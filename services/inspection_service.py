@@ -2,7 +2,7 @@
 
 import streamlit as st
 from config.prompts import construir_system_prompt
-from services.gemini_service import analizar_imagenes
+from services.gemini_service import analizar_imagenes, iniciar_chat_inspeccion
 
 def generar_analisis(
     equipo_seleccionado,
@@ -16,19 +16,31 @@ def generar_analisis(
     anio_actual,
     anio_sig
 ):
-    """Genera análisis usando Gemini"""
+    """Genera análisis usando Gemini (Legacy)"""
+    chat, texto, estado = iniciar_analisis_chat(
+        equipo_seleccionado, imagenes_pil, comentario, historial,
+        manuales, perfil, conocimiento, few_shots, anio_actual, anio_sig
+    )
+    return texto, estado
+
+def iniciar_analisis_chat(
+    equipo_seleccionado,
+    imagenes_pil,
+    comentario,
+    historial,
+    manuales,
+    perfil,
+    conocimiento,
+    few_shots,
+    anio_actual,
+    anio_sig
+):
+    """Inicia la conversación con Gemini y devuelve el chat y la primera respuesta"""
     try:
         if not imagenes_pil:
-            return "", "REGULAR"
+            return None, "", "REGULAR"
 
-        sys_prompt = construir_system_prompt(
-            perfil,
-            conocimiento,
-            few_shots,
-            historial,
-            anio_actual,
-            anio_sig
-        )
+        sys_prompt = construir_system_prompt(perfil, conocimiento, few_shots, historial, anio_actual, anio_sig)
 
         hist_block = ""
         if historial:
@@ -67,19 +79,16 @@ Considerar la evolución del deterioro entre años.
 Cantidad: {len(imagenes_pil)}
 {', '.join([nombre for nombre, _ in imagenes_pil])}
 
-Analiza TODAS las imágenes con máximo detalle técnico.
+Analiza TODAS las imágenes con máximo detalle técnico e indica el estado final sugerido (BUENO, REGULAR o CRÍTICO).
+Además, justifica tus hallazgos refiriendo a números/nombres de imágenes específicas. Preséntate como el asistente IA listo para responder preguntas sobre la inspección.
 """
+        chat_session, texto = iniciar_chat_inspeccion(prompt, imagenes_pil)
 
-        # ✅ CORREGIDO: Solo 2 argumentos
-        texto = analizar_imagenes(prompt, imagenes_pil)
-
-        if texto is None:
-            return "ERROR: Gemini devolvió una respuesta nula.", "REGULAR"
+        if not chat_session:
+            return None, texto, "REGULAR"
 
         texto = str(texto).strip()
-        if texto == "":
-            return "ERROR: Gemini devolvió una respuesta vacía.", "REGULAR"
-
+        
         estado_det = "REGULAR"
         texto_upper = texto.upper()
         if "CRÍTICO" in texto_upper or "CRITICO" in texto_upper:
@@ -87,7 +96,7 @@ Analiza TODAS las imágenes con máximo detalle técnico.
         elif "BUENO" in texto_upper:
             estado_det = "BUENO"
 
-        return texto, estado_det
+        return chat_session, texto, estado_det
 
     except Exception as e:
-        return f"ERROR EN GENERAR_ANALISIS:\n\n{str(e)}", "REGULAR"
+        return None, f"ERROR EN INICIAR_ANALISIS:\n\n{str(e)}", "REGULAR"

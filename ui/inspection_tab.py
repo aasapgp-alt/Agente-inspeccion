@@ -1,24 +1,20 @@
 import streamlit as st
 from services.drive_service import navegar_carpetas, obtener_imagenes_carpeta
-from services.inspection_service import generar_analisis
+from services.inspection_service import generar_analisis, iniciar_analisis_chat
+from services.gemini_service import enviar_mensaje_chat, extraer_consenso_chat
 from services.pdf_service import generar_pdf
-from services.db_service import guardar_inspeccion_db
 from utils.image_utils import descargar_imagen
 from config.constants import ANIO_ACTUAL, ANIO_SIG, ESTADOS, CARPETA_EQUIPOS_REAL_ID
 
 def render_inspection_tab(drive, equipo_actual, historial_actual, perfil, conocimiento, few_shots, gemini, on_guardar, usar_db=False):
     
-    st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin-bottom:12px;">🔍 INSPECCIÓN EN CURSO</div>', unsafe_allow_html=True)
-    
-    if equipo_actual is None:
-        st.info("👈 Selecciona un equipo en el panel lateral para comenzar")
-        return
-    
-    st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin-bottom:12px;">🔍 INSPECCIÓN EN CURSO</div>', unsafe_allow_html=True)
 
+    
     if equipo_actual is None:
         st.info("👈 Selecciona un equipo en el panel lateral para comenzar")
         return
+    
+
 
     # Mostrar equipo seleccionado
     st.markdown(f"""
@@ -148,116 +144,170 @@ def render_inspection_tab(drive, equipo_actual, historial_actual, perfil, conoci
     st.markdown("---")
 
     # ── ÁREA DE ANÁLISIS ──
-    st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin-bottom:12px;">🤖 ANÁLISIS CON IA</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin-bottom:12px;">🤖 ANÁLISIS Y CHAT CON IA</div>', unsafe_allow_html=True)
 
     comentario = st.text_area(
-        "📝 Instrucciones adicionales (opcional):",
+        "📝 Instrucciones adicionales iniciales (opcional):",
         placeholder="Ej: Enfocar en las uniones bridadas, revisar el revestimiento interior...",
         height=80,
         key="comentario_inspeccion"
     )
 
-    # ✅ Leer siempre de session_state
     imgs_sel = st.session_state.get("imgs_sel", [])
 
-    if st.button(
-        f"🚀 GENERAR ANÁLISIS ({len(imgs_sel)} imágenes)" if imgs_sel else "🚀 GENERAR ANÁLISIS",
-        type="primary",
-        width='stretch',
-        disabled=len(imgs_sel) == 0
-    ):
-        with st.spinner("📥 Procesando imágenes y consultando Gemini..."):
-            imgs_pil = []
-            progress_text = st.empty()
+    # Inicializar estado del chat
+    if "chat_session" not in st.session_state:
+        st.session_state.chat_session = None
+    if "mensajes_chat" not in st.session_state:
+        st.session_state.mensajes_chat = []
+    if "draft_diagnostico" not in st.session_state:
+        st.session_state.draft_diagnostico = ""
+    if "draft_recomendaciones" not in st.session_state:
+        st.session_state.draft_recomendaciones = ""
+    if "draft_estado" not in st.session_state:
+        st.session_state.draft_estado = "REGULAR"
 
-            for i, img_info in enumerate(imgs_sel):
-                progress_text.text(f"Descargando imagen {i+1}/{len(imgs_sel)}: {img_info['name']}")
-                pil = descargar_imagen(img_info["id"], drive, max_dim=st.session_state.get("img_dim", 1024))
-                if pil:
-                    imgs_pil.append((img_info["name"], pil))
+    col_gen, col_clear = st.columns([3, 1])
+    with col_gen:
+        if st.button(
+            f"🚀 INICIAR ANÁLISIS ({len(imgs_sel)} imágenes)" if imgs_sel else "🚀 INICIAR ANÁLISIS",
+            type="primary",
+            use_container_width=True,
+            disabled=len(imgs_sel) == 0
+        ):
+            with st.spinner("📥 Procesando imágenes y consultando Gemini..."):
+                imgs_pil = []
+                progress_text = st.empty()
 
-            if not imgs_pil:
-                st.error("❌ No se pudieron procesar las imágenes")
-                progress_text.empty()
-            else:
-                progress_text.text("🔍 Analizando con Gemini...")
-                texto, estado_det = generar_analisis(
-                    equipo_actual,
-                    imgs_pil,
-                    comentario,
-                    historial_actual,
-                    "",
-                    perfil,
-                    conocimiento,
-                    few_shots,
-                    ANIO_ACTUAL,
-                    ANIO_SIG
-                )
+                for i, img_info in enumerate(imgs_sel):
+                    progress_text.text(f"Descargando imagen {i+1}/{len(imgs_sel)}: {img_info['name']}")
+                    pil = descargar_imagen(img_info["id"], drive, max_dim=st.session_state.get("img_dim", 1024))
+                    if pil:
+                        imgs_pil.append((img_info["name"], pil))
 
-                if texto and str(texto).strip() and not texto.startswith("ERROR"):
-                    st.markdown("---")
-                    if estado_det == "BUENO":
-                        bc_display = "🟢 BUENO"
-                    elif estado_det == "CRÍTICO":
-                        bc_display = "🔴 CRÍTICO"
-                    else:
-                        bc_display = "🟡 REGULAR"
-
-                    st.markdown(f'<div style="margin-bottom:10px;"><span style="background:#1a2236;padding:4px 12px;border-radius:20px;font-size:.7rem;">Estado sugerido: {bc_display}</span></div>', unsafe_allow_html=True)
-
-                    with st.expander("📋 Análisis completo", expanded=True):
-                        st.markdown(f'<div style="background:#080f1a;border:1px solid #1e2d45;border-radius:8px;padding:16px;font-size:.82rem;line-height:1.7;white-space:pre-wrap;max-height:400px;overflow-y:auto;">{texto}</div>', unsafe_allow_html=True)
-
-                    st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin:16px 0 12px;">✏️ VALIDACIÓN Y GUARDADO</div>', unsafe_allow_html=True)
-
-                    estado_idx = 1
-                    if estado_det in ESTADOS:
-                        estado_idx = ESTADOS.index(estado_det)
-
-                    estado_final = st.selectbox("Estado final:", ESTADOS, index=estado_idx, key="estado_final")
-                    acciones = st.text_area(f"Acciones PGP {ANIO_ACTUAL}:", height=80, key="acciones_input", placeholder="Ej: - Inspección visual completa\n- Registro fotográfico\n- Medición de espesores")
-                    diagnostico = st.text_area(f"Diagnóstico PGP {ANIO_ACTUAL}:", height=150, key="diagnostico_input")
-                    recomendaciones = st.text_area(f"Recomendaciones PGP {ANIO_SIG}:", height=150, key="recomendaciones_input")
-
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("💾 GUARDAR INSPECCIÓN", type="primary", width='stretch'):
-                            if usar_db:
-                                equipo_id = equipo_actual.get("id")
-                                if equipo_id and guardar_inspeccion_db(equipo_id, ANIO_ACTUAL, estado_final, acciones, diagnostico, recomendaciones):
-                                    st.success(f"✅ {equipo_actual.get('equipo', 'Equipo')} actualizado en DB")
-                                    st.balloons()
-                                    on_guardar(st.session_state.df)  # ✅ llamar callback
-                                else:
-                                    st.error("Error al guardar en DB")
-
-                    with col2:
-                        pdf_bytes = generar_pdf(
-                            equipo_actual.get("equipo", "Equipo"),
-                            estado_final,
-                            acciones,
-                            diagnostico,
-                            recomendaciones,
-                            texto,
-                            imgs_pil,
-                            perfil,
-                            historial_actual
-                        )
-                        if pdf_bytes:
-                            st.download_button(
-                                "📄 DESCARGAR INFORME PDF",
-                                data=pdf_bytes,
-                                file_name=f"INFORME_{equipo_actual.get('equipo', 'Equipo').replace(' ', '_')}_{ANIO_ACTUAL}.pdf",
-                                mime="application/pdf",
-                                key="download_pdf",
-                                width='stretch'
-                            )
-                        else:
-                            st.error("Error al procesar PDF")
-
-                    with col3:
-                        if st.button("🔄 NUEVO ANÁLISIS", width='stretch'):
-                            st.rerun()
+                if not imgs_pil:
+                    st.error("❌ No se pudieron procesar las imágenes")
+                    progress_text.empty()
                 else:
-                    st.error(f"❌ {texto}")
-                progress_text.empty()
+                    progress_text.text("🔍 Iniciando conversación con Gemini...")
+                    chat_session, texto, estado_det = iniciar_analisis_chat(
+                        equipo_actual, imgs_pil, comentario, historial_actual,
+                        "", perfil, conocimiento, few_shots, ANIO_ACTUAL, ANIO_SIG
+                    )
+
+                    if chat_session and texto and not texto.startswith("ERROR"):
+                        st.session_state.chat_session = chat_session
+                        st.session_state.mensajes_chat = [{"role": "assistant", "content": texto}]
+                        st.session_state.draft_estado = estado_det
+                        st.session_state.draft_diagnostico = ""
+                        st.session_state.draft_recomendaciones = ""
+                    else:
+                        st.error(f"❌ {texto}")
+                    progress_text.empty()
+
+    with col_clear:
+        if st.button("🗑️ Reiniciar Chat", use_container_width=True):
+            st.session_state.chat_session = None
+            st.session_state.mensajes_chat = []
+            st.rerun()
+
+    # Mostrar chat si existe
+    if st.session_state.chat_session:
+        st.markdown("---")
+        st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin-bottom:12px;">💬 CONVERSACIÓN CON EL INSPECTOR IA</div>', unsafe_allow_html=True)
+        
+        # Historial del chat
+        for msg in st.session_state.mensajes_chat:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+        
+        # Quick prompts
+        st.markdown("<div style='font-size:0.7rem; color:#7a8ba8; margin-top:10px;'>⚡ Preguntas Rápidas:</div>", unsafe_allow_html=True)
+        qp1, qp2, qp3 = st.columns(3)
+        quick_prompt = None
+        if qp1.button("🔍 Enfócate solo en la corrosión", use_container_width=True): quick_prompt = "Por favor, enfócate únicamente en evaluar el nivel de corrosión visible en las imágenes."
+        if qp2.button("⚠️ Resume los puntos críticos", use_container_width=True): quick_prompt = "Resume cuáles son los hallazgos más críticos que requieren atención inmediata."
+        if qp3.button("🔧 Ignorar defectos de pintura", use_container_width=True): quick_prompt = "Ignora la pintura descascarada superficial, dime si hay daño estructural."
+
+        # Entrada del usuario
+        user_input = st.chat_input("Escribe tu pregunta o comentario sobre la inspección...")
+        
+        # Procesar entrada (manual o quick prompt)
+        prompt_a_enviar = user_input or quick_prompt
+        
+        if prompt_a_enviar:
+            st.session_state.mensajes_chat.append({"role": "user", "content": prompt_a_enviar})
+            with st.chat_message("user"):
+                st.markdown(prompt_a_enviar)
+                
+            with st.chat_message("assistant"):
+                with st.spinner("Pensando..."):
+                    respuesta = enviar_mensaje_chat(st.session_state.chat_session, prompt_a_enviar)
+                    st.markdown(respuesta)
+            st.session_state.mensajes_chat.append({"role": "assistant", "content": respuesta})
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown('<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;font-weight:600;color:#00c8d7;margin:16px 0 12px;">✏️ VALIDACIÓN Y GUARDADO</div>', unsafe_allow_html=True)
+
+        if st.button("🪄 Extraer Borrador Final Automáticamente", type="secondary", use_container_width=True, help="Usa la IA para leer el chat y autocompletar el diagnóstico y las recomendaciones."):
+            with st.spinner("Extrayendo consenso del chat..."):
+                datos = extraer_consenso_chat(st.session_state.chat_session)
+                st.session_state.draft_diagnostico = datos.get("diagnostico", "No se pudo extraer el diagnóstico.")
+                st.session_state.draft_recomendaciones = datos.get("recomendaciones", "No se pudieron extraer las recomendaciones.")
+                if datos.get("estado") in ESTADOS:
+                    st.session_state.draft_estado = datos["estado"]
+                st.toast("✅ Formulario autocompletado con éxito.")
+
+        estado_idx = 1
+        if st.session_state.draft_estado in ESTADOS:
+            estado_idx = ESTADOS.index(st.session_state.draft_estado)
+
+        estado_final = st.selectbox("Estado final:", ESTADOS, index=estado_idx, key="estado_final")
+        acciones = st.text_area(f"Acciones PGP {ANIO_ACTUAL}:", height=80, key="acciones_input", placeholder="Ej: - Inspección visual completa\n- Registro fotográfico\n- Medición de espesores")
+        diagnostico = st.text_area(f"Diagnóstico PGP {ANIO_ACTUAL}:", value=st.session_state.draft_diagnostico, height=150, key="diagnostico_input")
+        recomendaciones = st.text_area(f"Recomendaciones PGP {ANIO_SIG}:", value=st.session_state.draft_recomendaciones, height=150, key="recomendaciones_input")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("💾 GUARDAR INSPECCIÓN", type="primary", use_container_width=True):
+                if usar_db:
+                    equipo_id = equipo_actual.get("id")
+                    if equipo_id and guardar_inspeccion_db(equipo_id, ANIO_ACTUAL, estado_final, acciones, diagnostico, recomendaciones):
+                        st.success(f"✅ {equipo_actual.get('equipo', 'Equipo')} actualizado en DB")
+                        st.balloons()
+                        on_guardar(st.session_state.df)
+                    else:
+                        st.error("Error al guardar en DB")
+
+        with col2:
+            # Para el PDF, usamos el último mensaje de la IA o el chat completo (en este caso enviamos todo como texto)
+            texto_pdf = "\n\n".join([f"{'Inspector' if m['role']=='user' else 'IA'}: {m['content']}" for m in st.session_state.mensajes_chat])
+            pdf_bytes = generar_pdf(
+                equipo_actual.get("equipo", "Equipo"),
+                estado_final,
+                acciones,
+                diagnostico,
+                recomendaciones,
+                texto_pdf,
+                [], # Dummy imgs to save memory
+                perfil,
+                historial_actual
+            )
+            if pdf_bytes:
+                st.download_button(
+                    "📄 DESCARGAR INFORME PDF",
+                    data=pdf_bytes,
+                    file_name=f"INFORME_{equipo_actual.get('equipo', 'Equipo').replace(' ', '_')}_{ANIO_ACTUAL}.pdf",
+                    mime="application/pdf",
+                    key="download_pdf",
+                    use_container_width=True
+                )
+            else:
+                st.error("Error al procesar PDF")
+
+        with col3:
+            if st.button("🔄 NUEVO ANÁLISIS", use_container_width=True):
+                st.session_state.chat_session = None
+                st.session_state.mensajes_chat = []
+                st.rerun()
