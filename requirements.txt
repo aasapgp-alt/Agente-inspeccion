@@ -1,4 +1,10 @@
-streamlit>=1.36.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+passlib>=1.7.4
+python-jose>=3.3.0
+psycopg2-binary>=2.9.6
 pandas>=2.0.0
 google-generativeai>=0.3.0
 google-api-python-client>=2.100.0
@@ -6,3 +12,8 @@ google-auth-httplib2>=0.1.0
 google-auth-oauthlib>=1.0.0
 Pillow>=10.0.0
 reportlab>=4.0.0
+PyDrive2>=1.15.0
+
+# Pruebas (desarrollo)
+pytest>=8.0.0
+httpx>=0.27.0

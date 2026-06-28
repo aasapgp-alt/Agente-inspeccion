@@ -47,6 +47,34 @@ ENV/
 env.bak/
 venv.bak/
 
+# Credenciales / secretos (service accounts de Google, claves)
+praxis-effort-*.json
+*service-account*.json
+*-credentials.json
+client_secret*.json
+
+# Node / Next.js (frontend)
+node_modules/
+.next/
+out/
+
+# Configuración con rutas a credenciales (apunta a la service account)
+settings.yaml
+
+# Datos, BD y salidas generadas (no se versionan)
+data/
+Informes_Generados/
+reportes/
+extracted_media/
+
+# Sondas manuales y utilidades puntuales (no son parte del producto)
+scratch/
+scratch_*.py
+test_drive.py
+test_thumb.py
+replace_imports.py
+clear_reports.py
+
 # OS generated files
 .DS_Store
 .DS_Store?
