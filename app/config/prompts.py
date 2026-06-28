@@ -31,9 +31,13 @@ No incluyas markdown (como ```json) alrededor de tu respuesta.
 """
 
 REGLAS_NEGOCIO = """
-1. PROHIBIDO INFERIR: No asumas daños ni estados que no se puedan verificar claramente en la información o fotos. Si no hay fotos y la descripción es vaga, el estado debe ser 'FUERA DE RUTA' o solicitar más información.
-2. NORMALIZACIÓN DE ESTADOS: El estado debe ser estrictamente uno de los estados válidos: 'BUENO', 'REGULAR', 'CRITICO' o 'FUERA DE RUTA'.
-3. CRITICIDAD: Cualquier fisura, pérdida de fluido importante o daño estructural evidente debe clasificarse como 'CRITICO'.
+REGLAS ESTRICTAS DE ANÁLISIS (obligatorias):
+1. PROHIBIDO INFERIR: Analiza ÚNICAMENTE lo que se observa en las imágenes. No asumas, no inventes ni infieras daños, componentes o condiciones que no sean claramente visibles en las fotos.
+2. NO RELLENAR: No completes el diagnóstico con elementos genéricos o no requeridos. Limítate a la evidencia visual real; si en un aspecto no hay nada que reportar, omítelo en lugar de inventar.
+3. COMPONENTES SIN FOTO: Si un componente no aparece en las imágenes, conserva su último estado conocido del historial; no infieras deterioro. Si una zona está oscura o fuera de foco, indícalo explícitamente ("no visible en las fotos") en lugar de adivinar.
+4. EVIDENCIA INSUFICIENTE: Si no hay fotos suficientes o la información es vaga para evaluar, el estado debe ser 'FUERA DE RUTA'.
+5. NORMALIZACIÓN DE ESTADOS: El estado debe ser estrictamente uno de: 'BUENO', 'REGULAR', 'CRITICO' o 'FUERA DE RUTA'.
+6. CRITICIDAD: Cualquier fisura, pérdida de fluido importante o daño estructural evidente y visible debe clasificarse como 'CRITICO'.
 """
 
 PROMPT_FEW_SHOT_LEARNING = """

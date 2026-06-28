@@ -13,6 +13,8 @@ from app.core.dependencies import get_db, get_current_user
 from app.services.drive_service import descargar_imagen
 from app.services.gemini_service import analizar_imagenes, inicializar_gemini, build_annotation_context
 from app.services.learning_service import cargar_ejemplos_few_shot, obtener_aprendizaje_texto
+from app.config.prompts import REGLAS_NEGOCIO
+from app.utils.text_utils import es_estado_valido, normalizar_texto
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,14 @@ router = APIRouter(prefix="/api/ia", tags=["ia"])
 
 # Diccionario global para mantener las sesiones de chat activas de Gemini en memoria
 ACTIVE_CHATS = {}
+
+
+def _estado_validado(valor: Optional[str]) -> str:
+    """Normaliza el estado devuelto por Gemini a uno de los 4 válidos. Si el valor
+    no es reconocible, devuelve 'FUERA DE RUTA' en lugar de asumir un estado
+    intermedio sin evidencia (antes el default inseguro era 'REGULAR')."""
+    estado = normalizar_texto(valor or "")
+    return estado if es_estado_valido(estado) else "FUERA DE RUTA"
 
 class AnalizarRequest(BaseModel):
     equipo_id: int
@@ -132,6 +142,10 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
         # 5. Generar prompt estructurado para Gemini
         prompt = f"""
 Actúa como un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA).
+Reporta como si tú mismo hubieras tomado las fotos y realizado la inspección, describiendo solo lo que realmente se ve en ellas.
+
+{REGLAS_NEGOCIO}
+
 Analiza las imágenes adjuntas del siguiente equipo:
 Nombre: {equipo.get('nombre')}, Área: {equipo.get('area') or ''}, Código/Número: {equipo.get('codigo') or equipo.get('numero') or ''}, Material: {equipo.get('material') or ''}, Criticidad: {equipo.get('criticidad') or ''}.
 
@@ -159,10 +173,10 @@ Por favor, analiza con extremo cuidado las zonas señaladas por estas anotacione
 """
 
         prompt += """
-Evalúa el estado del equipo basándote en las imágenes. Devuelve tu respuesta únicamente en formato JSON con la siguiente estructura (no pongas texto adicional ni rodees la respuesta con bloques markdown como ```json):
+Evalúa el estado del equipo basándote ÚNICAMENTE en las imágenes. Devuelve tu respuesta únicamente en formato JSON con la siguiente estructura (no pongas texto adicional ni rodees la respuesta con bloques markdown como ```json):
 {
-  "estado": "BUENO" | "REGULAR" | "CRITICO",
-  "diagnostico": "Detalle técnico del diagnóstico observado en las fotos.",
+  "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
+  "diagnostico": "Detalle técnico de lo observado en las fotos, sin suposiciones.",
   "acciones": "Acciones correctivas sugeridas para PGP 2026.",
   "recomendaciones": "Recomendaciones a largo plazo para PGP 2027."
 }
@@ -218,7 +232,7 @@ Evalúa el estado del equipo basándote en las imágenes. Devuelve tu respuesta 
         return {
             "session_id": session_id,
             "analisis": {
-                "estado": analisis_data.get("estado", "REGULAR").upper(),
+                "estado": _estado_validado(analisis_data.get("estado")),
                 "diagnostico": analisis_data.get("diagnostico", ""),
                 "acciones": analisis_data.get("acciones", ""),
                 "recomendaciones": analisis_data.get("recomendaciones", "")
@@ -240,9 +254,12 @@ def chat(data: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
         prompt = f"""
 El inspector humano comenta: "{data.mensaje}"
-Evalúa el comentario, ajusta el diagnóstico o las recomendaciones si corresponde, y devuelve la respuesta de la inspección consolidada en formato JSON con la misma estructura:
+
+RECUERDA: no infieras daños que no se vean en las fotos. Ajusta el diagnóstico SOLO si el comentario aporta evidencia visual nueva o corrige la interpretación de algo visible; de lo contrario, mantén el diagnóstico previo. No rellenes con elementos no observados.
+
+Devuelve la respuesta de la inspección consolidada en formato JSON con la misma estructura:
 {{
-  "estado": "BUENO" | "REGULAR" | "CRITICO",
+  "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
   "diagnostico": "Diagnóstico actualizado.",
   "acciones": "Acciones actualizadas.",
   "recomendaciones": "Recomendaciones actualizadas."
@@ -261,7 +278,7 @@ Evalúa el comentario, ajusta el diagnóstico o las recomendaciones si correspon
 
         return {
             "analisis": {
-                "estado": analisis_data.get("estado", "REGULAR").upper(),
+                "estado": _estado_validado(analisis_data.get("estado")),
                 "diagnostico": analisis_data.get("diagnostico", ""),
                 "acciones": analisis_data.get("acciones", ""),
                 "recomendaciones": analisis_data.get("recomendaciones", "")
