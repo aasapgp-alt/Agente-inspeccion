@@ -90,7 +90,6 @@ function DashboardContent() {
 
             {/* Chip de perfil con menú desplegable */}
             <div className="user-chip" onClick={() => setShowUserMenu(!showUserMenu)}>
-              <span>👤</span>
               <span className="user-chip__name">{user.nombre_completo}</span>
               <span className={`role-badge role-badge--${user.rol}`}>{user.rol}</span>
               <span className="user-chip__caret">⌄</span>
@@ -101,7 +100,7 @@ function DashboardContent() {
                     <span className="user-menu__user">@{user.username}</span>
                     <span className="user-menu__meta">{user.email}</span>
                     {user.empresa && (
-                      <span className="user-menu__company">🏢 {user.empresa}</span>
+                      <span className="user-menu__company">{user.empresa}</span>
                     )}
                   </div>
                   <button className="btn-danger" onClick={logout}>

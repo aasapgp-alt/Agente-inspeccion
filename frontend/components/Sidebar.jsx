@@ -213,7 +213,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
               borderRadius: (activeTab !== 'REPORTS' && activeTab !== 'SETTINGS') ? '4px 8px 8px 4px' : 'none', 
               padding: '12px' 
             }}>
-            🌍 Global Map
+            Global Map
           </button>
           <button 
             onClick={() => {

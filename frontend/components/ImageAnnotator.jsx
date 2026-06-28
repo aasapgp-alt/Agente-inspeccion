@@ -362,12 +362,12 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
 
   // Definición de las herramientas de dibujo
   const tools = {
-    rect: { type: 'RECTANGLE', label: 'Rectángulo', icon: '📦', desc: 'Resaltar un área' },
-    circle: { type: 'CIRCLE', label: 'Círculo', icon: '🔵', desc: 'Resaltar un punto' },
-    line: { type: 'LINE', label: 'Línea', icon: '➖', desc: 'Dibujar línea recta' },
-    arrow: { type: 'ARROW', label: 'Flecha', icon: '➡️', desc: 'Señalar dirección' },
-    text: { type: 'TEXT', label: 'Texto', icon: '📝', desc: 'Agregar nota de texto' },
-    freehand: { type: 'FREEHAND', label: 'Lápiz', icon: '✏️', desc: 'Dibujo libre' }
+    rect: { type: 'RECTANGLE', label: 'Rectángulo', icon: '▭', desc: 'Resaltar un área' },
+    circle: { type: 'CIRCLE', label: 'Círculo', icon: '◯', desc: 'Resaltar un punto' },
+    line: { type: 'LINE', label: 'Línea', icon: '╱', desc: 'Dibujar línea recta' },
+    arrow: { type: 'ARROW', label: 'Flecha', icon: '↗', desc: 'Señalar dirección' },
+    text: { type: 'TEXT', label: 'Texto', icon: 'T', desc: 'Agregar nota de texto' },
+    freehand: { type: 'FREEHAND', label: 'Lápiz', icon: '✎', desc: 'Dibujo libre' }
   };
 
   const colors = [
@@ -772,10 +772,10 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
         {/* Acciones rápidas */}
         <div className={styles.actionsRow}>
           <button onClick={handleUndo} disabled={annotations.length === 0} className={styles.actionBtn} title="Deshacer último trazo">
-            ↩️ Deshacer
+            Deshacer
           </button>
           <button onClick={handleClearAll} disabled={annotations.length === 0} className={`${styles.actionBtn} ${styles.dangerBtn}`} title="Limpiar todo">
-            🗑️ Limpiar
+            Limpiar
           </button>
         </div>
       </div>
@@ -822,7 +822,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
       {/* Barra lateral de anotaciones y guardado */}
       <div className={styles.sidebar}>
         <div style={{ padding: '0.8rem', backgroundColor: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '6px', fontSize: '0.75rem', color: '#93c5fd', lineHeight: '1.4' }}>
-          💡 <strong>Guía de Dibujo:</strong>
+          <strong>Guía de Dibujo:</strong>
           <ul style={{ margin: '0.3rem 0 0 1rem', padding: 0 }}>
             <li>Elige una herramienta y haz clic/arrastra sobre la imagen.</li>
             <li>Escribe una nota opcional en el globo emergente y presiona Enter.</li>
@@ -862,7 +862,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
                     className={styles.deleteBtn}
                     title="Eliminar anotación"
                   >
-                    🗑️
+                    ✕
                   </button>
                 </div>
               ))}

@@ -1,23 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-color: #0f172a; /* Slate 900 */
-  --bg-card: rgba(30, 41, 59, 0.7); /* Slate 800 with opacity */
-  --bg-card-hover: rgba(51, 65, 85, 0.8); /* Slate 700 with opacity */
-  --border-color: rgba(255, 255, 255, 0.1);
-  --text-primary: #f8fafc; /* Slate 50 */
-  --text-secondary: #94a3b8; /* Slate 400 */
-  
-  --accent-primary: #0ea5e9; /* Light Blue 500 */
-  --accent-primary-hover: #0284c7; /* Light Blue 600 */
-  
-  --status-good: #10b981; /* Emerald 500 */
-  --status-regular: #f59e0b; /* Amber 500 */
-  --status-critical: #ef4444; /* Red 500 */
-  --status-pending: #64748b; /* Slate 500 */
+  --bg-color: #0e1014;        /* grafito casi negro, neutro (no slate genérico) */
+  --bg-card: #171a21;         /* superficie sólida, sin glass */
+  --bg-card-hover: #1f232c;
+  --border-color: #272c36;    /* borde definido de 1px, nítido */
+  --text-primary: #f3f4f6;
+  --text-secondary: #98a1b0;
 
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --accent-primary: #3b82f6;  /* azul acero sobrio, sin neón */
+  --accent-primary-hover: #2f6fd0;
+
+  --status-good: #3fa86b;
+  --status-regular: #e0a32e;
+  --status-critical: #e0533d;
+  --status-pending: #6b7280;
+
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 }
 
 * {
@@ -40,17 +40,15 @@ body {
 /* Glassmorphism Utilities */
 .glass-panel {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .glass-panel:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: #333a47;
 }
 
 /* Layout Utilities */
@@ -76,7 +74,7 @@ body {
   flex: 1;
   padding: 32px;
   overflow-y: auto;
-  background: linear-gradient(to bottom right, var(--bg-color), #020617);
+  background: var(--bg-color);
 }
 
 /* Typography */
@@ -116,7 +114,7 @@ select option {
 
 select:focus, input:focus, textarea:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
 
 button {
@@ -143,49 +141,51 @@ button:active {
 .glow-card {
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   padding: 1.5rem;
   text-align: center;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .glow-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-2px);
+  border-color: #333a47;
 }
 
+/* El color de estado vive en un borde-indicador superior (tipo tablero),
+   no en un resplandor neón. */
 .glow-red {
-  border-color: rgba(239, 68, 68, 0.5);
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15), inset 0 0 20px rgba(239, 68, 68, 0.05);
+  border-color: var(--border-color);
+  border-top: 2px solid var(--status-critical);
 }
-.glow-red h3 { color: #ef4444; }
+.glow-red h3 { color: var(--status-critical); }
 
 .glow-yellow {
-  border-color: rgba(245, 158, 11, 0.5);
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15), inset 0 0 20px rgba(245, 158, 11, 0.05);
+  border-color: var(--border-color);
+  border-top: 2px solid var(--status-regular);
 }
-.glow-yellow h3 { color: #f59e0b; }
+.glow-yellow h3 { color: var(--status-regular); }
 
 .glow-green {
-  border-color: rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15), inset 0 0 20px rgba(16, 185, 129, 0.05);
+  border-color: var(--border-color);
+  border-top: 2px solid var(--status-good);
 }
-.glow-green h3 { color: #10b981; }
+.glow-green h3 { color: var(--status-good); }
 
 .glow-blue {
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15), inset 0 0 20px rgba(56, 189, 248, 0.05);
+  border-color: var(--border-color);
+  border-top: 2px solid var(--accent-primary);
 }
-.glow-blue h3 { color: #38bdf8; }
+.glow-blue h3 { color: var(--accent-primary); }
 
 .number-big {
   font-size: 3rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0.5rem 0;
   font-family: var(--font-mono);
-  text-shadow: 0 0 10px rgba(255,255,255,0.3);
+  letter-spacing: -0.02em;
 }
 
 .card-subtitle {
@@ -236,9 +236,9 @@ button:active {
   height: 10px;
   border-radius: 50%;
 }
-.dot.green { background: #10b981; box-shadow: 0 0 5px #10b981;}
-.dot.yellow { background: #f59e0b; box-shadow: 0 0 5px #f59e0b;}
-.dot.red { background: #ef4444; box-shadow: 0 0 5px #ef4444;}
+.dot.green { background: var(--status-good); }
+.dot.yellow { background: var(--status-regular); }
+.dot.red { background: var(--status-critical); }
 
 /* Animated Loading Spinner and Progress Bar */
 .loading-container {
@@ -258,11 +258,10 @@ button:active {
 .spinner {
   width: 50px;
   height: 50px;
-  border: 3px solid rgba(14, 165, 233, 0.1);
+  border: 3px solid rgba(59, 130, 246, 0.15);
   border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
 }
 
 .loading-bar-wrapper {
@@ -278,11 +277,10 @@ button:active {
 .loading-bar-progress {
   height: 100%;
   width: 50%;
-  background: linear-gradient(90deg, var(--accent-primary), #38bdf8);
+  background: var(--accent-primary);
   border-radius: 10px;
   position: absolute;
   animation: loading-pulse 1.8s ease-in-out infinite;
-  box-shadow: 0 0 10px rgba(14, 165, 233, 0.5);
 }
 
 @keyframes spin {
@@ -375,7 +373,6 @@ button:active {
   height: 2px;
   background: var(--accent-primary);
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(14, 165, 233, 0.6);
 }
 
 /* Bloque derecho de la cabecera */
