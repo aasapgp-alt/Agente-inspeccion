@@ -1,30 +1,37 @@
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import os
 import logging
 import ssl
 
-# Bypass SSL certificate verification globally (useful for Windows local environments)
-ssl._create_default_https_context = ssl._create_unverified_context
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-try:
-    import requests
-    import urllib3
-    orig_request = requests.Session.request
-    def hacked_request(self, method, url, *args, **kwargs):
-        kwargs['verify'] = False
-        return orig_request(self, method, url, *args, **kwargs)
-    requests.Session.request = hacked_request
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-except ImportError:
-    pass
+# La verificación de certificados SSL puede desactivarse para entornos locales de
+# Windows que fallan con los certificados de las APIs de Google. Es INSEGURO: solo
+# se aplica si se define explícitamente DISABLE_SSL_VERIFY, nunca por defecto.
+if os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("1", "true", "yes"):
+    logger.warning(
+        "DISABLE_SSL_VERIFY activo: se deshabilita la verificación de certificados "
+        "SSL. No usar en producción."
+    )
+    ssl._create_default_https_context = ssl._create_unverified_context
+    try:
+        import requests
+        import urllib3
+        orig_request = requests.Session.request
+        def hacked_request(self, method, url, *args, **kwargs):
+            kwargs['verify'] = False
+            return orig_request(self, method, url, *args, **kwargs)
+        requests.Session.request = hacked_request
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    except ImportError:
+        pass
 
 from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router
 from app.services.db_service import get_db_connection
 from app.core.security import hash_password, verify_access_token
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Agente Inspector API",
