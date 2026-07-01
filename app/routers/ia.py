@@ -141,15 +141,20 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
         
         # 5. Generar prompt estructurado para Gemini
         prompt = f"""
-Actúa como un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA).
-Reporta como si tú mismo hubieras tomado las fotos y realizado la inspección, describiendo solo lo que realmente se ve en ellas.
+INSTRUCCIÓN DE ESTILO OBLIGATORIA (debe respetarse en TODO el informe):
+- PROHIBIDO usar primera persona singular: NO escribas "yo", "he verificado", "encuentro", "mi inspección", "he inspeccionado", "detecto", "constato", "he constatado".
+- PROHIBIDO usar tiempo pasado para narrar acciones: NO escribas "inspeccioné", "revisé", "verifiqué", "realicé", "evaluué".
+- DIAGNÓSTICO: Escribe siempre en TIEMPO PRESENTE IMPERSONAL. Ejemplos correctos: "El equipo presenta...", "Se observa deterioro...", "La línea muestra...", "Los soportes exhiben...".
+- ACCIONES y RECOMENDACIONES: Escribe siempre en INFINITIVO. Ejemplos correctos: "Realizar inspección...", "Proceder a cambio...", "Informar al área...", "Continuar con...", "Reemplazar elementos...".
+
+Redacta el siguiente informe técnico de inspección industrial. Solo describe lo que realmente se observa en las fotos.
 
 {REGLAS_NEGOCIO}
 
-Analiza las imágenes adjuntas del siguiente equipo:
+Equipo a analizar:
 Nombre: {equipo.get('nombre')}, Área: {equipo.get('area') or ''}, Código/Número: {equipo.get('codigo') or equipo.get('numero') or ''}, Material: {equipo.get('material') or ''}, Criticidad: {equipo.get('criticidad') or ''}.
 
-Historial del PGP 2024:
+Historial del PGP 2024 (úsalo como base para componentes no visibles en las fotos):
 - Estado: {historial_2024.get('estado')}
 - Diagnóstico: {historial_2024.get('diagnostico')}
 
@@ -173,14 +178,27 @@ Por favor, analiza con extremo cuidado las zonas señaladas por estas anotacione
 """
 
         prompt += """
-Evalúa el estado del equipo basándote ÚNICAMENTE en las imágenes. Devuelve tu respuesta únicamente en formato JSON con la siguiente estructura (no pongas texto adicional ni rodees la respuesta con bloques markdown como ```json):
+Devuelve tu respuesta ÚNICAMENTE en formato JSON (sin bloques markdown como ```json):
 {
   "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
-  "diagnostico": "Detalle técnico de lo observado en las fotos, sin suposiciones.",
-  "acciones": "Acciones correctivas sugeridas para PGP 2026.",
-  "recomendaciones": "Recomendaciones a largo plazo para PGP 2027."
+  "diagnostico": "TIEMPO PRESENTE IMPERSONAL. Ejemplos: 'El tramo de cañería presenta...', 'Se observa...', 'Los soportes exhiben...'. JAMÁS uses 'yo', 'he', 'detecté', 'encontré', 'verifiqué', 'inspeccioné'.",
+  "acciones": "INFINITIVO IMPERSONAL. Ejemplos: 'Realizar inspección visual externa', 'Verificar estado de bridas'. Muy breve.",
+  "recomendaciones": {
+    "EQUIPO INTERIOR": "INFINITIVO: 'Realizar...', 'Continuar...', 'Solicitar...', o 'Sin comentarios'",
+    "EQUIPO EXTERIOR": "INFINITIVO o 'Sin comentarios'",
+    "SOPORTES CAÑERÍAS ASOCIADAS": "INFINITIVO o 'Sin comentarios'",
+    "VÁLVULAS": "INFINITIVO o 'Sin comentarios'",
+    "ELEMENTOS DE SUJECIÓN EN GENERAL": "INFINITIVO o 'Sin comentarios'",
+    "ANCLAJES": "INFINITIVO o 'Sin comentarios'",
+    "ACOMETIDAS": "INFINITIVO o 'Sin comentarios'"
+  }
 }
+
+RECORDATORIO FINAL: El diagnóstico debe estar en TIEMPO PRESENTE IMPERSONAL (no primera persona). Las acciones y recomendaciones en INFINITIVO.
+
+*REGLA PREVENTIVA CRÍTICA PARA PLÁSTICOS*: Si el material es plástico (FRP, ACRBA, PP, etc.), en 'ACOMETIDAS' escribe obligatoriamente: 'Como medida preventiva y para evitar recurrir a los golpes para desmontar los espárragos y bulones en todas las acometidas bridadas (incluida la BdH) y sus consecuencias indeseables (roturas y fisuras recurrentes), reemplazar los elementos de sujeción y juntas en un plazo no mayor a 1 año. Aplica para todos los equipos y cañerías plásticas.'
 """
+
 
         # 6. Inicializar y llamar a Gemini
         from app.services.db_service import get_config_value_db
@@ -195,35 +213,62 @@ Evalúa el estado del equipo basándote ÚNICAMENTE en las imágenes. Devuelve t
 
         db_model = get_config_value_db("gemini_model") or "gemini-3.5-flash"
 
+        system_instruction = """
+Eres un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA) redactando un informe técnico formal.
+Debes redactar todo de manera estrictamente impersonal y formal.
+Está completamente prohibido usar la primera persona del singular ("yo", "he verificado", "mi inspección") y verbos en pasado para narrar tus acciones (no "inspeccioné", "revisé").
+- Para el DIAGNÓSTICO: Describe el estado actual o hechos únicamente en tiempo presente impersonal (ej: "El tramo de cañería presenta...", "Se observa desgaste...").
+- Para las ACCIONES y RECOMENDACIONES: Escribe siempre las tareas usando verbos en INFINITIVO (ej: "Continuar con...", "Proceder a...", "Informar al área...", "Reemplazar...", "Solicitar...").
+No menciones nunca limitaciones de fotos ni digas que "no se cuenta con imágenes" o "no se puede evaluar". Para cualquier zona o componente no visible, hereda o asume exactamente el diagnóstico del Historial PGP 2024 o no lo nombres.
+Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetando las llaves exactas.
+"""
+
         import google.generativeai as genai
         try:
             genai.configure(api_key=api_key, transport='rest')
-            model = genai.GenerativeModel(db_model)
+            model = genai.GenerativeModel(
+                model_name=db_model,
+                system_instruction=system_instruction
+            )
         except Exception as model_err:
             raise HTTPException(status_code=500, detail=f"Error al configurar Gemini: {model_err}")
 
-        # Iniciar chat
-        chat_session = model.start_chat(history=[])
-        
         # Estructurar partes del mensaje inicial (Texto + Imágenes inline)
         parts = [prompt]
         for img_b64 in images_b64:
             parts.append({"mime_type": "image/jpeg", "data": img_b64})
             
         try:
-            response = chat_session.send_message(parts, request_options={"timeout": 60})
+            response = model.generate_content(parts, request_options={"timeout": 60})
         except Exception as gem_err:
             raise HTTPException(status_code=502, detail=f"Fallo al comunicarse con Gemini API: {gem_err}")
             
+        # Iniciar chat session con el historial inicial para las futuras interacciones
+        chat_session = model.start_chat(history=[
+            {"role": "user", "parts": [prompt]},
+            {"role": "model", "parts": [response.text]}
+        ])
+
         # Parsear respuesta de Gemini
         import json
         import re
         res_text = response.text.strip()
+        print(">>> RAW RESP_TEXT:", res_text)
         match = re.search(r'\{.*\}', res_text, re.DOTALL)
         if match:
             analisis_data = json.loads(match.group(0))
         else:
             analisis_data = json.loads(res_text)
+        print(">>> PARSED ANALISIS_DATA:", analisis_data)
+
+        recs = analisis_data.get("recomendaciones", "")
+        if isinstance(recs, dict):
+            recs_lines = []
+            for k, v in recs.items():
+                recs_lines.append(f"{k}: {v}")
+            recs_str = "\n".join(recs_lines)
+        else:
+            recs_str = str(recs)
 
         # 7. Registrar sesión en memoria y retornar
         session_id = str(uuid.uuid4())
@@ -235,7 +280,7 @@ Evalúa el estado del equipo basándote ÚNICAMENTE en las imágenes. Devuelve t
                 "estado": _estado_validado(analisis_data.get("estado")),
                 "diagnostico": analisis_data.get("diagnostico", ""),
                 "acciones": analisis_data.get("acciones", ""),
-                "recomendaciones": analisis_data.get("recomendaciones", "")
+                "recomendaciones": recs_str
             },
             "historial_2024": historial_2024
         }
@@ -261,7 +306,7 @@ Devuelve la respuesta de la inspección consolidada en formato JSON con la misma
 {{
   "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
   "diagnostico": "Diagnóstico actualizado.",
-  "acciones": "Acciones actualizadas.",
+  "acciones": "Actividades de inspección realizadas por el inspector actualizadas, de forma telegráfica. NO acciones a futuro.",
   "recomendaciones": "Recomendaciones actualizadas."
 }}
 """

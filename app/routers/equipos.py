@@ -19,6 +19,11 @@ class EquipoCreate(BaseModel):
     temperatura_diseno: Optional[float] = None
     fabricante: Optional[str] = None
     modelo: Optional[str] = None
+    crear_carpeta_drive: Optional[bool] = False
+    parent_folder_id: Optional[str] = None
+    campanias_iniciales: Optional[List[str]] = []
+    subcarpetas: Optional[List[str]] = ["Succion", "Impulsión"]
+
 
 @router.get("/", response_model=Dict[str, Any])
 def list_equipos(
@@ -41,7 +46,7 @@ def list_equipos(
     return {"equipos": equipos}
 
 @router.post("/", response_model=Dict[str, Any])
-def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role(["admin"]))):
+def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:
         cursor = db.execute("""
             INSERT INTO equipos (ubicacion_id, codigo, nombre, tag, material, fluido, presion_diseno, temperatura_diseno, fabricante, modelo) 
@@ -49,6 +54,42 @@ def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db)
         """, (equipo.ubicacion_id, equipo.codigo, equipo.nombre, equipo.tag, equipo.material, equipo.fluido, equipo.presion_diseno, equipo.temperatura_diseno, equipo.fabricante, equipo.modelo))
         db.commit()
         nuevo_id = cursor.lastrowid
+        
+        drive_info = None
+        if equipo.crear_carpeta_drive:
+            from app.services.drive_service import crear_estructura_equipo, buscar_carpeta_area_por_nombre
+            
+            # Determinar parent folder ID
+            parent_id = equipo.parent_folder_id
+            if not parent_id:
+                cursor_loc = db.execute("SELECT nombre FROM ubicaciones WHERE id = ?", (equipo.ubicacion_id,))
+                loc_row = cursor_loc.fetchone()
+                if loc_row:
+                    parent_id = buscar_carpeta_area_por_nombre(loc_row["nombre"])
+            
+            if parent_id:
+                try:
+                    campanias = equipo.campanias_iniciales
+                    if not campanias:
+                        from app.services.db_service import get_config_value_db
+                        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+                        campanias = [campania_activa]
+                    
+                    res_drive = crear_estructura_equipo(
+                        parent_id=parent_id,
+                        nombre_equipo=f"{equipo.codigo} {equipo.nombre}",
+                        campanias=campanias,
+                        subcarpetas=equipo.subcarpetas
+                    )
+                    drive_info = {
+                        "folder_id": res_drive.get("id"),
+                        "folder_title": res_drive.get("title"),
+                        "folder_url": res_drive.get("alternateLink")
+                    }
+                except Exception as drive_err:
+                    import logging
+                    logging.getLogger(__name__).error(f"Error creando estructura en Google Drive: {drive_err}", exc_info=True)
+        
         registrar_auditoria(
             usuario_id=current_user.get("id"),
             accion="CREAR_EQUIPO",
@@ -56,7 +97,11 @@ def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db)
             registro_id=nuevo_id,
             detalles=f"Equipo '{equipo.codigo} - {equipo.nombre}' creado en ubicación {equipo.ubicacion_id}."
         )
-        return {"id": nuevo_id, "message": "Equipo creado exitosamente"}
+        return {
+            "id": nuevo_id, 
+            "message": "Equipo creado exitosamente",
+            "drive": drive_info
+        }
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=400, detail="El código de equipo ya existe para esta ubicación")
 
@@ -96,7 +141,7 @@ def update_equipo(id: int, data: Dict[str, Any], db: sqlite3.Connection = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{id}", response_model=Dict[str, Any])
-def delete_equipo(id: int, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role(["admin"]))):
+def delete_equipo(id: int, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     equipo = db_service.obtener_equipo_db(id)
     success = db_service.eliminar_equipo_db(id)
     if not success:

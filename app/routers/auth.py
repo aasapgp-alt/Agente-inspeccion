@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 import sqlite3
@@ -43,7 +43,7 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
+def login(data: LoginRequest, request: Request, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
     # Accept both username or email for login
     cursor.execute("""
@@ -53,7 +53,12 @@ def login(data: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
     """, (data.username, data.username))
     user = cursor.fetchone()
     
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+    
     if not user or not verify_password(data.password, user["password_hash"]):
+        if user:
+            from app.core.audit import log_login
+            log_login(usuario_id=user["id"], ip=ip_addr, resultado="FALLIDO: Contraseña incorrecta")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -61,6 +66,8 @@ def login(data: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
         )
         
     if not user["activo"]:
+        from app.core.audit import log_login
+        log_login(usuario_id=user["id"], ip=ip_addr, resultado="FALLIDO: Usuario desactivado")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="El usuario está desactivado"
@@ -86,6 +93,10 @@ def login(data: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
     
     db.commit()
     
+    # Registrar auditoría de login exitoso
+    from app.core.audit import log_login
+    log_login(usuario_id=user["id"], ip=ip_addr, resultado="EXITOSO")
+    
     user_dict = dict(user)
     del user_dict["password_hash"]
     
@@ -96,6 +107,11 @@ def logout(current_user: dict = Depends(get_current_user), db: sqlite3.Connectio
     cursor = db.cursor()
     cursor.execute("DELETE FROM sesiones_activas WHERE token = ?", (current_user["token"],))
     db.commit()
+    
+    # Registrar auditoría de logout
+    from app.core.audit import log_logout
+    log_logout(usuario_id=current_user["id"])
+    
     return {"message": "Sesión cerrada correctamente"}
 
 @router.post("/register", response_model=UserResponse, dependencies=[Depends(require_role("admin"))])

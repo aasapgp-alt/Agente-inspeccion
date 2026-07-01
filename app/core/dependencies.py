@@ -103,21 +103,58 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: sqlite3.Connection
     
     return user_info
 
-def require_role(rol: str) -> Callable:
+def require_role(rol: Any) -> Callable:
     """
     Fábrica de dependencias para verificar si el usuario logueado 
-    tiene el rol requerido. Sensible a minúsculas por convención del esquema.
+    tiene el rol requerido. Soporta tanto una cadena como una lista de cadenas.
     """
     def role_checker(current_user: dict = Depends(get_current_user)) -> dict:
-        user_role = current_user.get("role")
-        
-        if not user_role or user_role.lower() != rol.lower():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permiso denegado. Se requiere el rol '{rol.lower()}' para realizar esta acción."
-            )
-            
-        return current_user
+        import traceback
+        try:
+            user_role = current_user.get("role")
+            print(f"DEBUG: user_role={user_role} (type={type(user_role)}), rol={rol} (type={type(rol)})")
+            if not user_role:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Permiso denegado. Rol de usuario no encontrado."
+                )
+                
+            # Soportar si se pasa una lista de roles o una cadena única
+            if isinstance(rol, list):
+                roles_lower = [r.lower() for r in rol]
+                if isinstance(user_role, list):
+                    user_roles_lower = [ur.lower() for ur in user_role]
+                    if not any(ur in roles_lower for ur in user_roles_lower):
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Permiso denegado. Se requiere uno de los roles: {', '.join(roles_lower)}."
+                        )
+                else:
+                    if user_role.lower() not in roles_lower:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Permiso denegado. Se requiere uno de los roles: {', '.join(roles_lower)}."
+                        )
+            else:
+                if isinstance(user_role, list):
+                    user_roles_lower = [ur.lower() for ur in user_role]
+                    if rol.lower() not in user_roles_lower:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Permiso denegado. Se requiere el rol '{rol.lower()}' para realizar esta acción."
+                        )
+                else:
+                    if user_role.lower() != rol.lower():
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Permiso denegado. Se requiere el rol '{rol.lower()}' para realizar esta acción."
+                        )
+                
+            return current_user
+        except Exception as e:
+            print("ERROR IN role_checker:")
+            traceback.print_exc()
+            raise e
     return role_checker
 
 def require_any_role(roles: list[str]) -> Callable:

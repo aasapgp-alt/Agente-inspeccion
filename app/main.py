@@ -29,7 +29,7 @@ if os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("1", "true", "yes"):
     except ImportError:
         pass
 
-from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router
+from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router, campanias, audit
 from app.services.db_service import get_db_connection
 from app.core.security import hash_password, verify_access_token
 
@@ -72,6 +72,12 @@ async def startup_event():
     try:
         init_db()
         logger.info("Base de datos inicializada correctamente mediante scripts.init_db.")
+        try:
+            from scripts.migrate_auditoria import migrate
+            migrate()
+            logger.info("Migración de auditoría y carga de usuarios realizada.")
+        except Exception as mig_err:
+            logger.error(f"Error al correr la migración de auditoría: {mig_err}")
     except Exception as e:
         logger.error(f"Error al inicializar la base de datos: {e}")
 
@@ -88,6 +94,8 @@ app.include_router(libro.router)
 app.include_router(libros.router)
 app.include_router(anotaciones.router)
 app.include_router(settings_router.router)
+app.include_router(campanias.router)
+app.include_router(audit.router)
 
 # Endpoint Health
 @app.get("/api/health", tags=["health"])

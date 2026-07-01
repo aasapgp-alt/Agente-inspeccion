@@ -213,7 +213,13 @@ def get_report_versiones(inspeccion_id: int, db: sqlite3.Connection = Depends(ge
     Retorna versiones de reporte asociadas a una inspección (retrocompatible)
     """
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM reportes WHERE inspeccion_id = ? ORDER BY version DESC", (inspeccion_id,))
+    cursor.execute("""
+        SELECT v.*, us.nombre_completo as nombre_usuario
+        FROM reportes_versiones v
+        LEFT JOIN usuarios us ON v.usuario_id = us.id
+        WHERE v.inspeccion_id = ?
+        ORDER BY v.version DESC
+    """, (inspeccion_id,))
     return [dict(row) for row in cursor.fetchall()]
 
 @router.post("/generar-manual/{inspeccion_id}", response_model=Dict[str, Any])
@@ -272,28 +278,34 @@ def generar_todos_reportes(
         errores = 0
         
         from app.services.reporte_service import crear_reporte_individual_completo
+        from app.services.db_service import get_config_value_db
+        import re
+        
+        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+        digits = re.findall(r'\d+', campania_activa)
+        anio_campania = int(digits[0]) if digits else 2026
         
         for eq in equipos:
             eq_id = eq["id"]
             
-            # Verificar si ya existe reporte generado para PGP 2026
+            # Verificar si ya existe reporte generado para la campaña activa
             cursor.execute("""
                 SELECT id FROM reportes 
-                WHERE equipo_id = ? AND campania = 'PGP 2026' AND ruta_pdf_local IS NOT NULL AND ruta_pdf_local != ''
+                WHERE equipo_id = ? AND campania = ? AND ruta_pdf_local IS NOT NULL AND ruta_pdf_local != ''
                 LIMIT 1
-            """, (eq_id,))
+            """, (eq_id, campania_activa))
             if cursor.fetchone():
                 existentes += 1
                 continue
                 
-            # Verificar si tiene inspección de 2026 registrada
+            # Verificar si tiene inspección del año de la campaña registrada
             cursor.execute("""
                 SELECT id FROM inspecciones 
-                WHERE equipo_id = ? AND anio = 2026
+                WHERE equipo_id = ? AND anio = ?
                 LIMIT 1
-            """, (eq_id,))
+            """, (eq_id, anio_campania))
             if not cursor.fetchone():
-                # No se puede generar porque no hay inspección 2026
+                # No se puede generar porque no hay inspección de este año
                 errores += 1
                 continue
                 
@@ -324,17 +336,20 @@ def exportar_reportes_zip(
     """
     Exporta todos los reportes individuales de una ubicación en la campaña actual como un archivo ZIP.
     """
+    from app.services.db_service import get_config_value_db
+    campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+    
     cursor = db.cursor()
     cursor.execute("""
         SELECT r.ruta_pdf_local, r.nombre_equipo, r.codigo_equipo
         FROM reportes r
         JOIN equipos e ON r.equipo_id = e.id
-        WHERE e.ubicacion_id = ? AND r.campania = 'PGP 2026' AND r.ruta_pdf_local IS NOT NULL AND r.ruta_pdf_local != ''
-    """, (ubicacion_id,))
+        WHERE e.ubicacion_id = ? AND r.campania = ? AND r.ruta_pdf_local IS NOT NULL AND r.ruta_pdf_local != ''
+    """, (ubicacion_id, campania_activa))
     rows = cursor.fetchall()
     
     if not rows:
-        raise HTTPException(status_code=404, detail="No se encontraron reportes generados para esta ubicación en la campaña PGP 2026.")
+        raise HTTPException(status_code=404, detail=f"No se encontraron reportes generados para esta ubicación en la campaña {campania_activa}.")
         
     # Crear archivo ZIP temporal
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")

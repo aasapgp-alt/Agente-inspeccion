@@ -51,6 +51,14 @@ def generar_libro(
         empresa_id = ubi_row["empresa_id"]
         nombre_empresa = ubi_row["empresa_nombre"]
 
+        # Obtener campaña activa y año dinámicamente
+        from app.services.db_service import get_config_value_db
+        import re
+        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+        digits = re.findall(r'\d+', campania_activa)
+        anio_campania = int(digits[0]) if digits else 2026
+
+
         # 2. Obtener todos los equipos activos de la ubicación
         cursor.execute("""
             SELECT * FROM equipos 
@@ -70,27 +78,27 @@ def generar_libro(
         fotos_por_equipo = {}
         omitidos_count = 0
 
-        # Filtramos primero cuáles tienen inspección 2026
+        # Filtramos primero cuáles tienen inspección de la campaña activa
         equipos_con_inspeccion = []
         for eq in equipos_sorted:
             eq_id = eq["id"]
             cursor.execute("""
                 SELECT * FROM inspecciones 
-                WHERE equipo_id = ? AND anio = 2026 
+                WHERE equipo_id = ? AND anio = ? 
                 ORDER BY id DESC LIMIT 1
-            """, (eq_id,))
+            """, (eq_id, anio_campania))
             insp_row = cursor.fetchone()
             if not insp_row:
                 omitidos_count += 1
-                logger.info(f"Equipo {eq.get('codigo')} omitido: sin datos de inspección 2026.")
+                logger.info(f"Equipo {eq.get('codigo')} omitido: sin datos de inspección {anio_campania}.")
                 continue
             
             equipos_con_inspeccion.append((eq, dict(insp_row)))
 
         total_inspeccionados = len(equipos_con_inspeccion)
         if total_inspeccionados == 0:
-            libro_progress[ubicacion_id] = "Error: Sin inspecciones 2026"
-            raise HTTPException(status_code=400, detail="Ninguno de los equipos de esta ubicación tiene datos de inspección registrados para el año 2026")
+            libro_progress[ubicacion_id] = f"Error: Sin inspecciones {anio_campania}"
+            raise HTTPException(status_code=400, detail=f"Ninguno de los equipos de esta ubicación tiene datos de inspección registrados para el año {anio_campania}")
 
         # 3. Generar o verificar reportes individuales
         from app.services.drive_service import sugerir_carpetas as drive_sugerir_carpetas, listar_archivos, descargar_imagen
@@ -108,9 +116,9 @@ def generar_libro(
             # Verificar si ya existe el reporte individual en reportes
             cursor.execute("""
                 SELECT * FROM reportes 
-                WHERE equipo_id = ? AND campania = 'PGP 2026' 
+                WHERE equipo_id = ? AND campania = ? 
                 ORDER BY id DESC LIMIT 1
-            """, (eq_id,))
+            """, (eq_id, campania_activa))
             rep_row = cursor.fetchone()
             
             # Si no existe o no tiene ruta local válida, generarlo
@@ -224,9 +232,9 @@ def generar_libro(
         # Verificar si ya existe un libro para esta ubicación y campaña
         cursor.execute("""
             SELECT id FROM libros 
-            WHERE ubicacion_id = ? AND campania = 'PGP 2026'
+            WHERE ubicacion_id = ? AND campania = ?
             LIMIT 1
-        """, (ubicacion_id,))
+        """, (ubicacion_id, campania_activa))
         existing_row = cursor.fetchone()
         
         if existing_row:
@@ -288,7 +296,7 @@ def generar_libro(
                 drive_link,
                 drive_file_id,
                 tamanio_pdf,
-                "PGP 2026",
+                campania_activa,
                 json.dumps(resumen_estados),
                 json.dumps(equipos_incluidos)
             ))

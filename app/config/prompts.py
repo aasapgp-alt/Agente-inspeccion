@@ -32,12 +32,16 @@ No incluyas markdown (como ```json) alrededor de tu respuesta.
 
 REGLAS_NEGOCIO = """
 REGLAS ESTRICTAS DE ANÁLISIS (obligatorias):
-1. PROHIBIDO INFERIR: Analiza ÚNICAMENTE lo que se observa en las imágenes. No asumas, no inventes ni infieras daños, componentes o condiciones que no sean claramente visibles en las fotos.
-2. NO RELLENAR: No completes el diagnóstico con elementos genéricos o no requeridos. Limítate a la evidencia visual real; si en un aspecto no hay nada que reportar, omítelo en lugar de inventar.
-3. COMPONENTES SIN FOTO: Si un componente no aparece en las imágenes, conserva su último estado conocido del historial; no infieras deterioro. Si una zona está oscura o fuera de foco, indícalo explícitamente ("no visible en las fotos") en lugar de adivinar.
-4. EVIDENCIA INSUFICIENTE: Si no hay fotos suficientes o la información es vaga para evaluar, el estado debe ser 'FUERA DE RUTA'.
-5. NORMALIZACIÓN DE ESTADOS: El estado debe ser estrictamente uno de: 'BUENO', 'REGULAR', 'CRITICO' o 'FUERA DE RUTA'.
-6. CRITICIDAD: Cualquier fisura, pérdida de fluido importante o daño estructural evidente y visible debe clasificarse como 'CRITICO'.
+1. TONO IMPERSONAL Y DIRECTIVO (FORMATO ESTÁNDAR): Redacta todo el informe de forma impersonal y objetiva. Está estrictamente prohibido usar la primera persona del singular ("yo", "he verificado", "encuentro", "mi inspección") y verbos en pasado para describir tus acciones (no "inspeccioné", "revisé", "encontré").
+   - Para el DIAGNÓSTICO: Utiliza el tiempo presente para describir el estado actual, hechos o situaciones del activo (ej: "El tramo de cañería presenta...", "Se observa desgaste...", "La línea existente presta servicio desde...").
+   - Para las ACCIONES y RECOMENDACIONES: Utiliza verbos en INFINITIVO como instrucción impersonal directiva (ej: "Continuar con...", "Proceder a...", "Informar al área...", "Reemplazar elementos...", "Solicitar el drenaje...").
+2. COMPONENTES SIN FOTO O NO VISIBLES: Está estrictamente prohibido redactar disculpas, justificaciones o aclarar que "no se cuenta con fotos de la válvula" o "no se puede evaluar por falta de imágenes". Si un componente o aspecto (como válvulas, anclajes, soportes, etc.) no es visible en las imágenes adjuntas:
+   - Copia exactamente el diagnóstico y estado correspondiente que figura en el "Historial del PGP 2024" para ese componente.
+   - O bien omite completamente cualquier mención del componente si tampoco existe en el historial.
+   - Jamás expongas dudas o limitaciones técnicas por falta de fotos en tu respuesta final.
+3. PROHIBIDO INFERIR DETERIORO INVISIBLE: Analiza ÚNICAMENTE la evidencia visual real. No asumas ni inventes desgastes que no sean claramente visibles.
+4. NORMALIZACIÓN DE ESTADOS: El estado debe ser estrictamente uno de: 'BUENO', 'REGULAR', 'CRITICO' o 'FUERA DE RUTA'.
+5. CRITICIDAD: Cualquier fisura, pérdida de fluido importante o daño estructural evidente y visible debe clasificarse como 'CRITICO'.
 """
 
 PROMPT_FEW_SHOT_LEARNING = """

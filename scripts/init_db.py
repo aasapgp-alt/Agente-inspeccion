@@ -62,6 +62,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             accion TEXT NOT NULL,
+            tabla TEXT,
+            registro_id INTEGER,
             detalles TEXT,
             ip_address TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -162,6 +164,32 @@ def init_db():
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         """)
+
+        print("Creando tabla campanias...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS campanias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empresa_id INTEGER NOT NULL,
+            nombre TEXT NOT NULL,
+            descripcion TEXT,
+            activa BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE,
+            UNIQUE(empresa_id, nombre)
+        );
+        """)
+
+        print("Creando tabla drive_folders_cache...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS drive_folders_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            drive_id TEXT UNIQUE NOT NULL,
+            nombre TEXT NOT NULL,
+            parent_id TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
         
         # Crear índices
         print("Creando índices...")
@@ -170,6 +198,9 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sesiones_token ON sesiones_activas(token)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sesiones_user_id ON sesiones_activas(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_configuracion_clave ON configuracion(clave)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_campanias_empresa ON campanias(empresa_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_drive_folders_drive_id ON drive_folders_cache(drive_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_drive_folders_parent_id ON drive_folders_cache(parent_id)")
         
         # Insertar administrador por defecto (sin contraseña predecible)
         print("Creando usuario administrador por defecto...")
@@ -189,6 +220,23 @@ def init_db():
             print("[SEGURIDAD] Anótela y cámbiela tras el primer inicio de sesión.")
             print("[SEGURIDAD] Para fijarla, defina ADMIN_INITIAL_PASSWORD antes de init_db.")
             print("=" * 60)
+
+        # Crear usuarios solicitados por el usuario
+        print("Insertando usuarios semilla adicionales...")
+        new_users = [
+            ("mpaltrinieri", "mpaltrinieri@sulvy.com", "123456", "Marco Paltrinieri", "inspector"),
+            ("hpaltrinieri", "hpaltrinieri@sulvy.com", "123456", "Herman Paltrinieri", "inspector"),
+            ("eirioni", "eirioni@sulvy.com", "123456", "Esteban Irioni", "inspector"),
+            ("gabrielng2005", "gabrielng2005@gmail.com", "123456", "Gabriel Gonzalez", "inspector"),
+            ("anahivillalba_06", "anahivillalba_06@hotmail.com", "123456", "Anahi Villalba", "inspector"),
+            ("cristaldoiq", "cristaldoiq@gmail.com", "13011081", "Diego A Cristaldo", "admin")
+        ]
+        for username, email, password, nombre, rol in new_users:
+            pwd_hash = hash_password(password)
+            cursor.execute("""
+                INSERT OR IGNORE INTO usuarios (username, email, password_hash, nombre_completo, rol, activo)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (username, email, pwd_hash, nombre, rol, 1))
 
         # Insertar configuraciones por defecto
         print("Insertando configuraciones por defecto...")
@@ -220,6 +268,21 @@ def init_db():
                 INSERT OR IGNORE INTO configuracion (clave, valor, tipo, descripcion, categoria, editable)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (clave, valor, tipo, descripcion, categoria, editable))
+            
+        # Insertar campañas iniciales por defecto para Arauco (id = 1)
+        print("Insertando campañas por defecto para Arauco...")
+        cursor.execute("SELECT id FROM empresas WHERE id = 1")
+        if cursor.fetchone():
+            default_campanias = [
+                (1, "PGP 2023", "Campaña PGP Año 2023", 0),
+                (1, "PGP 2024", "Campaña PGP Año 2024", 0),
+                (1, "PGP 2026", "Campaña PGP Año 2026", 1)
+            ]
+            for emp_id, nombre, desc, activa in default_campanias:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO campanias (empresa_id, nombre, descripcion, activa)
+                    VALUES (?, ?, ?, ?)
+                """, (emp_id, nombre, desc, activa))
             
         conn.commit()
         print("¡Base de datos inicializada correctamente!")

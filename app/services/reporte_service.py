@@ -117,15 +117,22 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
         raise ValueError(f"Equipo con ID {equipo_id} no encontrado.")
     equipo = dict(eq_row)
     
-    # 2. Obtener datos de inspección (año 2026)
+    # 2. Obtener datos de campaña y año dinámicamente
+    from app.services.db_service import get_config_value_db
+    campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+    import re
+    digits = re.findall(r'\d+', campania_activa)
+    anio_campania = int(digits[0]) if digits else 2026
+
+    # Obtener datos de inspección para el año correspondiente
     cursor.execute("""
         SELECT * FROM inspecciones 
-        WHERE equipo_id = ? AND anio = 2026 
+        WHERE equipo_id = ? AND anio = ? 
         ORDER BY id DESC LIMIT 1
-    """, (equipo_id,))
+    """, (equipo_id, anio_campania))
     insp_row = cursor.fetchone()
     if not insp_row:
-        raise ValueError(f"El equipo seleccionado ({equipo.get('codigo')}) no tiene datos de inspección registrados para el año 2026.")
+        raise ValueError(f"El equipo seleccionado ({equipo.get('codigo')}) no tiene datos de inspección registrados para el año {anio_campania}.")
     inspeccion = dict(insp_row)
     
     # 3. Resolver imágenes asociadas en Google Drive y descargarlas temporalmente
@@ -174,12 +181,11 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
             pass
             
     # 5. Guardar en carpeta reportes/individuales/
-    from app.services.db_service import get_config_value_db
     directorio_reportes = get_config_value_db("reportes_dir") or os.path.join("reportes", "individuales")
     os.makedirs(directorio_reportes, exist_ok=True)
     
     codigo_eq = equipo.get('codigo', 'N/A')
-    nombre_archivo = f"ACTA-2026-{codigo_eq}.pdf"
+    nombre_archivo = f"ACTA-{campania_activa.replace(' ', '')}-{codigo_eq}.pdf"
     ruta_local = os.path.join(directorio_reportes, nombre_archivo)
     
     with open(ruta_local, "wb") as f:
@@ -190,9 +196,8 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
     drive_link = ""
     try:
         from app.services.drive_service import obtener_o_crear_carpeta_drive, subir_archivo
-        from app.services.db_service import get_config_value_db
         parent_folder = get_config_value_db("drive_folder_id") or settings.DRIVE_FOLDER_ID or "root"
-        folder_reportes_id = obtener_o_crear_carpeta_drive("Reportes Individuales 2026", parent_folder)
+        folder_reportes_id = obtener_o_crear_carpeta_drive(f"Reportes Individuales {campania_activa}", parent_folder)
         
         res_upload = subir_archivo(ruta_local, nombre_archivo, folder_reportes_id)
         if res_upload and "id" in res_upload:
@@ -202,7 +207,7 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
         logger.error(f"Error subiendo a Google Drive: {drive_up_err}")
         
     if not drive_link:
-        drive_link = f"https://drive.google.com/mock-link/ACTA-2026-{codigo_eq}.pdf"
+        drive_link = f"https://drive.google.com/mock-link/ACTA-{campania_activa.replace(' ', '')}-{codigo_eq}.pdf"
         
     # 7. Guardar registro en la tabla reportes (para historial) con lógica de versiones
     fecha_generacion = datetime.datetime.now().isoformat()
@@ -211,9 +216,8 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
     # Verificar si ya existe un reporte para este equipo y campaña
     cursor.execute("""
         SELECT id FROM reportes 
-        WHERE equipo_id = ? AND campania = 'PGP 2026'
-        LIMIT 1
-    """, (equipo_id,))
+        WHERE equipo_id = ? AND campania = ?
+    """, (equipo_id, campania_activa))
     existing_row = cursor.fetchone()
     
     if existing_row:
@@ -248,7 +252,7 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
             tamanio_pdf,
             user_id,
             inspeccion.get('diagnostico', ''),
-            f"ACTA-2026-{codigo_eq}",
+            f"ACTA-{campania_activa.replace(' ', '')}-{codigo_eq}",
             reporte_id
         ))
     else:
@@ -271,8 +275,8 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
             tamanio_pdf,
             user_id,
             inspeccion.get('diagnostico', ''),
-            f"ACTA-2026-{codigo_eq}",
-            "PGP 2026"
+            f"ACTA-{campania_activa.replace(' ', '')}-{codigo_eq}",
+            campania_activa
         ))
         reporte_id = cursor.lastrowid
         next_version = 1
@@ -306,7 +310,7 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
             numero_acta = ?,
             estado_generacion = 'COMPLETADO'
         WHERE id = ?
-    """, (ruta_local, drive_link, drive_file_id, fecha_generacion, f"ACTA-2026-{codigo_eq}", inspeccion['id']))
+    """, (ruta_local, drive_link, drive_file_id, fecha_generacion, f"ACTA-{campania_activa.replace(' ', '')}-{codigo_eq}", inspeccion['id']))
     
     db.commit()
     

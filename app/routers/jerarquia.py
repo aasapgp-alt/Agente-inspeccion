@@ -22,7 +22,7 @@ def get_empresas(db: sqlite3.Connection = Depends(get_db)):
     return [dict(row) for row in cursor.fetchall()]
 
 @router.post("/empresas", response_model=Dict[str, Any])
-def create_empresa(empresa: EmpresaCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role(["admin"]))):
+def create_empresa(empresa: EmpresaCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:
         cursor = db.execute("INSERT INTO empresas (nombre, descripcion) VALUES (?, ?)", (empresa.nombre, empresa.descripcion))
         db.commit()
@@ -41,7 +41,7 @@ def get_ubicaciones(empresa_id: Optional[int] = None, db: sqlite3.Connection = D
     return [dict(row) for row in cursor.fetchall()]
 
 @router.post("/ubicaciones", response_model=Dict[str, Any])
-def create_ubicacion(ubicacion: UbicacionCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role(["admin"]))):
+def create_ubicacion(ubicacion: UbicacionCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:
         cursor = db.execute("INSERT INTO ubicaciones (empresa_id, nombre, codigo, descripcion) VALUES (?, ?, ?, ?)", 
                             (ubicacion.empresa_id, ubicacion.nombre, ubicacion.codigo, ubicacion.descripcion))

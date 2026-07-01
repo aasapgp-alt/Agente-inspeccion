@@ -307,6 +307,8 @@ def make_reporte_canvas_class(doc_title):
     return CustomReporteCanvas
 
 def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = None) -> list:
+    from app.services.db_service import get_config_value_db
+    campania = get_config_value_db("reporte_campania", "PGP 2026")
     story = []
     styles = getSampleStyleSheet()
     
@@ -365,7 +367,7 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     story.append(Spacer(1, 4))
     
     codigo_eq = equipo.get('codigo', equipo.get('numero', 'N/A'))
-    num_acta = f"ACTA-2026-{codigo_eq}"
+    num_acta = f"ACTA-{campania.replace(' ', '')}-{codigo_eq}"
     story.append(Paragraph(f"Acta de Inspección: {num_acta}", ParagraphStyle('DocActa', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1)))
     story.append(Spacer(1, 15))
     
@@ -433,7 +435,7 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     story.append(eq_table)
     story.append(Spacer(1, 10))
     
-    # 3. ESTADO PGP 2026 (Badge)
+    # 3. ESTADO (Badge)
     estado_val = str(inspeccion.get('estado', 'BUENO')).upper()
     badge_bg = colors.HexColor('#6b7280') # FUERA DE RUTA / Default Gray
     if 'BUENO' in estado_val:
@@ -460,7 +462,7 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     ])
     
     estado_layout = Table([
-        [Paragraph("<b>ESTADO PGP 2026:</b>", ParagraphStyle('EstLbl', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold')), badge_cell]
+        [Paragraph(f"<b>ESTADO {campania}:</b>", ParagraphStyle('EstLbl', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold')), badge_cell]
     ], colWidths=[130, 368])
     estado_layout.setStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -470,8 +472,8 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     story.append(estado_layout)
     story.append(Spacer(1, 10))
     
-    # 4. ACCIONES EJECUTADAS EN PGP 2026
-    story.append(Paragraph("ACCIONES EJECUTADAS EN PGP 2026", section_title_style))
+    # 4. ACCIONES EJECUTADAS
+    story.append(Paragraph(f"ACCIONES EJECUTADAS EN {campania}", section_title_style))
     acciones_text = inspeccion.get('acciones', 'Sin acciones registradas.')
     story.append(Paragraph(acciones_text.replace('\n', '<br/>'), body_text_style))
     story.append(Spacer(1, 10))
@@ -590,6 +592,12 @@ def generar_pdf_individual(equipo: dict, inspeccion: dict, fotos_locales: list =
 from reportlab.pdfgen import canvas
 
 def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list, inspecciones: list, fotos_por_equipo: dict, omitidos_count: int = 0) -> bytes:
+    from app.services.db_service import get_config_value_db
+    import re
+    campania = get_config_value_db("reporte_campania", "PGP 2026")
+    digits = re.findall(r'\d+', campania)
+    next_camp = campania.replace(digits[0], str(int(digits[0]) + 1)) if digits else "siguiente"
+    
     try:
         buffer = io.BytesIO()
         top_m, bot_m = margenes_membrete()
@@ -622,7 +630,7 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
         meta_details = [
             [Paragraph("Cliente / Empresa:", meta_label_style), Paragraph(nombre_empresa, meta_val_style)],
             [Paragraph("Ubicación / Área:", meta_label_style), Paragraph(nombre_ubicacion, meta_val_style)],
-            [Paragraph("Campaña:", meta_label_style), Paragraph("PGP 2026", meta_val_style)],
+            [Paragraph("Campaña:", meta_label_style), Paragraph(campania, meta_val_style)],
             [Paragraph("Fecha de Generación:", meta_label_style), Paragraph(fecha_gen, meta_val_style)],
             [Paragraph("Equipos Incluidos:", meta_label_style), Paragraph(str(len(equipos)), meta_val_style)]
         ]
@@ -644,7 +652,7 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
         
         # Objetivo
         story.append(Paragraph("<b>Objetivo:</b>", ParagraphStyle('ObjHead', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=COLORES_SULVY['primario'])))
-        objetivo_text = f"Consolidar los informes de inspección técnica realizados en la ubicación {nombre_ubicacion} de la empresa {nombre_empresa} durante la campaña PGP 2026, detallando los hallazgos técnicos, el estado de conservación de los activos, y las recomendaciones de mantenimiento propuestas para el período PGP 2027."
+        objetivo_text = f"Consolidar los informes de inspección técnica realizados en la ubicación {nombre_ubicacion} de la empresa {nombre_empresa} durante la campaña {campania}, detallando los hallazgos técnicos, el estado de conservación de los activos, y las recomendaciones de mantenimiento propuestas para el período {next_camp}."
         story.append(Paragraph(objetivo_text, ParagraphStyle('ObjVal', fontName='Helvetica', fontSize=9.5, leading=13.5, textColor=COLORES_SULVY['texto'], alignment=4)))
         story.append(Spacer(1, 15))
         
@@ -831,7 +839,7 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
         # Cierre: firma del equipo técnico
         story.extend(generar_bloque_firma())
 
-        canvas_maker = make_reporte_canvas_class(f"Libro {nombre_ubicacion} - PGP 2026")
+        canvas_maker = make_reporte_canvas_class(f"Libro {nombre_ubicacion} - {campania}")
         doc.build(story, canvasmaker=canvas_maker)
         
         pdf_bytes = buffer.getvalue()

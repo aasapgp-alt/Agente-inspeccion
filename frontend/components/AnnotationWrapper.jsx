@@ -275,23 +275,39 @@ export default function AnnotationWrapper(props) {
         const ry = Math.abs(start.y - pointer.y) / 2;
         activeObjRef.current.set({ left, top, rx, ry });
       } else if (currentTool === 'LINE') {
-        activeObjRef.current.set({ x2: pointer.x, y2: pointer.y });
+        // Recrear la línea con coordenadas absolutas: mutar x2/y2 sobre una
+        // fabric.Line deja su bounding box (left/top) desactualizado y la dibuja
+        // desplazada respecto al cursor, lo que hace que la marca "salte" al
+        // confirmarse como SVG. Recrearla mantiene el preview pegado al cursor.
+        canvas.remove(activeObjRef.current);
+        activeObjRef.current = new fabric.Line([start.x, start.y, pointer.x, pointer.y], {
+          stroke: colorRef.current,
+          strokeWidth: lineWidthRef.current,
+          selectable: false,
+          evented: false
+        });
+        canvas.add(activeObjRef.current);
       } else if (currentTool === 'ARROW') {
-        const line = activeObjRef.current.line;
         const head = activeObjRef.current.head;
-        const x1 = line.x1;
-        const y1 = line.y1;
         const x2 = pointer.x;
         const y2 = pointer.y;
-        line.set({ x2, y2 });
-        
-        const dx = x2 - x1;
-        const dy = y2 - y1;
+        // Recrear la línea (mismo motivo que LINE). La punta usa left/top
+        // absolutos, así que no sufre el desfase: solo se reposiciona.
+        canvas.remove(activeObjRef.current.line);
+        canvas.remove(head);
+        const newLine = new fabric.Line([start.x, start.y, x2, y2], {
+          stroke: colorRef.current,
+          strokeWidth: lineWidthRef.current,
+          selectable: false,
+          evented: false
+        });
+        canvas.add(newLine);
+
+        const dx = x2 - start.x;
+        const dy = y2 - start.y;
         const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-        
         // Adjust head size based on stroke width to match SVG marker
         const markerSize = (lineWidthRef.current / (canvas.getZoom() || 1)) * 6;
-        
         head.set({
           left: x2,
           top: y2,
@@ -299,6 +315,8 @@ export default function AnnotationWrapper(props) {
           width: markerSize,
           height: markerSize
         });
+        canvas.add(head); // re-agregar para que la punta quede al frente
+        activeObjRef.current = { line: newLine, head };
       } else if (currentTool === 'FREEHAND') {
         const pt = { x: pointer.x, y: pointer.y };
         pointsRef.current.push(pt);
@@ -335,16 +353,19 @@ export default function AnnotationWrapper(props) {
         return;
       }
 
-      // Calculate percentage geometry for database consistency
-      const renderedW = imageRef.current ? imageRef.current.offsetWidth : canvas.getWidth();
-      const renderedH = imageRef.current ? imageRef.current.offsetHeight : canvas.getHeight();
-      const natW = naturalSizeRef.current.width || renderedW;
-      const natH = naturalSizeRef.current.height || renderedH;
-      // Scale factor: convert from rendered canvas pixels to natural image pixels
-      const scaleX = natW / renderedW;
-      const scaleY = natH / renderedH;
-      const w = renderedW;
-      const h = renderedH;
+      // Las coordenadas (start/pointer) provienen de canvas.getScenePoint, es
+      // decir viven en el espacio lógico del canvas de Fabric. El porcentaje DEBE
+      // calcularse sobre ese mismo espacio (canvas.getWidth/Height), no sobre
+      // imageRef.offsetWidth: si el canvas y la imagen difieren en tamaño lógico
+      // (por timing de carga o resize), mezclar ambas bases desplaza la marca al
+      // pasar del preview de Fabric al overlay SVG. Unificar la base evita el salto.
+      const w = canvas.getWidth();
+      const h = canvas.getHeight();
+      const natW = naturalSizeRef.current.width || w;
+      const natH = naturalSizeRef.current.height || h;
+      // Factor de escala: de píxeles del canvas a píxeles naturales de la imagen.
+      const scaleX = natW / w;
+      const scaleY = natH / h;
       let geometry = {};
       const start = startPointRef.current;
 

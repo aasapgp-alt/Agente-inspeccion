@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from '../components/AuthProvider';
 import Login from '../components/Login';
 import ReportsPanel from '../components/ReportsPanel';
 import SettingsPanel from '../components/SettingsPanel';
+import AuditPanel from '../components/AuditPanel';
 
 export default function Home() {
   return (
@@ -157,6 +158,10 @@ function DashboardContent() {
 
           {activeTab === 'SETTINGS' && (
             <SettingsPanel />
+          )}
+
+          {activeTab === 'AUDIT' && (
+            <AuditPanel />
           )}
 
         </div>

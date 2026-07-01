@@ -1,11 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, Query
+from fastapi import APIRouter, Depends, HTTPException, Response, Query, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from app.core.dependencies import get_current_user, get_db
 import sqlite3
+import uuid
 from app.services.drive_service import listar_carpetas, listar_archivos, descargar_imagen, sugerir_carpetas as drive_sugerir_carpetas
 
 router = APIRouter(prefix="/api/drive", tags=["drive"])
+
+sincronizacion_progress = {}
+
+def bg_task_sincronizar_drive(task_id: str):
+    from app.services.db_service import get_db_connection
+    from app.services.drive_service import indexar_todas_las_carpetas_drive
+    try:
+        with get_db_connection() as conn:
+            indexar_todas_las_carpetas_drive(conn, task_id, sincronizacion_progress)
+    except Exception as e:
+        sincronizacion_progress[task_id] = {"status": "failed", "progress": 100, "mensaje": f"Error: {str(e)}"}
 
 @router.get("/root")
 def get_root_folder(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
@@ -88,6 +100,19 @@ def get_imagen(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/sincronizar")
+def sincronizar_drive(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    task_id = str(uuid.uuid4())
+    sincronizacion_progress[task_id] = {"status": "processing", "progress": 0, "mensaje": "Iniciando sincronización..."}
+    background_tasks.add_task(bg_task_sincronizar_drive, task_id)
+    return {"task_id": task_id}
+
+@router.get("/sincronizar/estado/{task_id}")
+def status_sincronizar_drive(task_id: str, current_user: dict = Depends(get_current_user)):
+    if task_id not in sincronizacion_progress:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    return sincronizacion_progress[task_id]
+
 @router.get("/sugerir_carpetas", response_model=Dict[str, Any])
 def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     try:
@@ -110,6 +135,9 @@ def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_curren
         
         # drive_sugerir_carpetas will receive both to find the best match
         sugerencias_raw = drive_sugerir_carpetas(codigo, nombre, root_folder_id)
+        
+        # Limitar las sugerencias a un máximo de 5 para no dejar un listado muy largo
+        sugerencias_raw = sugerencias_raw[:5]
         
         sugerencias = []
         for i, c in enumerate(sugerencias_raw):
