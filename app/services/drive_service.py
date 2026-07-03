@@ -23,19 +23,30 @@ logger = logging.getLogger(__name__)
 
 def autenticar_drive() -> GoogleAuth:
     try:
+        # 1. Intentar usar Cuenta de Servicio (Service Account) para producción/cero login
+        service_json_path = "c:\\Agente-Inspector\\service_account.json"
+        if os.path.exists(service_json_path):
+            from oauth2client.service_account import ServiceAccountCredentials
+            scope = ["https://www.googleapis.com/auth/drive"]
+            
+            gauth = GoogleAuth()
+            gauth.auth_method = 'service'
+            gauth.credentials = ServiceAccountCredentials.from_json_keyfile_name(
+                service_json_path, 
+                scope
+            )
+            logger.info("Autenticado exitosamente en Google Drive usando Cuenta de Servicio.")
+            return gauth
+
+        # 2. Fallback a flujo OAuth normal (requiere login por navegador inicial)
         gauth = GoogleAuth(settings_file="settings.yaml")
-        # Cargar credenciales guardadas de mycreds.txt si existen
         gauth.LoadCredentialsFile("mycreds.txt")
         if gauth.credentials is None:
-            # Autenticación inicial local (abrirá el navegador del propietario)
             gauth.LocalWebserverAuth()
         elif gauth.access_token_expired:
-            # Refrescar token automáticamente
             gauth.Refresh()
         else:
-            # Autorizar credenciales existentes
             gauth.Authorize()
-        # Guardar credenciales para futuras ejecuciones
         gauth.SaveCredentialsFile("mycreds.txt")
         return gauth
     except Exception as e:
@@ -247,7 +258,7 @@ def indexar_todas_las_carpetas_drive(db_conn, task_id: str = None, progress_stor
 
 def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
     drive = get_drive_instance()
-    
+
     # If the parent folder is 'root', resolve it to the configured drive_folder_id from DB settings
     if carpeta_id == "root":
         try:
@@ -262,18 +273,13 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
     words = [w for w in re.split(r'\W+', nombre) if len(w) >= 3]
     stop_words = {'del', 'con', 'para', 'por', 'las', 'los', 'una', 'uno', 'de', 'la', 'el', 'en'}
     clean_words = [w for w in words if w.lower() not in stop_words]
-    
+
     # Also include the code
     if codigo:
         clean_words.append(codigo)
-        
-    if not drive:
-        # MOCK DATA
-        termino_busqueda = clean_words[0] if clean_words else codigo
-        return [
-            {"id": "mock_folder_3", "title": f"Carpeta del Equipo {termino_busqueda} ({nombre})"},
-            {"id": "mock_folder_4", "title": f"Historial {termino_busqueda}"}
-        ]
+
+    # NOTE: Do NOT return mock data here if drive is None.
+    # Always try the local cache first — it works independently of Drive auth.
         
     try:
         # Intentar consultar caché local de Drive primero
@@ -298,68 +304,95 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
             nfkd_form = unicodedata.normalize('NFKD', word)
             return "".join([ch for ch in nfkd_form if not unicodedata.combining(ch)]).lower()
 
+        # Extraer tags numéricos del nombre del equipo (ej: "431-032", "421-070")
+        # Estos son los identificadores más específicos y deben tener mayor peso
+        numeric_tags = re.findall(r'\d{3}-\s*\d{3}', nombre)
+        # Normalizar (quitar espacios en el medio: "431- 032" -> "431-032")
+        numeric_tags = [re.sub(r'\s+', '', t) for t in numeric_tags]
+
         if has_cache:
             # Búsqueda en el caché local
             clean_words_norm = [clean_word(w) for w in clean_words]
             sugeridas_raw = []
-            
+
             if clean_words_norm:
                 for r in cache_rows:
                     title_norm = clean_word(r["title"])
                     if any(w in title_norm for w in clean_words_norm):
                         sugeridas_raw.append(r)
-            
+
             if not sugeridas_raw:
                 # Fallback: listar hijos directos en caché
                 sugeridas_raw = [r for r in cache_rows if r["parent_id"] == carpeta_id]
         else:
-            # Fallback a la API de Drive si el caché no está disponible/vacío
+            # No hay cache: intentar con la API de Drive en tiempo real (solo si está disponible)
+            if not drive:
+                # Sin cache y sin Drive: retornar lista vacía (no mockear)
+                return []
             if not clean_words:
                 carpetas = listar_carpetas(carpeta_id)
                 return carpetas[:5]
-                
+
             query_parts = [f"title contains '{w}'" for w in clean_words[:5]]
             query = "mimeType='application/vnd.google-apps.folder' and (" + " or ".join(query_parts) + ") and trashed=false"
             file_list = drive.ListFile({'q': query}).GetList()
             sugeridas_raw = [{"id": file['id'], "title": file['title']} for file in file_list]
-            
+
+
         results = []
         eq_words = set(clean_word(w) for w in re.split(r'\W+', nombre) if len(w) >= 2)
-        
+
         for c in sugeridas_raw:
+            title_clean = clean_word(c['title'])
             folder_words = set(clean_word(w) for w in re.split(r'\W+', c['title']) if len(w) >= 2)
-            
-            overlap_score = 0
+
+            # Score base: Jaccard overlap entre palabras del nombre y carpeta
+            overlap_score = 0.0
             if folder_words and eq_words:
                 overlap = folder_words.intersection(eq_words)
                 overlap_score = len(overlap) / len(folder_words.union(eq_words))
-                
-            # Extra points if title contains the code/number (e.g. '135')
-            if codigo and clean_word(codigo) in clean_word(c['title']):
-                overlap_score += 0.5
-                
+
+            # Bonus fuerte si la carpeta contiene un tag numérico específico del equipo
+            # (ej: "431-032" en el título) → máxima prioridad
+            tag_bonus = 0.0
+            for tag in numeric_tags:
+                tag_norm = clean_word(tag)
+                tag_no_dash = tag_norm.replace('-', '')
+                title_no_dash = title_clean.replace('-', '').replace(' ', '')
+                if tag_norm in title_clean or tag_no_dash in title_no_dash:
+                    tag_bonus = 2.0  # supera cualquier score de Jaccard
+                    break
+
+            # Bonus menor si el código interno aparece en el título (solo si no es un número genérico)
+            codigo_bonus = 0.0
+            if codigo and len(codigo) > 2 and clean_word(codigo) in title_clean:
+                codigo_bonus = 0.3
+
+            total_score = overlap_score + tag_bonus + codigo_bonus
+
             results.append({
                 "id": c['id'],
                 "title": c['title'],
-                "overlap_score": overlap_score
+                "overlap_score": total_score
             })
-            
+
         # Sort by score descending
         results.sort(key=lambda x: x['overlap_score'], reverse=True)
-        
+
         # Limitar a máximo 5 resultados para evitar listas muy largas
         top_results = results[:5]
-        
+
         if top_results:
             return [{"id": r['id'], "title": r['title'], "match_score": r['overlap_score']} for r in top_results]
-            
+
         # Fallback a listar contenido
         carpetas = listar_carpetas(carpeta_id)
         return carpetas[:5]
-        
+
     except Exception as e:
         logger.error(f"Error sugiriendo carpetas para {nombre}: {e}")
         return []
+
 
 def obtener_metadata_archivo(file_id: str) -> dict:
     try:

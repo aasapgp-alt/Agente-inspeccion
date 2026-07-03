@@ -83,3 +83,7 @@ clear_reports.py
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Credenciales específicas de producción
+service_account.json
+
