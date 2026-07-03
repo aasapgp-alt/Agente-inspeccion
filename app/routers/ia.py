@@ -105,9 +105,14 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
         equipo = dict(eq_row)
 
         # 2. Obtener historial de inspección para 2024
-        cursor.execute("SELECT estado, diagnostico FROM inspecciones WHERE equipo_id = ? AND anio = 2024 LIMIT 1", (data.equipo_id,))
+        cursor.execute("SELECT estado, diagnostico, acciones, recomendaciones FROM inspecciones WHERE equipo_id = ? AND anio = 2024 LIMIT 1", (data.equipo_id,))
         hist_row = cursor.fetchone()
-        historial_2024 = dict(hist_row) if hist_row else {"estado": "Sin datos", "diagnostico": "Sin diagnóstico previo."}
+        historial_2024 = dict(hist_row) if hist_row else {
+            "estado": "Sin datos", 
+            "diagnostico": "Sin diagnóstico previo.",
+            "acciones": "Sin acciones registradas.",
+            "recomendaciones": "Sin recomendaciones registradas."
+        }
 
         # 3. Descargar y codificar imágenes en base64
         images_b64 = []
@@ -143,9 +148,9 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
         prompt = f"""
 INSTRUCCIÓN DE ESTILO OBLIGATORIA (debe respetarse en TODO el informe):
 - PROHIBIDO usar primera persona singular: NO escribas "yo", "he verificado", "encuentro", "mi inspección", "he inspeccionado", "detecto", "constato", "he constatado".
-- PROHIBIDO usar tiempo pasado para narrar acciones: NO escribas "inspeccioné", "revisé", "verifiqué", "realicé", "evaluué".
-- DIAGNÓSTICO: Escribe siempre en TIEMPO PRESENTE IMPERSONAL. Ejemplos correctos: "El equipo presenta...", "Se observa deterioro...", "La línea muestra...", "Los soportes exhiben...".
-- ACCIONES y RECOMENDACIONES: Escribe siempre en INFINITIVO. Ejemplos correctos: "Realizar inspección...", "Proceder a cambio...", "Informar al área...", "Continuar con...", "Reemplazar elementos...".
+- DIAGNÓSTICO: Escribe siempre en TIEMPO PRESENTE IMPERSONAL (ej. "El tramo de cañería presenta...", "Se observa deterioro...").
+- ACCIONES: Escribe en TIEMPO PASADO IMPERSONAL (ej. "Se realizó inspección externa", "Se realizó apertura de bridas o carreteles" si se muestran piezas desmontadas, "Se realizó inspección visual externa anual, verificando un estado general regular del equipo"). Describe lo que hizo el inspector comparándolo con las acciones de la PGP anterior de historial.
+- RECOMENDACIONES: Escribe siempre en INFINITIVO (ej. "Continuar con...", "Proceder a...", "Informar al área...", "Reemplazar...").
 
 Redacta el siguiente informe técnico de inspección industrial. Solo describe lo que realmente se observa en las fotos.
 
@@ -154,9 +159,11 @@ Redacta el siguiente informe técnico de inspección industrial. Solo describe l
 Equipo a analizar:
 Nombre: {equipo.get('nombre')}, Área: {equipo.get('area') or ''}, Código/Número: {equipo.get('codigo') or equipo.get('numero') or ''}, Material: {equipo.get('material') or ''}, Criticidad: {equipo.get('criticidad') or ''}.
 
-Historial del PGP 2024 (úsalo como base para componentes no visibles en las fotos):
+Historial del PGP 2024 (comparar con este historial para todos los campos):
 - Estado: {historial_2024.get('estado')}
 - Diagnóstico: {historial_2024.get('diagnostico')}
+- Acciones: {historial_2024.get('acciones')}
+- Recomendaciones: {historial_2024.get('recomendaciones')}
 
 Indicaciones previas del inspector humano:
 {data.indicaciones_previas or 'Ninguna indicación adicional.'}
@@ -181,8 +188,8 @@ Por favor, analiza con extremo cuidado las zonas señaladas por estas anotacione
 Devuelve tu respuesta ÚNICAMENTE en formato JSON (sin bloques markdown como ```json):
 {
   "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
-  "diagnostico": "TIEMPO PRESENTE IMPERSONAL. Ejemplos: 'El tramo de cañería presenta...', 'Se observa...', 'Los soportes exhiben...'. JAMÁS uses 'yo', 'he', 'detecté', 'encontré', 'verifiqué', 'inspeccioné'.",
-  "acciones": "Lista de las partes o componentes físicos inspeccionados durante la visita, en INFINITIVO y de forma concisa. Describe QUÉ SE INSPECCIONÓ (no qué hacer a futuro). Ejemplos correctos: 'Inspeccionar tramo interno', 'Verificar parte exterior del cuerpo', 'Revisar tornillos y uniones bridadas', 'Examinar soportes metálicos', 'Inspeccionar acometidas y bridas de conexión'. Muy breve, máximo 1-2 líneas.",
+  "diagnostico": "TIEMPO PRESENTE IMPERSONAL. Compara con el diagnóstico de la PGP 2024. Ejemplos: 'El tramo de cañería presenta...', 'Se observa...', 'Los soportes exhiben...'. JAMÁS uses 'yo', 'he', 'detecté', 'encontré', 'verifiqué', 'inspeccioné'.",
+  "acciones": "PASADO IMPERSONAL. Describe qué hizo el inspector basándote y comparando con la PGP 2024. Ejemplos: 'Se realizó inspección externa', 'Se realizó apertura de bridas o carreteles', 'Se realizó inspección visual externa anual, verificando un estado general regular del equipo'.",
   "recomendaciones": {
     "EQUIPO INTERIOR": "INFINITIVO: 'Realizar...', 'Continuar...', 'Solicitar...', o 'Sin comentarios'",
     "EQUIPO EXTERIOR": "INFINITIVO o 'Sin comentarios'",
@@ -194,7 +201,7 @@ Devuelve tu respuesta ÚNICAMENTE en formato JSON (sin bloques markdown como ```
   }
 }
 
-RECORDATORIO FINAL: El diagnóstico debe estar en TIEMPO PRESENTE IMPERSONAL (no primera persona). Las acciones y recomendaciones en INFINITIVO.
+RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impersonal (Se realizó...). Recomendaciones en infinitivo.
 
 *REGLA PREVENTIVA CRÍTICA PARA PLÁSTICOS*: Si el material es plástico (FRP, ACRBA, PP, etc.), en 'ACOMETIDAS' escribe obligatoriamente: 'Como medida preventiva y para evitar recurrir a los golpes para desmontar los espárragos y bulones en todas las acometidas bridadas (incluida la BdH) y sus consecuencias indeseables (roturas y fisuras recurrentes), reemplazar los elementos de sujeción y juntas en un plazo no mayor a 1 año. Aplica para todos los equipos y cañerías plásticas.'
 """
@@ -216,10 +223,10 @@ RECORDATORIO FINAL: El diagnóstico debe estar en TIEMPO PRESENTE IMPERSONAL (no
         system_instruction = """
 Eres un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA) redactando un informe técnico formal.
 Debes redactar todo de manera estrictamente impersonal y formal.
-Está completamente prohibido usar la primera persona del singular ("yo", "he verificado", "mi inspección") y verbos en pasado para narrar tus acciones (no "inspeccioné", "revisé").
-- Para el DIAGNÓSTICO: Describe el estado actual o hechos únicamente en tiempo presente impersonal (ej: "El tramo de cañería presenta...", "Se observa desgaste...").
-- Para las ACCIONES: Lista los componentes o partes físicas que fueron inspeccionadas durante la visita, en infinitivo. Describe qué se inspeccionó, NO tareas a futuro. Ejemplo: "Inspeccionar tramo interno", "Revisar tornillos y uniones bridadas", "Examinar soportes metálicos".
-- Para las RECOMENDACIONES: Escribe siempre las tareas a futuro usando verbos en INFINITIVO (ej: "Continuar con...", "Proceder a...", "Informar al área...", "Reemplazar...", "Solicitar...").
+Está completamente prohibido usar la primera persona del singular ("yo", "he verificado", "mi inspección") y verbos en pasado en primera persona (no "inspeccioné", "revisé").
+- Para el DIAGNÓSTICO: Describe el estado actual o hechos únicamente en tiempo presente impersonal (ej: "El tramo de cañería presenta...", "Se observa desgaste..."). Compara con el historial PGP 2024 provisto.
+- Para las ACCIONES: Escribe en pasado impersonal, describiendo qué hizo el inspector (ej. "Se realizó inspección externa", "Se realizó apertura de bridas o carreteles", "Se realizó inspección visual externa anual"). Compara con la PGP 2024.
+- Para las RECOMENDACIONES: Escribe siempre las tareas a futuro usando verbos en INFINITIVO (ej: "Continuar con...", "Proceder a...", "Informar al área...", "Reemplazar...").
 No menciones nunca limitaciones de fotos ni digas que "no se cuenta con imágenes" o "no se puede evaluar". Para cualquier zona o componente no visible, hereda o asume exactamente el diagnóstico del Historial PGP 2024 o no lo nombres.
 Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetando las llaves exactas.
 """
