@@ -4,14 +4,104 @@ import datetime
 import logging
 from PIL import Image
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, PageBreak, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer, Image as RLImage, Table, PageBreak, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+import html
+import re
 
 logger = logging.getLogger(__name__)
+
+def clean_xml_text(text: str) -> str:
+    if not text:
+        return ""
+    text = str(text)
+    try:
+        text = text.encode('utf-8', errors='ignore').decode('utf-8')
+    except Exception:
+        pass
+    escaped = html.escape(text)
+    escaped = escaped.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+    escaped = escaped.replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>")
+    escaped = escaped.replace("&lt;u&gt;", "<u>").replace("&lt;/u&gt;", "</u>")
+    escaped = escaped.replace("&lt;br/&gt;", "<br/>").replace("&lt;br&gt;", "<br/>").replace("&lt;br /&gt;", "<br/>")
+    return escaped
+
+def load_and_scale_image(path: str, target_width: float) -> RLImage:
+    try:
+        from PIL import Image as PILImage
+        with PILImage.open(path) as pil_img:
+            orig_w, orig_h = pil_img.size
+        proportional_height = (target_width / orig_w) * orig_h
+        return RLImage(path, width=target_width, height=proportional_height, kind='proportional')
+    except Exception as e:
+        logger.error(f"Error loading image with PIL ({path}): {e}")
+        return RLImage(path, width=target_width, height=150, kind='proportional')
+
+def obtener_config_fotos(total_fotos: int) -> dict:
+    if total_fotos <= 3:
+        return {
+            "columnas": 1,
+            "ancho": 450,
+            "fuente_titulo": 9,
+            "fuente_obs": 8,
+            "espaciado_filas": 12,
+            "max_lineas_obs": None,
+            "ubicacion": "cuerpo"
+        }
+    elif total_fotos <= 6:
+        return {
+            "columnas": 2,
+            "ancho": 210,
+            "fuente_titulo": 9,
+            "fuente_obs": 8,
+            "espaciado_filas": 12,
+            "max_lineas_obs": None,
+            "ubicacion": "cuerpo"
+        }
+    elif total_fotos <= 10:
+        return {
+            "columnas": 2,
+            "ancho": 200,
+            "fuente_titulo": 9,
+            "fuente_obs": 7,
+            "espaciado_filas": 10,
+            "max_lineas_obs": None,
+            "ubicacion": "cuerpo"
+        }
+    elif total_fotos <= 15:
+        return {
+            "columnas": 2,
+            "ancho": 190,
+            "fuente_titulo": 8,
+            "fuente_obs": 7,
+            "espaciado_filas": 8,
+            "max_lineas_obs": None,
+            "ubicacion": "cuerpo"
+        }
+    elif total_fotos <= 20:
+        return {
+            "columnas": 2,
+            "ancho": 180,
+            "fuente_titulo": 8,
+            "fuente_obs": 7,
+            "espaciado_filas": 8,
+            "max_lineas_obs": 1,
+            "ubicacion": "cuerpo"
+        }
+    else:
+        return {
+            "columnas": 2,
+            "ancho": 210,
+            "fuente_titulo": 9,
+            "fuente_obs": 8,
+            "espaciado_filas": 12,
+            "max_lineas_obs": None,
+            "ubicacion": "mixto"
+        }
 
 # Máximo de imágenes incluidas por equipo en el registro fotográfico del reporte.
 MAX_FOTOS_REPORTE = 6
@@ -131,9 +221,9 @@ MEMBRETE = {
 
 # Datos fijos de la empresa (encabezado, esquina superior derecha)
 SULVY_CONTACTO = [
-    "Miranda 549, Hurlingham, Buenos Aires B1686GNA",
-    "+54 9 11 4665 2875",
-    "+54 9 11 4089 8597",
+    "Miranda 549 (B1686GNA) Hurlingham,",
+    "Buenos Aires, Argentina.",
+    "+54 11 4665-2875 / +54 11 4662-2558",
 ]
 # Firma del equipo técnico (bloque al final del cuerpo del informe)
 SULVY_FIRMANTES = [
@@ -306,6 +396,66 @@ def make_reporte_canvas_class(doc_title):
             self.doc_title = doc_title
     return CustomReporteCanvas
 
+def generar_recuadro_criterios() -> Table:
+    styles = getSampleStyleSheet()
+    
+    # Define styles for the box
+    left_text_style = ParagraphStyle(
+        'CriteriosLeftText',
+        parent=styles['Normal'],
+        fontName='Helvetica-BoldOblique',
+        fontSize=11,
+        leading=14,
+        textColor=colors.black,
+        alignment=0 # Left-aligned
+    )
+    
+    right_text_style = ParagraphStyle(
+        'CriteriosRightText',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        leading=11,
+        textColor=colors.black,
+        leftIndent=12,
+        firstLineIndent=-12,
+        spaceAfter=5
+    )
+    
+    # Content of left column
+    left_paragraph = Paragraph("CRITERIOS Y<br/>NORMATIVAS:", left_text_style)
+    
+    # Content of right column
+    items = [
+        "• ASTM D 2563-94 <i>\"Standard Practice for Classifying Visual Defects in Glass-Reinforced Plastic Laminate Parts\"</i>",
+        "• Manuales específicos <i>Ashland</i> y <i>Reichhold</i>, Lineamientos y criterios específicos.",
+        "• NOGA Guía 055-97 <i>\"Guía recomendada para ensayos no destructivos (NDT) en tanques y sistemas de tuberías PRFV\"</i>, Norwegian Oil & Gas Association.",
+        "• Proyecto MTI 129-99 <i>\"Guía práctica para inspección de campo para equipos y tuberías PRFV\"</i>, John Niesse / Hira Ahluwalia, Materials Technology Institute St. Louis MO, USA.",
+        "• ESA/FSA pub. nº 009/98 <i>\"Guía para la utilización segura de elementos de sellado - Juntas y Bridas\"</i>, Parte 1 - Pautas para los operadores / técnicos / ajustadores de mantenimiento. European Sealing Association (ESA) / Fluid Sealing Association (FSA)."
+    ]
+    
+    right_flowables = []
+    for item in items:
+        right_flowables.append(Paragraph(item, right_text_style))
+        
+    t = Table([[left_paragraph, right_flowables]], colWidths=[110, 388])
+    t.setStyle([
+        ('BACKGROUND', (0,0), (0,0), colors.HexColor('#a5bfdd')),
+        ('VALIGN', (0,0), (0,0), 'MIDDLE'),
+        ('VALIGN', (1,0), (1,0), 'TOP'),
+        ('BOX', (0,0), (-1,-1), 0.8, colors.black),
+        ('LINEBEFORE', (1,0), (1,0), 0.8, colors.black),
+        ('LEFTPADDING', (0,0), (0,0), 12),
+        ('RIGHTPADDING', (0,0), (0,0), 12),
+        ('TOPPADDING', (0,0), (0,0), 12),
+        ('BOTTOMPADDING', (0,0), (0,0), 12),
+        ('LEFTPADDING', (1,0), (1,0), 12),
+        ('RIGHTPADDING', (1,0), (1,0), 12),
+        ('TOPPADDING', (1,0), (1,0), 8),
+        ('BOTTOMPADDING', (1,0), (1,0), 4),
+    ])
+    return t
+
 def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = None) -> list:
     from app.services.db_service import get_config_value_db
     campania = get_config_value_db("reporte_campania", "PGP 2026")
@@ -380,6 +530,11 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     ])
     story.append(line_table)
     story.append(Spacer(1, 10))
+    
+    # Criterios y Normativas Box
+    criterios_box = generar_recuadro_criterios()
+    story.append(criterios_box)
+    story.append(Spacer(1, 12))
     
     # 2. DATOS DEL EQUIPO
     story.append(Paragraph("DATOS DEL EQUIPO Y UBICACIÓN", section_title_style))
@@ -561,32 +716,660 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
         
     return story
 
+def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locales: list = None) -> list:
+    from app.services.db_service import get_config_value_db
+    campania = get_config_value_db("reporte_campania", "PGP 2026")
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # 6. JERARQUÍA VISUAL (ParagraphStyle with clear names and constraints)
+    title_style = ParagraphStyle(
+        'TituloPrincipalIndividual',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=16,
+        leading=20,
+        textColor=COLORES_SULVY['primario'],
+        alignment=1, # Center
+        keepWithNext=True,
+        spaceAfter=12,
+        orphan=2,
+        widow=2
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'SubtituloIndividual',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=13,
+        leading=16,
+        textColor=COLORES_SULVY['primario'],
+        keepWithNext=True,
+        spaceBefore=12,
+        spaceAfter=6,
+        orphan=2,
+        widow=2
+    )
+    
+    body_text_style = ParagraphStyle(
+        'TextoNormalIndividual',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
+        textColor=COLORES_SULVY['texto'],
+        alignment=4, # Justify
+        spaceBefore=4,
+        spaceAfter=4,
+        orphan=2,
+        widow=2
+    )
+    
+    label_style = ParagraphStyle(
+        'TableLabelIndividual',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=12,
+        textColor=COLORES_SULVY['texto'],
+        orphan=2,
+        widow=2
+    )
+    
+    val_style = ParagraphStyle(
+        'TableValueIndividual',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9.5,
+        leading=12,
+        textColor=COLORES_SULVY['secundario'],
+        orphan=2,
+        widow=2
+    )
+
+    # 1. ESTRUCTURA DE STORY: TÍTULO PRINCIPAL
+    story.append(Paragraph("INFORME DE INSPECCIÓN TÉCNICA", title_style))
+    story.append(Spacer(1, 4))
+    
+    codigo_eq = equipo.get('codigo', equipo.get('numero', 'N/A'))
+    num_acta = f"ACTA-{campania.replace(' ', '')}-{codigo_eq}"
+    story.append(Paragraph(f"Acta de Inspección: {clean_xml_text(num_acta)}", ParagraphStyle('DocActaIndividual', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1)))
+    story.append(Spacer(1, 12))
+    
+    # 2. TABLA DE DATOS DEL EQUIPO (2 columns: Campo | Valor)
+    fecha_insp_raw = inspeccion.get('updated_at', inspeccion.get('created_at', ''))
+    if fecha_insp_raw:
+        try:
+            dt = datetime.datetime.fromisoformat(str(fecha_insp_raw).replace('Z', '+00:00'))
+            fecha_str = dt.strftime("%d/%m/%Y")
+        except:
+            fecha_str = str(fecha_insp_raw)[:10]
+    else:
+        fecha_str = datetime.datetime.now().strftime("%d/%m/%Y")
+
+    empresa_nombre = equipo.get('empresa', 'N/A')
+    area_nombre = equipo.get('area', 'N/A')
+    ubicacion_str = f"{empresa_nombre} &rarr; {area_nombre}"
+
+    eq_details = [
+        [Paragraph("Código del Equipo:", label_style), Paragraph(clean_xml_text(str(equipo.get('codigo', 'N/A'))), val_style)],
+        [Paragraph("Nombre / Tag:", label_style), Paragraph(clean_xml_text(str(equipo.get('nombre', 'N/A'))), val_style)],
+        [Paragraph("Material de Construcción:", label_style), Paragraph(clean_xml_text(str(equipo.get('material', 'N/A') or 'N/A')), val_style)],
+        [Paragraph("Fluido de Servicio:", label_style), Paragraph(clean_xml_text(str(equipo.get('fluido', 'N/A') or 'N/A')), val_style)],
+        [Paragraph("Presión de Diseño:", label_style), Paragraph(clean_xml_text(f"{equipo.get('presion_diseno', 'N/A')} bar" if equipo.get('presion_diseno') is not None else 'N/A'), val_style)],
+        [Paragraph("Temperatura de Diseño:", label_style), Paragraph(clean_xml_text(f"{equipo.get('temperatura_diseno', 'N/A')} °C" if equipo.get('temperatura_diseno') is not None else 'N/A'), val_style)],
+        [Paragraph("Ubicación / Área:", label_style), Paragraph(clean_xml_text(ubicacion_str), val_style)],
+        [Paragraph("Fecha de Inspección:", label_style), Paragraph(clean_xml_text(fecha_str), val_style)]
+    ]
+    
+    # 5. TABLAS: Usar Table con colWidths y TableStyle. colWidths=[150, 318] para un total de 468 (ancho de página 612-72-72)
+    eq_table = Table(eq_details, colWidths=[150, 318])
+    eq_table.setStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#f1f5f9')),  # Fondo gris en la primera columna
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('LEFTPADDING', (0,0), (-1,-1), 8),
+        ('RIGHTPADDING', (0,0), (-1,-1), 8),
+    ])
+    story.append(eq_table)
+    story.append(Spacer(1, 10))
+    
+    # 3. ESTADO (Badge)
+    estado_val = str(inspeccion.get('estado', 'BUENO')).upper()
+    badge_bg = colors.HexColor('#6b7280') # FUERA DE RUTA / Default Gray
+    if 'BUENO' in estado_val:
+        badge_bg = colors.HexColor('#22c55e') # Green
+    elif 'REGULAR' in estado_val:
+        badge_bg = colors.HexColor('#f59e0b') # Orange
+    elif 'CRIT' in estado_val:
+        badge_bg = colors.HexColor('#ef4444') # Red
+        
+    badge_style = ParagraphStyle(
+        'BadgeTxtIndividual',
+        fontName='Helvetica-Bold',
+        fontSize=10,
+        textColor=colors.white,
+        alignment=1
+    )
+    
+    badge_cell = Table([[Paragraph(estado_val, badge_style)]], colWidths=[130], rowHeights=[20])
+    badge_cell.setStyle([
+        ('BACKGROUND', (0,0), (-1,-1), badge_bg),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+    ])
+    
+    estado_layout = Table([
+        [Paragraph(f"<b>ESTADO {campania}:</b>", ParagraphStyle('EstLblIndividual', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold')), badge_cell]
+    ], colWidths=[130, 338])
+    estado_layout.setStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+    ])
+    story.append(estado_layout)
+    story.append(Spacer(1, 12))
+    
+    # 3. SECCIÓN 1: ACCIONES EJECUTADAS (KeepTogether)
+    acciones_text = inspeccion.get('acciones', 'Sin acciones registradas.')
+    acciones_clean = clean_xml_text(acciones_text).replace('\n', '<br/>')
+    sec_acciones = [
+        Paragraph(f"ACCIONES EJECUTADAS EN {campania}", subtitle_style),
+        Paragraph(acciones_clean, body_text_style),
+        Spacer(1, 8)
+    ]
+    story.append(KeepTogether(sec_acciones))
+    
+    # 4. SECCIÓN 2: DIAGNÓSTICO TÉCNICO (KeepTogether)
+    diagnostico_text = inspeccion.get('diagnostico', 'Sin diagnóstico registrado.')
+    diagnostico_clean = clean_xml_text(diagnostico_text).replace('\n', '<br/>')
+    sec_diagnostico = [
+        Paragraph("DIAGNÓSTICO TÉCNICO", subtitle_style),
+        Paragraph(diagnostico_clean, body_text_style),
+        Spacer(1, 8)
+    ]
+    story.append(KeepTogether(sec_diagnostico))
+    
+    # 5. SECCIÓN 3: RECOMENDACIONES (cada ítem en viñeta o lista con KeepTogether)
+    recom_text = inspeccion.get('recomendaciones', 'Sin recomendaciones registradas.')
+    recom_lines = [line.strip() for line in recom_text.split('\n') if line.strip()]
+    
+    bullet_style = ParagraphStyle(
+        'RecomBulletIndividual',
+        parent=body_text_style,
+        leftIndent=20,
+        firstLineIndent=-10,
+        spaceAfter=4,
+        orphan=2,
+        widow=2
+    )
+    
+    sec_recom = [Paragraph("RECOMENDACIONES PARA EL PRÓXIMO PERÍODO", subtitle_style)]
+    if recom_lines:
+        for line in recom_lines:
+            clean_line = line
+            if clean_line.startswith(('•', '-', '*')):
+                clean_line = clean_line[1:].strip()
+            clean_line = clean_line.replace('\n', '<br/>')
+            p = Paragraph(f"• {clean_xml_text(clean_line)}", bullet_style)
+            sec_recom.append(KeepTogether([p]))
+    else:
+        sec_recom.append(Paragraph("Sin recomendaciones registradas.", body_text_style))
+    
+    sec_recom.append(Spacer(1, 8))
+    story.append(KeepTogether(sec_recom))
+    
+    # 6. SECCIÓN 4: FOTOS DEL CUERPO (organizadas según tabla de cantidades)
+    total_fotos = len(fotos_locales) if fotos_locales else 0
+    config_fotos = obtener_config_fotos(total_fotos)
+    
+    if total_fotos > 0:
+        story.append(Paragraph("FOTOS ILUSTRATIVAS DE LAS DISTINTAS ETAPAS DE LAS TAREAS DESARROLLADAS", subtitle_style))
+        story.append(Spacer(1, 4))
+        
+        # Decide qué fotos van al cuerpo
+        if config_fotos["ubicacion"] == "mixto":
+            fotos_cuerpo = fotos_locales[:5]
+            # Agregar la nota de referencia al cuerpo
+            story.append(Paragraph("<i>Ver anexo para registro fotográfico completo.</i>", ParagraphStyle('RefAnexoIndividual', parent=styles['Normal'], fontName='Helvetica-Oblique', fontSize=9, textColor=COLORES_SULVY['gris'], spaceAfter=8)))
+        else:
+            fotos_cuerpo = fotos_locales
+            
+        # Generar elementos de fotos para el cuerpo
+        col_count = config_fotos["columnas"]
+        w_img = config_fotos["ancho"]
+        fs_title = config_fotos["fuente_titulo"]
+        fs_obs = config_fotos["fuente_obs"]
+        spacing = config_fotos["espaciado_filas"]
+        max_lines_obs = config_fotos.get("max_lineas_obs")
+        
+        # Estilos de comentario
+        leyenda_style = ParagraphStyle(
+            'LeyendaImagenIndividual',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=fs_title,
+            leading=fs_title + 2.5,
+            alignment=0, # Izquierda
+            spaceBefore=4,
+            spaceAfter=2,
+            orphan=2,
+            widow=2
+        )
+        
+        obs_style = ParagraphStyle(
+            'ComentarioImagenIndividual',
+            parent=styles['Normal'],
+            fontName='Helvetica-Oblique',
+            fontSize=fs_obs,
+            leading=fs_obs + 2,
+            textColor=colors.HexColor('#4a5568'),
+            alignment=0, # Izquierda
+            spaceAfter=4,
+            orphan=2,
+            widow=2
+        )
+        
+        fotos_elements = []
+        for idx, item in enumerate(fotos_cuerpo):
+            path = item.get('path', item.get('ruta', item)) if isinstance(item, dict) else item
+            caption = item.get('caption', item.get('descripcion', '')) if isinstance(item, dict) else ''
+            
+            # Parse Title and Observations
+            lines = [l.strip() for l in caption.split('\n') if l.strip()]
+            if not lines:
+                title = f"Foto {idx + 1}: Detalle de inspección"
+                obs = "Se observa el estado del equipo y puntos de interés."
+            else:
+                first_line = lines[0]
+                if re.match(r'^foto\s+\d+[:\s]', first_line, re.IGNORECASE):
+                    title = first_line
+                else:
+                    title = f"Foto {idx + 1}: {first_line}"
+                
+                if len(lines) > 1:
+                    obs = "\n".join(lines[1:])
+                else:
+                    obs = "Se observa el estado del equipo y puntos de interés."
+            
+            # Enforce max 1 line if configured
+            if max_lines_obs == 1:
+                obs_lines = [l.strip() for l in obs.split('\n') if l.strip()]
+                first_obs_line = obs_lines[0] if obs_lines else ""
+                if len(first_obs_line) > 50:
+                    obs = first_obs_line[:47] + "..."
+                else:
+                    obs = first_obs_line
+            
+            if os.path.exists(path):
+                # Proportional Image using PIL
+                rl_img = load_and_scale_image(path, w_img)
+                
+                # Image Cell Table to keep Image + Comments together
+                cell_data = [
+                    [rl_img],
+                    [Paragraph(clean_xml_text(title), leyenda_style)],
+                    [Paragraph(clean_xml_text(obs).replace('\n', '<br/>'), obs_style)]
+                ]
+                cell_table = Table(cell_data, colWidths=[w_img])
+                cell_table.setStyle([
+                    ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('TOPPADDING', (0,0), (-1,-1), 2),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+                    ('LEFTPADDING', (0,0), (-1,-1), 0),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                ])
+                fotos_elements.append(cell_table)
+        
+        # Build Grid (1 or 2 columns)
+        if col_count == 1:
+            for element in fotos_elements:
+                story.append(KeepTogether([element, Spacer(1, spacing)]))
+        else: # 2 columns
+            for i in range(0, len(fotos_elements), 2):
+                row_items = fotos_elements[i:i+2]
+                col_width = 468 / 2.0  # 234
+                if len(row_items) == 2:
+                    row_table = Table([row_items], colWidths=[col_width, col_width])
+                else:
+                    row_table = Table([[row_items[0], '']], colWidths=[col_width, col_width])
+                
+                row_table.setStyle([
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('TOPPADDING', (0,0), (-1,-1), 0),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), spacing),
+                    ('LEFTPADDING', (0,0), (-1,-1), 10), # Padding of 10pt between cells
+                    ('RIGHTPADDING', (0,0), (-1,-1), 10),
+                ])
+                story.append(KeepTogether([row_table]))
+    else:
+        story.append(Paragraph("FOTOS ILUSTRATIVAS DE LAS DISTINTAS ETAPAS DE LAS TAREAS DESARROLLADAS", subtitle_style))
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<i>No se registran imágenes asociadas.</i>", body_text_style))
+        story.append(Spacer(1, 8))
+        
+    return story
+
+def generar_bloque_firma_individual() -> list:
+    styles = getSampleStyleSheet()
+    linea_style = ParagraphStyle('FirmaLineaIndiv', parent=styles['Normal'], fontName='Helvetica',
+                                 fontSize=9, alignment=1, textColor=MEMBRETE['separador'])
+    nombre_style = ParagraphStyle('FirmaNombreIndiv', parent=styles['Normal'], fontName='Helvetica-Bold',
+                                  fontSize=9, leading=11, alignment=1, textColor=MEMBRETE['texto'])
+    cargo_style = ParagraphStyle('FirmaCargoIndiv', parent=styles['Normal'], fontName='Helvetica',
+                                 fontSize=8, leading=10, alignment=1, textColor=COLORES_SULVY['gris'])
+    matricula_style = ParagraphStyle('FirmaMatriculaIndiv', parent=styles['Normal'], fontName='Helvetica',
+                                     fontSize=7.5, leading=9.5, alignment=1, textColor=COLORES_SULVY['gris'])
+    empresa_style = ParagraphStyle('FirmaEmpresaIndiv', parent=styles['Normal'], fontName='Helvetica-Bold',
+                                   fontSize=11, leading=14, alignment=1, textColor=COLORES_SULVY['primario'])
+
+    col_izq = [
+        Paragraph("_______________________", linea_style),
+        Spacer(1, 4),
+        Paragraph("Marco G. Paltrinieri", nombre_style),
+        Paragraph("Director Técnico", cargo_style),
+        Paragraph("Matrícula COPIME Nº 12345", matricula_style)
+    ]
+    col_der = [
+        Paragraph("_______________________", linea_style),
+        Spacer(1, 4),
+        Paragraph("Ing. Esteban M. Irioni", nombre_style),
+        Paragraph("Inspector Autorizado", cargo_style),
+        Paragraph("Matrícula COPIME Nº 67890", matricula_style)
+    ]
+
+    firma_tabla = Table([[col_izq, col_der]], colWidths=[234, 234])
+    firma_tabla.setStyle([
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0), (-1,-1), 15),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+    ])
+
+    return [
+        Spacer(1, 15),
+        KeepTogether([
+            firma_tabla,
+            Spacer(1, 6),
+            Paragraph("SULVY SRL", empresa_style)
+        ])
+    ]
+
+def generar_recuadro_certificaciones(datos_inspeccion: dict = None, equipo: dict = None, inspeccion: dict = None) -> list:
+    paths_to_check = []
+    if datos_inspeccion and datos_inspeccion.get('certificacion_path'):
+        paths_to_check.append(datos_inspeccion['certificacion_path'])
+    if equipo and equipo.get('certificacion_path'):
+        paths_to_check.append(equipo['certificacion_path'])
+    if inspeccion and inspeccion.get('certificacion_path'):
+        paths_to_check.append(inspeccion['certificacion_path'])
+        
+    assets_cert = os.path.join("app", "assets", "certificacion.png")
+    paths_to_check.append(assets_cert)
+    
+    cert_path = None
+    for p in paths_to_check:
+        if p and os.path.exists(p):
+            cert_path = p
+            break
+            
+    if not cert_path:
+        return []
+        
+    try:
+        rl_img = load_and_scale_image(cert_path, 200)
+        styles = getSampleStyleSheet()
+        caption_style = ParagraphStyle(
+            'CertCaption',
+            parent=styles['Normal'],
+            fontName='Helvetica-Oblique',
+            fontSize=8,
+            leading=10,
+            textColor=colors.HexColor('#4a5568'),
+            alignment=1,
+            spaceBefore=4
+        )
+        
+        caption_p = Paragraph("Certificaciones vigentes al momento de la inspección", caption_style)
+        
+        t = Table([[rl_img], [caption_p]], colWidths=[220])
+        t.setStyle([
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8fafc')),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('LEFTPADDING', (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ])
+        
+        return [
+            Spacer(1, 15),
+            KeepTogether([
+                Paragraph("<b>CERTIFICACIONES</b>", ParagraphStyle('CertTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=COLORES_SULVY['primario'], spaceAfter=5, alignment=1)),
+                t
+            ])
+        ]
+    except Exception as e:
+        logger.error(f"Error rendering certification box: {e}")
+        return []
+
+def generar_anexo_individual(fotos_locales: list) -> list:
+    if not fotos_locales or len(fotos_locales) <= 20:
+        return []
+        
+    story = []
+    styles = getSampleStyleSheet()
+    
+    story.append(PageBreak())
+    
+    annex_title_style = ParagraphStyle(
+        'AnnexTitleIndividual',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        leading=18,
+        textColor=COLORES_SULVY['primario'],
+        alignment=1,
+        spaceAfter=15,
+        keepWithNext=True
+    )
+    story.append(Paragraph("ANEXO: REGISTRO FOTOGRÁFICO", annex_title_style))
+    story.append(Spacer(1, 5))
+    
+    fotos_anexo = fotos_locales[5:]
+    
+    col_w = 468 / 3.0  # 156
+    w_img = 140
+    spacing = 6
+    
+    leyenda_style = ParagraphStyle(
+        'LeyendaImagenAnexo',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=7,
+        leading=9,
+        alignment=0,
+        spaceBefore=3,
+        spaceAfter=1,
+        orphan=2,
+        widow=2
+    )
+    
+    obs_style = ParagraphStyle(
+        'ComentarioImagenAnexo',
+        parent=styles['Normal'],
+        fontName='Helvetica-Oblique',
+        fontSize=6,
+        leading=8,
+        textColor=colors.HexColor('#4a5568'),
+        alignment=0,
+        spaceAfter=3,
+        orphan=2,
+        widow=2
+    )
+    
+    fotos_elements = []
+    for idx, item in enumerate(fotos_anexo):
+        real_idx = idx + 6
+        path = item.get('path', item.get('ruta', item)) if isinstance(item, dict) else item
+        caption = item.get('caption', item.get('descripcion', '')) if isinstance(item, dict) else ''
+        
+        lines = [l.strip() for l in caption.split('\n') if l.strip()]
+        if not lines:
+            title = f"Foto {real_idx}: Detalle de inspección"
+            obs = "Se observa el estado del equipo."
+        else:
+            first_line = lines[0]
+            if re.match(r'^foto\s+\d+[:\s]', first_line, re.IGNORECASE):
+                title = first_line
+            else:
+                title = f"Foto {real_idx}: {first_line}"
+            
+            if len(lines) > 1:
+                obs = "\n".join(lines[1:])
+            else:
+                obs = "Se observa el estado del equipo."
+                
+        if os.path.exists(path):
+            rl_img = load_and_scale_image(path, w_img)
+            
+            cell_data = [
+                [rl_img],
+                [Paragraph(clean_xml_text(title), leyenda_style)],
+                [Paragraph(clean_xml_text(obs).replace('\n', '<br/>'), obs_style)]
+            ]
+            cell_table = Table(cell_data, colWidths=[w_img])
+            cell_table.setStyle([
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('TOPPADDING', (0,0), (-1,-1), 1),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                ('LEFTPADDING', (0,0), (-1,-1), 0),
+                ('RIGHTPADDING', (0,0), (-1,-1), 0),
+            ])
+            fotos_elements.append(cell_table)
+            
+    for i in range(0, len(fotos_elements), 3):
+        row_items = fotos_elements[i:i+3]
+        if len(row_items) == 3:
+            row_table = Table([row_items], colWidths=[col_w, col_w, col_w])
+        elif len(row_items) == 2:
+            row_table = Table([[row_items[0], row_items[1], '']], colWidths=[col_w, col_w, col_w])
+        else:
+            row_table = Table([[row_items[0], '', '']], colWidths=[col_w, col_w, col_w])
+            
+        row_table.setStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), spacing),
+            ('LEFTPADDING', (0,0), (-1,-1), 5),
+            ('RIGHTPADDING', (0,0), (-1,-1), 5),
+        ])
+        story.append(KeepTogether([row_table]))
+        
+    return story
+
 def generar_pdf_individual(equipo: dict, inspeccion: dict, fotos_locales: list = None) -> bytes:
     try:
         buffer = io.BytesIO()
-        top_m, bot_m = margenes_membrete()
-        doc = SimpleDocTemplate(
+        
+        left_margin = 72
+        right_margin = 72
+        top_margin = 72
+        bottom_margin = 72
+        
+        doc = BaseDocTemplate(
             buffer,
             pagesize=letter,
-            leftMargin=2*cm,
-            rightMargin=2*cm,
-            topMargin=top_m,
-            bottomMargin=bot_m
+            leftMargin=left_margin,
+            rightMargin=right_margin,
+            topMargin=top_margin,
+            bottomMargin=bottom_margin
         )
-
-        story = obtener_flujo_equipo(equipo, inspeccion, fotos_locales)
-        story.extend(generar_bloque_firma())
-        codigo_eq = equipo.get('codigo', equipo.get('numero', 'N/A'))
-        num_acta = f"ACTA-2026-{codigo_eq}"
         
-        canvas_maker = make_reporte_canvas_class(f"Informe de Inspección Técnica - Acta: {num_acta}")
-        doc.build(story, canvasmaker=canvas_maker)
+        frame_x = left_margin
+        frame_y = bottom_margin + 50
+        frame_width = letter[0] - left_margin - right_margin
+        frame_height = letter[1] - (top_margin + 50) - (bottom_margin + 50)
         
+        frame = Frame(frame_x, frame_y, frame_width, frame_height, id='normal')
+        
+        def draw_header_footer(canvas, document):
+            canvas.saveState()
+            
+            ancho = letter[0]
+            alto = letter[1]
+            
+            # --- HEADER ---
+            if os.path.exists(HEADER_ASSET):
+                h_head = altura_banda(HEADER_ASSET, ancho)
+                canvas.drawImage(HEADER_ASSET, 0, alto - h_head, width=ancho, height=h_head,
+                                 preserveAspectRatio=True, mask='auto')
+            else:
+                canvas.setFont('Helvetica-Bold', 9)
+                canvas.setFillColor(colors.HexColor('#1a365d'))
+                canvas.drawString(left_margin, alto - 50, "INFORME DE INSPECCIÓN TÉCNICA")
+                
+                page_num_str = f"Pág. {canvas._pageNumber}"
+                canvas.drawRightString(ancho - right_margin, alto - 50, page_num_str)
+                
+                canvas.setStrokeColor(colors.HexColor('#cbd5e1'))
+                canvas.setLineWidth(0.5)
+                canvas.line(left_margin, alto - 55, ancho - right_margin, alto - 55)
+            
+            # --- FOOTER ---
+            if os.path.exists(FOOTER_ASSET):
+                h_foot = altura_banda(FOOTER_ASSET, ancho)
+                canvas.drawImage(FOOTER_ASSET, 0, 0, width=ancho, height=h_foot,
+                                 preserveAspectRatio=True, mask='auto')
+                # Numeración de página por encima de la banda del pie, centrada
+                canvas.setFont('Helvetica', 7.5)
+                canvas.setFillColor(colors.HexColor('#4a5568'))
+                canvas.drawCentredString(ancho / 2.0, h_foot + 6, f"Pág. {canvas._pageNumber}")
+            else:
+                canvas.setFont('Helvetica', 8)
+                canvas.setFillColor(colors.HexColor('#4a5568'))
+                contacto_linea = "Miranda 549 (B1686GNA) Hurlingham, Buenos Aires  •  Tel: +54 11 4665-2875 / 4662-2558  •  info@sulvy.com"
+                canvas.drawCentredString(ancho / 2.0, 50, contacto_linea)
+                canvas.line(left_margin, 62, ancho - right_margin, 62)
+            
+            canvas.restoreState()
+            
+        template = PageTemplate(id='todos', frames=frame, onPage=draw_header_footer)
+        doc.addPageTemplates([template])
+        
+        # 12. ESTRUCTURA DE STORY
+        # 1. Título principal
+        # 2. Tabla de datos del equipo
+        # 3. Sección 1: Acciones ejecutadas (KeepTogether)
+        # 4. Sección 2: Diagnóstico técnico (KeepTogether)
+        # 5. Sección 3: Recomendaciones (KeepTogether)
+        # 6. Sección 4: Fotos del cuerpo (organizadas según cantidad)
+        story = obtener_flujo_equipo_individual(equipo, inspeccion, fotos_locales)
+        
+        # 7. Sección 5: Firmas (con espacio para nombres, cargos y matrículas)
+        story.extend(generar_bloque_firma_individual())
+        
+        # 13. Certificaciones (al final, no interfieren con flujo principal)
+        story.extend(generar_recuadro_certificaciones(equipo=equipo, inspeccion=inspeccion))
+        
+        # 8. Anexo (si aplica): Registro fotográfico completo (3 columnas)
+        story.extend(generar_anexo_individual(fotos_locales))
+        
+        doc.build(story)
         pdf_bytes = buffer.getvalue()
         buffer.close()
         return pdf_bytes
     except Exception as e:
-        logger.error(f"Error generando PDF individual: {e}", exc_info=True)
+        logger.error(f"Error generando PDF individual con BaseDocTemplate: {e}", exc_info=True)
         raise e
 
 from reportlab.pdfgen import canvas
@@ -614,12 +1397,12 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
         styles = getSampleStyleSheet()
         
         # 1. PORTADA
-        story.append(Spacer(1, 20))
+        story.append(Spacer(1, 15))
         story.append(Paragraph("SULVY", ParagraphStyle('CoverSulvyLogo', fontName='Helvetica-Bold', fontSize=32, leading=38, textColor=COLORES_SULVY['primario'], alignment=1, spaceAfter=5)))
-        story.append(Paragraph("Sistema de Gestión de Calidad y Ambiental Certificado", ParagraphStyle('CoverSulvySub', fontName='Helvetica', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1, spaceAfter=40)))
+        story.append(Paragraph("Sistema de Gestión de Calidad y Ambiental Certificado", ParagraphStyle('CoverSulvySub', fontName='Helvetica', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1, spaceAfter=20)))
         
         story.append(Paragraph("LIBRO DE INSPECCIONES TÉCNICAS", ParagraphStyle('CoverBookTitle', fontName='Helvetica-Bold', fontSize=22, leading=26, textColor=COLORES_SULVY['primario'], alignment=1, spaceAfter=5)))
-        story.append(Paragraph(nombre_ubicacion.upper(), ParagraphStyle('CoverBookSub', fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=COLORES_SULVY['enfasis'], alignment=1, spaceAfter=20)))
+        story.append(Paragraph(nombre_ubicacion.upper(), ParagraphStyle('CoverBookSub', fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=COLORES_SULVY['enfasis'], alignment=1, spaceAfter=12)))
         
         # Meta info
         meta_label_style = ParagraphStyle('CoverMetaLabel', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=COLORES_SULVY['texto'])
@@ -648,23 +1431,16 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
             ('RIGHTPADDING', (0,0), (-1,-1), 8),
         ])
         story.append(meta_table)
-        story.append(Spacer(1, 20))
+        story.append(Spacer(1, 10))
         
         # Objetivo
         story.append(Paragraph("<b>Objetivo:</b>", ParagraphStyle('ObjHead', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=COLORES_SULVY['primario'])))
         objetivo_text = f"Consolidar los informes de inspección técnica realizados en la ubicación {nombre_ubicacion} de la empresa {nombre_empresa} durante la campaña {campania}, detallando los hallazgos técnicos, el estado de conservación de los activos, y las recomendaciones de mantenimiento propuestas para el período {next_camp}."
         story.append(Paragraph(objetivo_text, ParagraphStyle('ObjVal', fontName='Helvetica', fontSize=9.5, leading=13.5, textColor=COLORES_SULVY['texto'], alignment=4)))
-        story.append(Spacer(1, 15))
+        story.append(Spacer(1, 8))
         
         # Criterios y Normativas
-        story.append(Paragraph("<b>Criterios y Normativas:</b>", ParagraphStyle('NormHead', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=COLORES_SULVY['primario'])))
-        normas = [
-            "• Evaluación de integridad estructural de recipientes, cañerías y accesorios según normas de referencia ASME Sección VIII Div. 1 y API 510.",
-            "• Criterios de aceptación y rechazo basados en tolerancias de diseño y espesores nominales de pared.",
-            "• Clasificación del estado de conservación en base a criticidad operativa de los activos (Bueno / Regular / Crítico / Fuera de Ruta)."
-        ]
-        for norma in normas:
-            story.append(Paragraph(norma, ParagraphStyle('NormVal', fontName='Helvetica', fontSize=9.5, leading=13.5, textColor=COLORES_SULVY['texto'], alignment=4)))
+        story.append(generar_recuadro_criterios())
             
         story.append(PageBreak())
 

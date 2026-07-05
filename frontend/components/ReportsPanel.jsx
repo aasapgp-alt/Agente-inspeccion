@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import VersionHistoryModal from './VersionHistoryModal';
+import LibroValidationModal from './LibroValidationModal';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -34,6 +35,8 @@ export default function ReportsPanel() {
   const [generandoReportes, setGenerandoReportes] = useState(false);
   const [generandoLibro, setGenerandoLibro] = useState(false);
   const [libroProgress, setLibroProgress] = useState(null);
+  const [validationAlerts, setValidationAlerts] = useState([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Version history modal state
   const [selectedDocId, setSelectedDocId] = useState(null);
@@ -302,7 +305,21 @@ export default function ReportsPanel() {
     }
   };
 
-  const handleGenerarLibroArea = async () => {
+  const handleCancelarLibro = async () => {
+    if (!ubicacionFilter) return;
+    if (confirm("¿Está seguro de que desea detener la generación del libro por área?")) {
+      try {
+        await fetch(`${API_BASE_URL}/libro/cancelar/${ubicacionFilter}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (err) {
+        console.error("Error al cancelar la generación del libro:", err);
+      }
+    }
+  };
+
+  const handleGenerarLibroArea = async (e, overrideSoloAprobados = false) => {
     if (!ubicacionFilter) {
       alert("Debe seleccionar una ubicación técnica para generar el libro por área.");
       return;
@@ -311,10 +328,33 @@ export default function ReportsPanel() {
     const ubiObj = ubicaciones.find(u => u.id === parseInt(ubicacionFilter));
     const ubiName = ubiObj ? ubiObj.nombre : 'seleccionada';
     
-    if (!confirm(`¿Está seguro de que desea generar el libro consolidado por área para '${ubiName}'?`)) {
-      return;
+    // Si no es un override directo (desde el modal de confirmación), validar primero
+    if (e !== null && validationAlerts.length === 0 && !showValidationModal) {
+      try {
+        setLibroProgress("Validando criterios...");
+        setGenerandoLibro(true);
+        const valRes = await fetch(`${API_BASE_URL}/libro/validar/${ubicacionFilter}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setGenerandoLibro(false);
+        setLibroProgress(null);
+        if (valRes.ok) {
+          const valData = await valRes.json();
+          if (valData.alertas && valData.alertas.length > 0) {
+            setValidationAlerts(valData.alertas);
+            setShowValidationModal(true);
+            return;
+          }
+        }
+      } catch (valErr) {
+        console.error("Error al validar libro:", valErr);
+        setGenerandoLibro(false);
+        setLibroProgress(null);
+      }
     }
 
+    setShowValidationModal(false);
+    setValidationAlerts([]);
     setGenerandoLibro(true);
     setLibroProgress("Generando...");
 
@@ -336,7 +376,7 @@ export default function ReportsPanel() {
     }, 1000);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/libro/generar/${ubicacionFilter}`, {
+      const res = await fetch(`${API_BASE_URL}/libro/generar/${ubicacionFilter}?solo_aprobados=${overrideSoloAprobados}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -349,8 +389,13 @@ export default function ReportsPanel() {
         fetchData();
       } else {
         const errData = await res.json();
-        setLibroProgress(`Error: ${errData.detail || 'Error al generar'}`);
-        alert("Error al generar el libro por área: " + (errData.detail || JSON.stringify(errData)));
+        if (errData.detail === "Generación cancelada por el usuario") {
+          setLibroProgress("Cancelado por el usuario");
+          alert("Generación cancelada por el usuario.");
+        } else {
+          setLibroProgress(`Error: ${errData.detail || 'Error al generar'}`);
+          alert("Error al generar el libro por área: " + (errData.detail || JSON.stringify(errData)));
+        }
       }
     } catch (e) {
       clearInterval(intervalId);
@@ -716,10 +761,42 @@ export default function ReportsPanel() {
                 )}
 
                 {libroProgress && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
-                    <div style={{ width: '12px', height: '12px', border: '2px solid rgba(16,185,129,0.1)', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                    {libroProgress}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8rem', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: '12px', height: '12px', border: '2px solid rgba(16,185,129,0.1)', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      {libroProgress}
+                    </div>
+                    {generandoLibro && !libroProgress.includes("Error") && !libroProgress.includes("Completado") && !libroProgress.includes("Validando") && (
+                      <button
+                        onClick={handleCancelarLibro}
+                        className="btn"
+                        style={{
+                          padding: '2px 8px',
+                          fontSize: '0.75rem',
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Detener
+                      </button>
+                    )}
                   </div>
+                )}
+
+                {showValidationModal && (
+                  <LibroValidationModal 
+                    alertas={validationAlerts}
+                    onConfirm={() => handleGenerarLibroArea(null, false)}
+                    onConfirmAprobados={() => handleGenerarLibroArea(null, true)}
+                    onClose={() => {
+                      setShowValidationModal(false);
+                      setValidationAlerts([]);
+                    }}
+                  />
                 )}
               </>
             )}

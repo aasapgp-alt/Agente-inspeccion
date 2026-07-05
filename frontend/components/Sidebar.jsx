@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthProvider';
+import LibroValidationModal from './LibroValidationModal';
 
 export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, onChangeTab }) {
   const { user, token } = useAuth();
@@ -17,6 +18,8 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [generandoLibro, setGenerandoLibro] = useState(false);
   const [libroProgress, setLibroProgress] = useState(null);
   const [libroResult, setLibroResult] = useState(null);
+  const [validationAlerts, setValidationAlerts] = useState([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Estados para Modal de Agregar Equipo con Drive
   const [showAddEquipoModal, setShowAddEquipoModal] = useState(false);
@@ -34,8 +37,50 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     setGenerandoLibro(false);
   }, [ubicacionSeleccionada]);
 
-  const handleGenerarLibro = async () => {
+  const handleCancelarLibro = async () => {
     if (!ubicacionSeleccionada) return;
+    if (confirm("¿Está seguro de que desea detener la generación del libro por área?")) {
+      try {
+        await fetch(`http://localhost:8000/api/libro/cancelar/${ubicacionSeleccionada}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (err) {
+        console.error("Error al cancelar la generación del libro:", err);
+      }
+    }
+  };
+
+  const handleGenerarLibro = async (e, overrideSoloAprobados = false) => {
+    if (!ubicacionSeleccionada) return;
+    
+    // Si no es confirmación desde el modal (e !== null), validar primero
+    if (e !== null && validationAlerts.length === 0 && !showValidationModal) {
+      try {
+        setLibroProgress("Validando criterios...");
+        setGenerandoLibro(true);
+        const valRes = await fetch(`http://localhost:8000/api/libro/validar/${ubicacionSeleccionada}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setGenerandoLibro(false);
+        setLibroProgress(null);
+        if (valRes.ok) {
+          const valData = await valRes.json();
+          if (valData.alertas && valData.alertas.length > 0) {
+            setValidationAlerts(valData.alertas);
+            setShowValidationModal(true);
+            return;
+          }
+        }
+      } catch (valErr) {
+        console.error("Error al validar libro:", valErr);
+        setGenerandoLibro(false);
+        setLibroProgress(null);
+      }
+    }
+
+    setShowValidationModal(false);
+    setValidationAlerts([]);
     setGenerandoLibro(true);
     setLibroResult(null);
     setLibroProgress("Generando...");
@@ -58,7 +103,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     }, 1000);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/libro/generar/${ubicacionSeleccionada}`, {
+      const res = await fetch(`http://localhost:8000/api/libro/generar/${ubicacionSeleccionada}?solo_aprobados=${overrideSoloAprobados}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -72,8 +117,13 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         alert("¡Libro por área generado con éxito!");
       } else {
         const errData = await res.json();
-        setLibroProgress(`Error: ${errData.detail || 'Error al generar'}`);
-        alert("Error al generar el libro por área: " + (errData.detail || JSON.stringify(errData)));
+        if (errData.detail === "Generación cancelada por el usuario") {
+          setLibroProgress("Cancelado por el usuario");
+          alert("Generación cancelada por el usuario.");
+        } else {
+          setLibroProgress(`Error: ${errData.detail || 'Error al generar'}`);
+          alert("Error al generar el libro por área: " + (errData.detail || JSON.stringify(errData)));
+        }
       }
     } catch (e) {
       clearInterval(intervalId);
@@ -460,19 +510,53 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
                 color: 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
                 gap: '0.4rem'
               }}>
-                <span className="spinner" style={{
-                  display: 'inline-block',
-                  width: '12px',
-                  height: '12px',
-                  border: '2px solid rgba(255,255,255,0.1)',
-                  borderTopColor: 'var(--accent-primary)',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }} />
-                {libroProgress}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span className="spinner" style={{
+                    display: 'inline-block',
+                    width: '12px',
+                    height: '12px',
+                    border: '2px solid rgba(255,255,255,0.1)',
+                    borderTopColor: 'var(--accent-primary)',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  {libroProgress}
+                </div>
+                {generandoLibro && !libroProgress.includes("Error") && !libroProgress.includes("Completado") && !libroProgress.includes("Validando") && (
+                  <button
+                    onClick={handleCancelarLibro}
+                    className="btn"
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: '0.75rem',
+                      backgroundColor: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    Detener
+                  </button>
+                )}
               </div>
+            )}
+            
+            {showValidationModal && (
+              <LibroValidationModal 
+                alertas={validationAlerts}
+                onConfirm={() => handleGenerarLibro(null, false)}
+                onConfirmAprobados={() => handleGenerarLibro(null, true)}
+                onClose={() => {
+                  setShowValidationModal(false);
+                  setValidationAlerts([]);
+                }}
+              />
             )}
             
             {libroResult && (

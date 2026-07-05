@@ -21,15 +21,19 @@ router = APIRouter(prefix="/api/libro", tags=["libro"])
 
 # Dictionary to store the real-time progress of book generation per location
 libro_progress: Dict[int, str] = {}
+# Dictionary to store cancellation requests per location
+libro_cancel: Dict[int, bool] = {}
 
 @router.post("/generar/{ubicacion_id}", response_model=Dict[str, Any])
 def generar_libro(
     ubicacion_id: int,
+    solo_aprobados: bool = False,
     db: sqlite3.Connection = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user.get("id")
     libro_progress[ubicacion_id] = "Generando..."
+    libro_cancel[ubicacion_id] = False
     
     temp_dir = tempfile.mkdtemp(prefix="libro_fotos_")
     
@@ -104,9 +108,46 @@ def generar_libro(
         from app.services.drive_service import sugerir_carpetas as drive_sugerir_carpetas, listar_archivos, descargar_imagen
 
         for index, (eq, insp) in enumerate(equipos_con_inspeccion):
+            if libro_cancel.get(ubicacion_id, False):
+                libro_progress[ubicacion_id] = "Cancelado"
+                raise HTTPException(status_code=400, detail="Generación cancelada por el usuario")
+                
             eq_id = eq["id"]
             codigo_eq = eq.get("codigo", "N/A")
             nombre_eq = eq.get("nombre", "N/A")
+            
+            if solo_aprobados:
+                estado = str(insp.get("estado", "BUENO")).upper()
+                if "REGULAR" in estado or "CRIT" in estado:
+                    # Validar recomendaciones
+                    recom = (insp.get("recomendaciones") or "").strip()
+                    if not recom or len(recom) < 5:
+                        logger.info(f"Equipo {codigo_eq} omitido por falta de recomendaciones (modo solo_aprobados).")
+                        omitidos_count += 1
+                        continue
+                    
+                    # Validar fotos
+                    has_photos = False
+                    from app.services.memory_service import obtener_memoria_imagenes
+                    saved_images = obtener_memoria_imagenes(eq_id)
+                    if saved_images:
+                        has_photos = True
+                    else:
+                        try:
+                            sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root")
+                            if sugerencias:
+                                folder_id = sugerencias[0]['id']
+                                archivos = listar_archivos(folder_id)
+                                imagenes = [f for f in archivos if f.get('mimeType', '').startswith('image/')]
+                                if imagenes:
+                                    has_photos = True
+                        except Exception as e:
+                            logger.error(f"Error comprobando fotos en Drive para {codigo_eq}: {e}")
+                    
+                    if not has_photos:
+                        logger.info(f"Equipo {codigo_eq} omitido por falta de fotos (modo solo_aprobados).")
+                        omitidos_count += 1
+                        continue
             
             # Mostrar progreso
             progreso_str = f"Generando reporte {index + 1} de {total_inspeccionados}..."
@@ -145,7 +186,16 @@ def generar_libro(
                             temp_file_path = os.path.join(temp_dir, f"foto_{eq_id}_{f_idx}_{img_id}.jpg")
                             with open(temp_file_path, "wb") as f:
                                 f.write(img_bytes)
-                            fotos_locales.append(temp_file_path)
+                            
+                            # Consultar comentario de la imagen si existe
+                            cursor.execute("SELECT comentario FROM anotaciones_imagenes WHERE equipo_id = ? AND image_id = ?", (eq_id, img_id))
+                            com_row = cursor.fetchone()
+                            comentario = com_row[0] if (com_row and com_row[0]) else ""
+                            
+                            fotos_locales.append({
+                                "path": temp_file_path,
+                                "caption": comentario
+                            })
                 else:
                     sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root")
                     if sugerencias:
@@ -154,16 +204,30 @@ def generar_libro(
                         imagenes = [f for f in archivos if f.get('mimeType', '').startswith('image/')]
                         
                         for f_idx, img in enumerate(imagenes[:2]):
-                            img_bytes = descargar_imagen(img['id'])
+                            img_id = img['id']
+                            img_bytes = descargar_imagen(img_id)
                             if img_bytes:
-                                temp_file_path = os.path.join(temp_dir, f"foto_{eq_id}_{f_idx}_{img['id']}.jpg")
+                                temp_file_path = os.path.join(temp_dir, f"foto_{eq_id}_{f_idx}_{img_id}.jpg")
                                 with open(temp_file_path, "wb") as f:
                                     f.write(img_bytes)
-                                fotos_locales.append(temp_file_path)
+                                
+                                # Consultar comentario de la imagen si existe
+                                cursor.execute("SELECT comentario FROM anotaciones_imagenes WHERE equipo_id = ? AND image_id = ?", (eq_id, img_id))
+                                com_row = cursor.fetchone()
+                                comentario = com_row[0] if (com_row and com_row[0]) else ""
+                                
+                                fotos_locales.append({
+                                    "path": temp_file_path,
+                                    "caption": comentario
+                                })
             except Exception as drive_err:
                 logger.error(f"Error descargando fotos de Drive para libro en equipo {codigo_eq}: {drive_err}")
                 
             fotos_por_equipo[eq_id] = fotos_locales
+
+        if libro_cancel.get(ubicacion_id, False):
+            libro_progress[ubicacion_id] = "Cancelado"
+            raise HTTPException(status_code=400, detail="Generación cancelada por el usuario")
 
         # 4. Generar Libro PDF consolidado
         libro_progress[ubicacion_id] = "Consolidando libro..."
@@ -340,6 +404,9 @@ def generar_libro(
             "drive_link": drive_link
         }
 
+    except HTTPException as he:
+        db.rollback()
+        raise he
     except Exception as e:
         db.rollback()
         libro_progress[ubicacion_id] = f"Error: {str(e)}"
@@ -381,3 +448,117 @@ def historial_libros(
         ORDER BY l.fecha_generacion DESC
     """)
     return [dict(row) for row in cursor.fetchall()]
+
+@router.post("/cancelar/{ubicacion_id}", response_model=Dict[str, Any])
+def cancelar_libro(
+    ubicacion_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    libro_cancel[ubicacion_id] = True
+    libro_progress[ubicacion_id] = "Cancelado"
+    return {"status": "success", "message": "Cancelación solicitada."}
+
+@router.get("/validar/{ubicacion_id}", response_model=Dict[str, Any])
+def validar_libro(
+    ubicacion_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        cursor = db.cursor()
+        
+        # 1. Obtener datos de campaña y año
+        from app.services.db_service import get_config_value_db
+        import re
+        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+        digits = re.findall(r'\d+', campania_activa)
+        anio_campania = int(digits[0]) if digits else 2026
+
+        # 2. Obtener todos los equipos activos de la ubicación
+        cursor.execute("""
+            SELECT id, codigo, nombre FROM equipos 
+            WHERE ubicacion_id = ? AND activo = 1
+        """, (ubicacion_id,))
+        equipos = [dict(row) for row in cursor.fetchall()]
+        
+        if not equipos:
+            return {
+                "valid": False,
+                "alertas": [{
+                    "tipo": "critico",
+                    "mensaje": "No hay equipos activos en esta ubicación.",
+                    "detalles": "Debe agregar al menos un equipo activo antes de generar el libro."
+                }]
+            }
+        
+        alertas = []
+        
+        # 3. Validar inspecciones, recomendaciones y fotos
+        from app.services.memory_service import obtener_memoria_imagenes
+        from app.services.drive_service import sugerir_carpetas as drive_sugerir_carpetas, listar_archivos
+        
+        for eq in equipos:
+            eq_id = eq["id"]
+            codigo_eq = eq.get("codigo", "N/A")
+            nombre_eq = eq.get("nombre", "N/A")
+            
+            # 3.1 Inspecciones del año
+            cursor.execute("""
+                SELECT * FROM inspecciones 
+                WHERE equipo_id = ? AND anio = ? 
+                ORDER BY id DESC LIMIT 1
+            """, (eq_id, anio_campania))
+            insp_row = cursor.fetchone()
+            if not insp_row:
+                alertas.append({
+                    "tipo": "sin_inspeccion",
+                    "mensaje": f"El equipo {codigo_eq} - {nombre_eq} no tiene inspección registrada para el año {anio_campania}.",
+                    "detalles": "Se omitirá del libro consolidado."
+                })
+                continue
+            
+            insp = dict(insp_row)
+            estado = str(insp.get("estado", "BUENO")).upper()
+            
+            # 3.2 Recomendaciones obligatorias para REGULAR / CRITICO
+            if "REGULAR" in estado or "CRIT" in estado:
+                recom = (insp.get("recomendaciones") or "").strip()
+                if not recom or len(recom) < 5:
+                    alertas.append({
+                        "tipo": "sin_recomendaciones",
+                        "mensaje": f"El equipo {codigo_eq} ({estado}) no tiene recomendaciones o el texto es demasiado corto.",
+                        "detalles": "Se requiere detallar las acciones correctivas propuestas."
+                    })
+                
+                # 3.3 Fotos obligatorias para REGULAR / CRITICO
+                has_photos = False
+                saved_images = obtener_memoria_imagenes(eq_id)
+                if saved_images:
+                    has_photos = True
+                else:
+                    try:
+                        sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root")
+                        if sugerencias:
+                            folder_id = sugerencias[0]['id']
+                            archivos = listar_archivos(folder_id)
+                            imagenes = [f for f in archivos if f.get('mimeType', '').startswith('image/')]
+                            if imagenes:
+                                has_photos = True
+                    except Exception as e:
+                        logger.error(f"Error comprobando fotos en Drive para {codigo_eq} durante validación: {e}")
+                
+                if not has_photos:
+                    alertas.append({
+                        "tipo": "sin_fotos",
+                        "mensaje": f"El equipo {codigo_eq} ({estado}) no tiene fotos asociadas.",
+                        "detalles": "Se recomienda subir registro fotográfico de la patología."
+                    })
+        
+        has_critico = any(a["tipo"] == "critico" for a in alertas)
+        return {
+            "valid": not has_critico,
+            "alertas": alertas
+        }
+    except Exception as e:
+        logger.error(f"Error al validar libro para ubicación {ubicacion_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error en la validación: {str(e)}")
