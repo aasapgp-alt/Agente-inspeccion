@@ -15,19 +15,25 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [equipos, setEquipos] = useState([]);
   const [filtro, setFiltro] = useState('TODOS');
   
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState('dark');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      const savedTheme = localStorage.getItem('theme') || 'dark';
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTheme(currentTheme);
+      setTheme(savedTheme);
+      if (savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
     }
   }, []);
 
   const toggleTheme = (newTheme) => {
     setTheme(newTheme);
     if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', newTheme);
       if (newTheme === 'dark') {
         document.documentElement.setAttribute('data-theme', 'dark');
       } else {
