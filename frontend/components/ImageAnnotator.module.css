@@ -406,3 +406,29 @@
   padding-top: 0.75rem;
   margin-top: auto;
 }
+
+.commentSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.commentInput {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: white;
+  padding: 0.6rem;
+  font-size: 0.8rem;
+  resize: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+}
+
+.commentInput:focus {
+  outline: none;
+  border-color: var(--accent-primary, #00c8d7);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px var(--accent-primary, #00c8d7);
+}

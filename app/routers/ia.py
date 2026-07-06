@@ -9,7 +9,7 @@ import uuid
 import datetime
 import os
 
-from app.core.dependencies import get_db, get_current_user
+from app.core.dependencies import get_db, get_current_user, require_role
 from app.services.drive_service import descargar_imagen
 from app.services.gemini_service import analizar_imagenes, inicializar_gemini, build_annotation_context
 from app.services.learning_service import cargar_ejemplos_few_shot, obtener_aprendizaje_texto
@@ -96,6 +96,8 @@ class ChatRequest(BaseModel):
 @router.post("/analizar", response_model=Dict[str, Any])
 def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
+        from app.services.db_service import get_config_value_db
+
         # 1. Obtener detalles del equipo
         cursor = db.cursor()
         cursor.execute("SELECT * FROM equipos WHERE id = ?", (data.equipo_id,))
@@ -144,6 +146,9 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
                 all_annotations_flat.extend(anns)
         spatial_context = build_annotation_context(all_annotations_flat)
         
+        # Recuperar reglas de negocio desde la base de datos
+        db_reglas = get_config_value_db("reglas_negocio") or REGLAS_NEGOCIO
+
         # 5. Generar prompt estructurado para Gemini
         prompt = f"""
 INSTRUCCIÓN DE ESTILO OBLIGATORIA (debe respetarse en TODO el informe):
@@ -154,7 +159,7 @@ INSTRUCCIÓN DE ESTILO OBLIGATORIA (debe respetarse en TODO el informe):
 
 Redacta el siguiente informe técnico de inspección industrial. Solo describe lo que realmente se observa en las fotos.
 
-{REGLAS_NEGOCIO}
+{db_reglas}
 
 Equipo a analizar:
 Nombre: {equipo.get('nombre')}, Área: {equipo.get('area') or ''}, Código/Número: {equipo.get('codigo') or equipo.get('numero') or ''}, Material: {equipo.get('material') or ''}, Criticidad: {equipo.get('criticidad') or ''}.
@@ -206,9 +211,7 @@ RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impe
 *REGLA PREVENTIVA CRÍTICA PARA PLÁSTICOS*: Si el material es plástico (FRP, ACRBA, PP, etc.), en 'ACOMETIDAS' escribe obligatoriamente: 'Como medida preventiva y para evitar recurrir a los golpes para desmontar los espárragos y bulones en todas las acometidas bridadas (incluida la BdH) y sus consecuencias indeseables (roturas y fisuras recurrentes), reemplazar los elementos de sujeción y juntas en un plazo no mayor a 1 año. Aplica para todos los equipos y cañerías plásticas.'
 """
 
-
         # 6. Inicializar y llamar a Gemini
-        from app.services.db_service import get_config_value_db
         db_api_key = get_config_value_db("google_api_key")
         api_key = db_api_key if db_api_key else os.getenv("GEMINI_API_KEY")
         
@@ -219,8 +222,13 @@ RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impe
             )
 
         db_model = get_config_value_db("gemini_model") or "gemini-3.5-flash"
+        db_system_instruction = get_config_value_db("system_instruction")
+        db_temperature = get_config_value_db("temperature", 0.2)
+        db_top_p = get_config_value_db("top_p", 0.95)
+        db_top_k = get_config_value_db("top_k", 40)
+        db_max_tokens = get_config_value_db("max_tokens", 4096)
 
-        system_instruction = """
+        system_instruction_fallback = """
 Eres un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA) redactando un informe técnico formal.
 Debes redactar todo de manera estrictamente impersonal y formal.
 Está completamente prohibido usar la primera persona del singular ("yo", "he verificado", "mi inspección") y verbos en pasado en primera persona (no "inspeccioné", "revisé").
@@ -230,13 +238,40 @@ Está completamente prohibido usar la primera persona del singular ("yo", "he ve
 No menciones nunca limitaciones de fotos ni digas que "no se cuenta con imágenes" o "no se puede evaluar". Para cualquier zona o componente no visible, hereda o asume exactamente el diagnóstico del Historial PGP 2024 o no lo nombres.
 Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetando las llaves exactas.
 """
+        system_instruction = db_system_instruction if db_system_instruction else system_instruction_fallback
+
+        try:
+            temp_val = float(db_temperature)
+        except (ValueError, TypeError):
+            temp_val = 0.2
+
+        try:
+            top_p_val = float(db_top_p)
+        except (ValueError, TypeError):
+            top_p_val = 0.95
+
+        try:
+            top_k_val = int(db_top_k)
+        except (ValueError, TypeError):
+            top_k_val = 40
+
+        try:
+            max_tok_val = int(db_max_tokens)
+        except (ValueError, TypeError):
+            max_tok_val = 4096
 
         import google.generativeai as genai
         try:
             genai.configure(api_key=api_key, transport='rest')
             model = genai.GenerativeModel(
                 model_name=db_model,
-                system_instruction=system_instruction
+                system_instruction=system_instruction,
+                generation_config={
+                    "temperature": temp_val,
+                    "top_p": top_p_val,
+                    "top_k": top_k_val,
+                    "max_output_tokens": max_tok_val
+                }
             )
         except Exception as model_err:
             raise HTTPException(status_code=500, detail=f"Error al configurar Gemini: {model_err}")
@@ -469,3 +504,34 @@ def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3
         db.rollback()
         logger.error(f"Error en /guardar: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error al guardar la inspección: {str(e)}")
+
+
+@router.get("/aprendizaje", response_model=List[Dict[str, Any]])
+def get_aprendizaje(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    try:
+        cursor = db.cursor()
+        cursor.execute("SELECT id, equipo, ia_dijo, inspector_corrigio, leccion, fecha, created_at FROM aprendizaje ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Error al obtener aprendizajes: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al obtener la lista de aprendizajes: {str(e)}")
+
+
+@router.delete("/aprendizaje/{id}", response_model=Dict[str, Any])
+def delete_aprendizaje(id: int, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
+    try:
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM aprendizaje WHERE id = ?", (id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Aprendizaje no encontrado")
+            
+        cursor.execute("DELETE FROM aprendizaje WHERE id = ?", (id,))
+        db.commit()
+        return {"message": "Aprendizaje eliminado exitosamente."}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al eliminar aprendizaje: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al eliminar el aprendizaje: {str(e)}")

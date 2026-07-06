@@ -1,14 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-color: #0e1014;        /* grafito casi negro, neutro (no slate genérico) */
-  --bg-card: #171a21;         /* superficie sólida, sin glass */
+  /* Default: Sulvy Light/Corporate Theme */
+  --bg-color: #f4f6f9;        
+  --bg-card: #ffffff;         
+  --bg-card-hover: #f9fafb;
+  --bg-input: #ffffff;
+  --bg-progress-bar: rgba(0, 0, 0, 0.05);
+  --border-color: #e5e7eb;    
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+
+  --accent-primary: #005ca7;  /* Azul corporativo Sulvy */
+  --accent-primary-hover: #004a95; /* Azul marino oscuro hover */
+
+  --status-good: #10b981;
+  --status-regular: #f59e0b;
+  --status-critical: #ef4444;
+  --status-pending: #6b7280;
+
+  --font-sans: 'Montserrat', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+[data-theme="dark"] {
+  /* Original Dark Glassmorphism Theme */
+  --bg-color: #0e1014;        
+  --bg-card: #171a21;         
   --bg-card-hover: #1f232c;
-  --border-color: #272c36;    /* borde definido de 1px, nítido */
+  --bg-input: rgba(0, 0, 0, 0.2);
+  --bg-progress-bar: rgba(0, 0, 0, 0.3);
+  --border-color: #272c36;    
   --text-primary: #f3f4f6;
   --text-secondary: #98a1b0;
 
-  --accent-primary: #3b82f6;  /* azul acero sobrio, sin neón */
+  --accent-primary: #3b82f6;  
   --accent-primary-hover: #2f6fd0;
 
   --status-good: #3fa86b;
@@ -37,18 +63,22 @@ body {
   flex-direction: column;
 }
 
-/* Glassmorphism Utilities */
+/* Glassmorphism/Card Utilities */
 .glass-panel {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+[data-theme="dark"] .glass-panel {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .glass-panel:hover {
   background: var(--bg-card-hover);
-  border-color: #333a47;
+  border-color: var(--border-color);
 }
 
 /* Layout Utilities */
@@ -61,13 +91,40 @@ body {
 
 .sidebar {
   width: 320px;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  background-color: rgba(15, 23, 42, 0.95);
+  background-color: #0C2E53; /* Azul marino corporativo Sulvy */
+  color: #ffffff;
   overflow-y: auto;
+}
+
+/* Forzar contraste en etiquetas, títulos y controles de la barra lateral */
+.sidebar h4 {
+  color: #93c5fd !important; /* Azul claro suave */
+  font-weight: 600;
+}
+
+.sidebar label {
+  color: #cbd5e1 !important; /* Gris claro */
+}
+
+.sidebar select, .sidebar input, .sidebar textarea {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+}
+
+.sidebar select:focus, .sidebar input:focus, .sidebar textarea:focus {
+  border-color: #0193cf !important;
+  box-shadow: 0 0 0 2px rgba(1, 147, 207, 0.3) !important;
+}
+
+.sidebar select option {
+  background-color: #0c2e53 !important;
+  color: #ffffff !important;
 }
 
 .main-content {
@@ -91,7 +148,7 @@ p {
 /* Inputs & Buttons */
 select, input, textarea {
   width: 100%;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-input);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   padding: 12px 16px;
@@ -103,18 +160,17 @@ select, input, textarea {
 }
 
 select {
-  background-color: #000000;
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 select option {
-  background-color: #000000;
+  background-color: var(--bg-card);
   color: var(--text-primary);
 }
 
 select:focus, input:focus, textarea:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 2px rgba(0, 92, 167, 0.2);
 }
 
 button {
@@ -146,37 +202,43 @@ button:active {
   border: 1px solid var(--border-color);
   padding: 1.5rem;
   text-align: center;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="dark"] .glow-card {
+  box-shadow: none;
 }
 
 .glow-card:hover {
   transform: translateY(-2px);
-  border-color: #333a47;
+  border-color: var(--border-color);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 /* El color de estado vive en un borde-indicador superior (tipo tablero),
    no en un resplandor neón. */
 .glow-red {
   border-color: var(--border-color);
-  border-top: 2px solid var(--status-critical);
+  border-top: 3px solid var(--status-critical);
 }
 .glow-red h3 { color: var(--status-critical); }
 
 .glow-yellow {
   border-color: var(--border-color);
-  border-top: 2px solid var(--status-regular);
+  border-top: 3px solid var(--status-regular);
 }
 .glow-yellow h3 { color: var(--status-regular); }
 
 .glow-green {
   border-color: var(--border-color);
-  border-top: 2px solid var(--status-good);
+  border-top: 3px solid var(--status-good);
 }
 .glow-green h3 { color: var(--status-good); }
 
 .glow-blue {
   border-color: var(--border-color);
-  border-top: 2px solid var(--accent-primary);
+  border-top: 3px solid var(--accent-primary);
 }
 .glow-blue h3 { color: var(--accent-primary); }
 
@@ -201,7 +263,7 @@ button:active {
   border-radius: 12px;
   overflow: hidden;
   margin: 1rem 0;
-  background: rgba(0,0,0,0.3);
+  background: var(--bg-progress-bar);
 }
 
 .progress-segment {
@@ -249,16 +311,15 @@ button:active {
   gap: 1.5rem;
   padding: 3rem 2rem;
   border-radius: 12px;
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   margin-top: 1rem;
 }
 
 .spinner {
   width: 50px;
   height: 50px;
-  border: 3px solid rgba(59, 130, 246, 0.15);
+  border: 3px solid rgba(0, 92, 167, 0.1);
   border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -268,7 +329,7 @@ button:active {
   width: 100%;
   max-width: 300px;
   height: 6px;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-progress-bar);
   border-radius: 10px;
   overflow: hidden;
   position: relative;
@@ -359,8 +420,13 @@ button:active {
 }
 .tab:hover {
   color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="dark"] .tab:hover {
   background: rgba(255, 255, 255, 0.04);
 }
+
 .tab.active {
   color: var(--text-primary);
 }
@@ -396,15 +462,16 @@ button:active {
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.55rem 0.4rem 0.9rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 999px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .user-chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
 }
 .user-chip__name {
   font-size: 0.85rem;
@@ -424,9 +491,13 @@ button:active {
   font-weight: 600;
   text-transform: uppercase;
 }
-.role-badge--admin { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
-.role-badge--supervisor { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
-.role-badge--inspector { background: rgba(14, 165, 233, 0.15); color: #7dd3fc; }
+.role-badge--admin { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.role-badge--supervisor { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.role-badge--inspector { background: rgba(14, 165, 233, 0.15); color: #0ea5e9; }
+
+[data-theme="dark"] .role-badge--admin { color: #fca5a5; }
+[data-theme="dark"] .role-badge--supervisor { color: #fcd34d; }
+[data-theme="dark"] .role-badge--inspector { color: #7dd3fc; }
 
 .user-menu {
   position: absolute;
@@ -438,10 +509,10 @@ button:active {
   flex-direction: column;
   gap: 0.7rem;
   z-index: 100;
-  background: rgba(15, 23, 42, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
   animation: menu-in 0.16s ease-out;
 }
 @keyframes menu-in {
@@ -450,7 +521,7 @@ button:active {
 }
 .user-menu__head {
   padding-bottom: 0.6rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-color);
 }
 .user-menu__user { display: block; font-weight: 600; color: var(--text-primary); }
 .user-menu__meta {

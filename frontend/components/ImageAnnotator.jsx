@@ -350,7 +350,7 @@ const ALL_SELECTORS = [
   FreehandSelector
 ];
 
-export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, onClose, imageId }) {
+export default function ImageAnnotator({ imageUrl, initialAnnotations, initialComment, onSave, onClose, imageId }) {
   const [annotations, setAnnotations] = useState(initialAnnotations || []);
   const [annotation, setAnnotation] = useState({});
   const [activeTool, setActiveTool] = useState('rect');
@@ -358,6 +358,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
   const [customColor, setCustomColor] = useState('#ef4444');
   const [lineWidth, setLineWidth] = useState(2);
   const [zoom, setZoom] = useState(1);
+  const [imageComment, setImageComment] = useState(initialComment || "");
   const containerRef = useRef(null);
 
   // Definición de las herramientas de dibujo
@@ -444,7 +445,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
 
   const handleSave = () => {
     if (onSave) {
-      onSave(annotations);
+      onSave(annotations, imageComment);
     }
   };
 
@@ -828,6 +829,20 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, onSave, o
             <li>Escribe una nota opcional en el globo emergente y presiona Enter.</li>
             <li>Para texto, arrastra un cuadro y escribe el texto obligatorio.</li>
           </ul>
+        </div>
+
+        {/* Sección de Comentario de la Imagen */}
+        <div className={styles.commentSection}>
+          <div className={styles.sidebarSectionTitle}>
+            Comentario de la Imagen (Reporte)
+          </div>
+          <textarea
+            className={styles.commentInput}
+            value={imageComment}
+            onChange={(e) => setImageComment(e.target.value)}
+            placeholder="Escribe un comentario o indicación para esta imagen en el reporte..."
+            rows={3}
+          />
         </div>
 
         <div className={styles.annotationsListContainer}>

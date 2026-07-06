@@ -396,7 +396,7 @@ def make_reporte_canvas_class(doc_title):
             self.doc_title = doc_title
     return CustomReporteCanvas
 
-def generar_recuadro_criterios() -> Table:
+def generar_recuadro_criterios(width: float = 498) -> Table:
     styles = getSampleStyleSheet()
     
     # Define styles for the box
@@ -438,7 +438,11 @@ def generar_recuadro_criterios() -> Table:
     for item in items:
         right_flowables.append(Paragraph(item, right_text_style))
         
-    t = Table([[left_paragraph, right_flowables]], colWidths=[110, 388])
+    # Scale column widths to fit the total width
+    col_left = round(width * 0.22)
+    col_right = width - col_left
+    
+    t = Table([[left_paragraph, right_flowables]], colWidths=[col_left, col_right])
     t.setStyle([
         ('BACKGROUND', (0,0), (0,0), colors.HexColor('#a5bfdd')),
         ('VALIGN', (0,0), (0,0), 'MIDDLE'),
@@ -794,6 +798,10 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
     codigo_eq = equipo.get('codigo', equipo.get('numero', 'N/A'))
     num_acta = f"ACTA-{campania.replace(' ', '')}-{codigo_eq}"
     story.append(Paragraph(f"Acta de Inspección: {clean_xml_text(num_acta)}", ParagraphStyle('DocActaIndividual', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1)))
+    story.append(Spacer(1, 12))
+    
+    # Criterios y Normativas Box (scaled to fit individual report width 468)
+    story.append(generar_recuadro_criterios(width=468))
     story.append(Spacer(1, 12))
     
     # 2. TABLA DE DATOS DEL EQUIPO (2 columns: Campo | Valor)
@@ -1444,64 +1452,78 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
             
         story.append(PageBreak())
 
-        # 2. ÍNDICE DE EQUIPOS
-        story.append(Paragraph("<b>ÍNDICE DE EQUIPOS</b>", ParagraphStyle('IndexTitle', fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=COLORES_SULVY['primario'], spaceAfter=15)))
-
-        index_data = []
-        index_style = ParagraphStyle('IndexLine', fontName='Helvetica', fontSize=9.5, leading=13, textColor=COLORES_SULVY['texto'])
-        page_style = ParagraphStyle('IndexPageNum', fontName='Helvetica-Bold', fontSize=9.5, leading=13, textColor=COLORES_SULVY['primario'], alignment=2)
-
-        for idx, eq in enumerate(equipos):
-            codigo = eq.get('codigo', 'N/A')
-            nombre = eq.get('nombre', 'N/A')
-            start_page = 3 + 2 * idx
-            
-            text = f"{idx + 1}. {codigo} - {nombre}"
-            
-            index_data.append([
-                Paragraph(text, index_style),
-                Paragraph(". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .", ParagraphStyle('Dots', fontName='Helvetica', fontSize=9.5, textColor=colors.HexColor('#cbd5e1'))),
-                Paragraph(str(start_page), page_style)
-            ])
-
-        index_table = Table(index_data, colWidths=[240, 224, 34])
-        index_table.setStyle([
-            ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-            ('TOPPADDING', (0,0), (-1,-1), 3),
-        ])
-        story.append(index_table)
-        story.append(PageBreak())
-
-        # 3. CUERPO (UN CAPÍTULO POR EQUIPO)
-        for idx, eq in enumerate(equipos):
+        # Group and sort equipments by severity (CRITICO > REGULAR > BUENO/FUERA DE RUTA)
+        criticos = []
+        regulares = []
+        buenos_y_otros = []
+        
+        for eq in equipos:
             insp = next((i for i in inspecciones if i['equipo_id'] == eq['id']), {})
-            fotos = fotos_por_equipo.get(eq['id'], [])
-            story.extend(obtener_flujo_equipo(eq, insp, fotos))
-            story.append(PageBreak())
+            estado_val = str(insp.get('estado', 'BUENO')).upper()
+            if 'CRIT' in estado_val:
+                criticos.append((eq, insp))
+            elif 'REGULAR' in estado_val:
+                regulares.append((eq, insp))
+            else:
+                buenos_y_otros.append((eq, insp))
+                
+        # Sort alphabetically within each severity group
+        criticos.sort(key=lambda x: x[0].get('codigo', ''))
+        regulares.sort(key=lambda x: x[0].get('codigo', ''))
+        buenos_y_otros.sort(key=lambda x: x[0].get('codigo', ''))
+        
+        # Calculate dynamic page numbers
+        # Cover page = Page 1
+        # Metrics/Dashboard = Page 2
+        # Plan de Acción table = Page 3
+        # Estimate number of pages for Plan de Acción table (max 20 rows per page)
+        total_eq = len(equipos)
+        plan_pages = (total_eq + 19) // 20 if total_eq > 0 else 1
+        
+        # Index page = Page (3 + plan_pages)
+        # Body starts at Page (3 + plan_pages + 1)
+        current_page = 3 + plan_pages + 1
+        
+        criticos_indexed = []
+        regulares_indexed = []
+        buenos_y_otros_indexed = []
+        
+        if criticos:
+            current_page += 1 # 1 page for Chapter I Title Cover
+            for eq, insp in criticos:
+                criticos_indexed.append((eq, current_page))
+                current_page += 2 # each equipment takes exactly 2 pages
+                
+        if regulares:
+            current_page += 1 # 1 page for Chapter II Title Cover
+            for eq, insp in regulares:
+                regulares_indexed.append((eq, current_page))
+                current_page += 2
+                
+        if buenos_y_otros:
+            current_page += 1 # 1 page for Chapter III Title Cover
+            for eq, insp in buenos_y_otros:
+                buenos_y_otros_indexed.append((eq, current_page))
+                current_page += 2
 
-        # 4. ANEXOS
-        story.append(Paragraph("ANEXOS", ParagraphStyle('AnnexesMainTitle', fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=COLORES_SULVY['primario'], spaceAfter=15)))
-
-        # Anexo A: Resumen de Estados
-        story.append(Paragraph("Anexo A: Resumen de Estados de Equipos", ParagraphStyle('AnnexTitle', fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=COLORES_SULVY['primario'], spaceBefore=10, spaceAfter=8)))
-
+        # 1.5. PANEL DE CONTROL Y MÉTRICAS DE DECISIÓN (Dashboard)
+        story.append(Paragraph("<b>PANEL DE CONTROL Y MÉTRICAS DE DECISIÓN</b>", ParagraphStyle('DashTitle', fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=COLORES_SULVY['primario'], spaceAfter=15)))
+        
+        dash_desc = f"Este panel resume la distribución del estado de conservación de los activos de la ubicación <b>{nombre_ubicacion}</b> de la empresa <b>{nombre_empresa}</b> durante la campaña activa <b>{campania}</b>. Su propósito es proveer información estadística clave para la planificación presupuestaria de mantenimiento técnico."
+        story.append(Paragraph(dash_desc, ParagraphStyle('DashDesc', fontName='Helvetica', fontSize=9.5, leading=14, textColor=COLORES_SULVY['texto'], spaceAfter=15)))
+        
         counts = {"BUENO": 0, "REGULAR": 0, "CRITICO": 0, "FUERA DE RUTA": 0}
         for insp in inspecciones:
             est = str(insp.get('estado', 'BUENO')).upper()
-            if 'BUENO' in est:
-                counts['BUENO'] += 1
+            if 'CRIT' in est:
+                counts['CRITICO'] += 1
             elif 'REGULAR' in est:
                 counts['REGULAR'] += 1
-            elif 'CRIT' in est:
-                counts['CRITICO'] += 1
             elif 'FUERA' in est:
                 counts['FUERA DE RUTA'] += 1
             else:
                 counts['BUENO'] += 1
-
-        total_eq = len(equipos)
-
+                
         stats_data = []
         for state, color_hex in [("BUENO", "#22c55e"), ("REGULAR", "#f59e0b"), ("CRITICO", "#ef4444"), ("FUERA DE RUTA", "#6b7280")]:
             cnt = counts[state]
@@ -1522,8 +1544,8 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
             ])
             
             stats_data.append([
-                Paragraph(f"<b>{state}</b>", ParagraphStyle('StateLabel', fontName='Helvetica', fontSize=9)),
-                Paragraph(f"{cnt} ({pct:.1f}%)", ParagraphStyle('StateCount', fontName='Helvetica-Bold', fontSize=9, alignment=1)),
+                Paragraph(f"<b>{state}</b>", ParagraphStyle('StateLabel', fontName='Helvetica', fontSize=9.5)),
+                Paragraph(f"{cnt} ({pct:.1f}%)", ParagraphStyle('StateCount', fontName='Helvetica-Bold', fontSize=9.5, alignment=1)),
                 bar_table
             ])
 
@@ -1538,81 +1560,216 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
             ('RIGHTPADDING', (0,0), (-1,-1), 8),
         ])
         story.append(stats_table)
-        story.append(Spacer(1, 20))
+        story.append(PageBreak())
 
-        # Anexo B: Recomendaciones Consolidadas
-        story.append(Paragraph("Anexo B: Recomendaciones Consolidadas (PGP 2027)", ParagraphStyle('AnnexTitle', fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=COLORES_SULVY['primario'], spaceBefore=10, spaceAfter=8)))
-
-        recom_data = []
-        recom_data.append([
-            Paragraph("<b>Equipo</b>", ParagraphStyle('RecomHead', fontName='Helvetica-Bold', fontSize=9, textColor=colors.white)),
-            Paragraph("<b>Recomendaciones PGP 2027</b>", ParagraphStyle('RecomHead', fontName='Helvetica-Bold', fontSize=9, textColor=colors.white))
-        ])
-
-        for idx, eq in enumerate(equipos):
+        # 1.6. PLAN DE ACCIÓN Y ESTIMACIÓN DE ALCANCES (Para estimación de costos)
+        story.append(Paragraph("<b>PLAN DE ACCIÓN Y ESTIMACIÓN DE ALCANCES</b>", ParagraphStyle('PlanTitle', fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=COLORES_SULVY['primario'], spaceAfter=12)))
+        
+        plan_desc = "Esta sección consolida las intervenciones recomendadas por la inspección técnica. Clasifica el tipo de tarea prioritaria para facilitar el desarrollo de cotizaciones y estimación de costos de reparación o parada general de planta."
+        story.append(Paragraph(plan_desc, ParagraphStyle('PlanDesc', fontName='Helvetica', fontSize=9.5, leading=14, textColor=COLORES_SULVY['texto'], spaceAfter=15)))
+        
+        table_text_style = ParagraphStyle(
+            'PlanTableText',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8,
+            leading=10,
+            textColor=COLORES_SULVY['texto']
+        )
+        table_header_style = ParagraphStyle(
+            'PlanTableHeader',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=8.5,
+            leading=11,
+            textColor=colors.white,
+            alignment=1
+        )
+        
+        plan_data = [[
+            Paragraph("<b>Equipo</b>", table_header_style),
+            Paragraph("<b>Estado</b>", table_header_style),
+            Paragraph("<b>Intervención Propuesta</b>", table_header_style),
+            Paragraph("<b>Prioridad</b>", table_header_style),
+            Paragraph("<b>Recomendaciones</b>", table_header_style)
+        ]]
+        
+        all_ordered = criticos + regulares + buenos_y_otros
+        for eq, insp in all_ordered:
             codigo = eq.get('codigo', 'N/A')
             nombre = eq.get('nombre', 'N/A')
-            insp = next((i for i in inspecciones if i['equipo_id'] == eq['id']), {})
-            recom = insp.get('recomendaciones', 'Sin recomendaciones registradas.')
-            
-            recom_data.append([
-                Paragraph(f"<b>{codigo}</b><br/>{nombre}", ParagraphStyle('RecomEq', fontName='Helvetica', fontSize=8.5, leading=11)),
-                Paragraph(recom.replace('\n', '<br/>'), ParagraphStyle('RecomVal', fontName='Helvetica', fontSize=8.5, leading=11))
-            ])
-
-        recom_table = Table(recom_data, colWidths=[130, 368])
-        recom_table.setStyle([
-            ('BACKGROUND', (0,0), (-1,0), COLORES_SULVY['primario']),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('LEFTPADDING', (0,0), (-1,-1), 8),
-            ('RIGHTPADDING', (0,0), (-1,-1), 8),
-        ])
-        recom_table.repeatRows = 1
-        story.append(recom_table)
-        story.append(Spacer(1, 20))
-
-        # Anexo C: Tabla Resumen de Equipos
-        story.append(Paragraph("Anexo C: Tabla Resumen de Equipos", ParagraphStyle('AnnexTitle', fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=COLORES_SULVY['primario'], spaceBefore=10, spaceAfter=8)))
-
-        summary_data = []
-        summary_data.append([
-            Paragraph("<b>Código</b>", ParagraphStyle('SumHead', fontName='Helvetica-Bold', fontSize=9, textColor=colors.white)),
-            Paragraph("<b>Nombre Equipo</b>", ParagraphStyle('SumHead', fontName='Helvetica-Bold', fontSize=9, textColor=colors.white)),
-            Paragraph("<b>Estado</b>", ParagraphStyle('SumHead', fontName='Helvetica-Bold', fontSize=9, textColor=colors.white, alignment=1)),
-            Paragraph("<b>Página</b>", ParagraphStyle('SumHead', fontName='Helvetica-Bold', fontSize=9, textColor=colors.white, alignment=1))
-        ])
-
-        for idx, eq in enumerate(equipos):
-            codigo = eq.get('codigo', 'N/A')
-            nombre = eq.get('nombre', 'N/A')
-            insp = next((i for i in inspecciones if i['equipo_id'] == eq['id']), {})
             estado_val = str(insp.get('estado', 'BUENO')).upper()
-            start_page = 3 + 2 * idx
             
-            summary_data.append([
-                Paragraph(codigo, ParagraphStyle('SumVal', fontName='Helvetica', fontSize=8.5)),
-                Paragraph(nombre, ParagraphStyle('SumVal', fontName='Helvetica', fontSize=8.5)),
-                Paragraph(estado_val, ParagraphStyle('SumVal', fontName='Helvetica-Bold', fontSize=8.5, alignment=1)),
-                Paragraph(str(start_page), ParagraphStyle('SumVal', fontName='Helvetica', fontSize=8.5, alignment=1))
+            if 'CRIT' in estado_val:
+                intervencion = "Reparación Urgente"
+                prioridad = "Alta"
+                estado_color = "#ef4444"
+                prio_color = "#ef4444"
+            elif 'REGULAR' in estado_val:
+                intervencion = "Mantenimiento Prog."
+                prioridad = "Media"
+                estado_color = "#f59e0b"
+                prio_color = "#f59e0b"
+            elif 'BUENO' in estado_val:
+                intervencion = "Monitoreo Prev."
+                prioridad = "Baja"
+                estado_color = "#22c55e"
+                prio_color = "#22c55e"
+            else:
+                intervencion = "Re-inspección"
+                prioridad = "Baja"
+                estado_color = "#6b7280"
+                prio_color = "#6b7280"
+                
+            recom = insp.get('recomendaciones', 'Sin recomendaciones.')
+            if len(recom) > 130:
+                recom = recom[:127] + "..."
+                
+            plan_data.append([
+                Paragraph(f"<b>{codigo}</b><br/>{nombre}", table_text_style),
+                Paragraph(f"<font color='{estado_color}'><b>{estado_val}</b></font>", ParagraphStyle('StateCol', parent=table_text_style, alignment=1)),
+                Paragraph(intervencion, table_text_style),
+                Paragraph(f"<font color='{prio_color}'><b>{prioridad}</b></font>", ParagraphStyle('PrioCol', parent=table_text_style, alignment=1)),
+                Paragraph(recom.replace('\n', '<br/>'), table_text_style)
             ])
-
-        summary_table = Table(summary_data, colWidths=[100, 238, 100, 60])
-        summary_table.setStyle([
+            
+        plan_table = Table(plan_data, colWidths=[105, 70, 105, 50, 168])
+        plan_table.setStyle([
             ('BACKGROUND', (0,0), (-1,0), COLORES_SULVY['primario']),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('TOPPADDING', (0,0), (-1,-1), 5),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('TOPPADDING', (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
             ('LEFTPADDING', (0,0), (-1,-1), 6),
             ('RIGHTPADDING', (0,0), (-1,-1), 6),
         ])
-        summary_table.repeatRows = 1
-        story.append(summary_table)
+        plan_table.repeatRows = 1
+        story.append(plan_table)
+        story.append(PageBreak())
+
+        # 1.7. ÍNDICE GENERAL POR CAPÍTULOS
+        story.append(Paragraph("<b>ÍNDICE DE EQUIPOS POR CAPÍTULOS</b>", ParagraphStyle('IndexTitle', fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=COLORES_SULVY['primario'], spaceAfter=15)))
+        
+        index_data = []
+        index_style = ParagraphStyle('IndexLine', fontName='Helvetica', fontSize=9.5, leading=13, textColor=COLORES_SULVY['texto'])
+        chapter_style = ParagraphStyle('IndexChapter', fontName='Helvetica-Bold', fontSize=11, leading=16, textColor=COLORES_SULVY['primario'], spaceBefore=8, spaceAfter=4)
+        page_style = ParagraphStyle('IndexPageNum', fontName='Helvetica-Bold', fontSize=9.5, leading=13, textColor=COLORES_SULVY['primario'], alignment=2)
+        
+        if criticos_indexed:
+            index_data.append([Paragraph("<b>Capítulo I: Equipos en Estado Crítico</b>", chapter_style), "", ""])
+            for idx, (eq, start_page) in enumerate(criticos_indexed):
+                codigo = eq.get('codigo', 'N/A')
+                nombre = eq.get('nombre', 'N/A')
+                text = f"{codigo} - {nombre}"
+                index_data.append([
+                    Paragraph(text, index_style),
+                    Paragraph(". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .", ParagraphStyle('Dots', fontName='Helvetica', fontSize=9.5, textColor=colors.HexColor('#cbd5e1'))),
+                    Paragraph(str(start_page), page_style)
+                ])
+                
+        if regulares_indexed:
+            index_data.append([Paragraph("<b>Capítulo II: Equipos en Estado Regular</b>", chapter_style), "", ""])
+            for idx, (eq, start_page) in enumerate(regulares_indexed):
+                codigo = eq.get('codigo', 'N/A')
+                nombre = eq.get('nombre', 'N/A')
+                text = f"{codigo} - {nombre}"
+                index_data.append([
+                    Paragraph(text, index_style),
+                    Paragraph(". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .", ParagraphStyle('Dots', fontName='Helvetica', fontSize=9.5, textColor=colors.HexColor('#cbd5e1'))),
+                    Paragraph(str(start_page), page_style)
+                ])
+                
+        if buenos_y_otros_indexed:
+            index_data.append([Paragraph("<b>Capítulo III: Equipos en Estado Bueno / Otros</b>", chapter_style), "", ""])
+            for idx, (eq, start_page) in enumerate(buenos_y_otros_indexed):
+                codigo = eq.get('codigo', 'N/A')
+                nombre = eq.get('nombre', 'N/A')
+                text = f"{codigo} - {nombre}"
+                index_data.append([
+                    Paragraph(text, index_style),
+                    Paragraph(". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .", ParagraphStyle('Dots', fontName='Helvetica', fontSize=9.5, textColor=colors.HexColor('#cbd5e1'))),
+                    Paragraph(str(start_page), page_style)
+                ])
+                
+        index_table = Table(index_data, colWidths=[240, 224, 34])
+        index_table.setStyle([
+            ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+        ])
+        story.append(index_table)
+        story.append(PageBreak())
+
+        # Define chapter cover styles
+        cap_title_style = ParagraphStyle(
+            'ChapterCoverTitle',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=22,
+            leading=26,
+            textColor=COLORES_SULVY['primario'],
+            alignment=1,
+            spaceAfter=15
+        )
+        cap_desc_style = ParagraphStyle(
+            'ChapterCoverDesc',
+            parent=styles['Normal'],
+            fontName='Helvetica-Oblique',
+            fontSize=11,
+            leading=15,
+            textColor=COLORES_SULVY['secundario'],
+            alignment=1,
+            spaceAfter=30
+        )
+        line_table = Table([['']], colWidths=[200], rowHeights=[2])
+        line_table.setStyle([
+            ('BACKGROUND', (0,0), (-1,-1), COLORES_SULVY['primario']),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ])
+        
+        # CHAPTER I: EQUIPOS EN ESTADO CRÍTICO
+        if criticos:
+            story.append(Spacer(1, 150))
+            story.append(Paragraph("CAPÍTULO I: EQUIPOS EN ESTADO CRÍTICO", cap_title_style))
+            story.append(Paragraph("Equipos que presentan patologías graves o fallas estructurales que requieren reparación urgente o detención inmediata de operaciones para resguardar la seguridad y la integridad física de la planta.", cap_desc_style))
+            story.append(line_table)
+            story.append(PageBreak())
+            
+            for eq, insp in criticos:
+                fotos = fotos_por_equipo.get(eq['id'], [])
+                story.extend(obtener_flujo_equipo(eq, insp, fotos))
+                story.append(PageBreak())
+                
+        # CHAPTER II: EQUIPOS EN ESTADO REGULAR
+        if regulares:
+            story.append(Spacer(1, 150))
+            story.append(Paragraph("CAPÍTULO II: EQUIPOS EN ESTADO REGULAR", cap_title_style))
+            story.append(Paragraph("Equipos con desviaciones operativas o patologías menores controladas. Se recomienda programar mantenimiento correctivo durante las paradas de planta regulares.", cap_desc_style))
+            story.append(line_table)
+            story.append(PageBreak())
+            
+            for eq, insp in regulares:
+                fotos = fotos_por_equipo.get(eq['id'], [])
+                story.extend(obtener_flujo_equipo(eq, insp, fotos))
+                story.append(PageBreak())
+                
+        # CHAPTER III: EQUIPOS EN ESTADO BUENO / OTROS
+        if buenos_y_otros:
+            story.append(Spacer(1, 150))
+            story.append(Paragraph("CAPÍTULO III: EQUIPOS EN ESTADO BUENO / OTROS", cap_title_style))
+            story.append(Paragraph("Equipos en óptimo estado de conservación o cuya inspección parcial/fuera de ruta no detectó hallazgos relevantes. Se recomienda continuar con monitoreo preventivo de rutina.", cap_desc_style))
+            story.append(line_table)
+            story.append(PageBreak())
+            
+            for eq, insp in buenos_y_otros:
+                fotos = fotos_por_equipo.get(eq['id'], [])
+                story.extend(obtener_flujo_equipo(eq, insp, fotos))
+                story.append(PageBreak())
 
         # Cierre: firma del equipo técnico
+        story.append(Paragraph("<b>FIN DE INFORME CONSOLIDADO</b>", ParagraphStyle('EndTitle', fontName='Helvetica-Bold', fontSize=12, alignment=1, spaceAfter=20)))
         story.extend(generar_bloque_firma())
 
         canvas_maker = make_reporte_canvas_class(f"Libro {nombre_ubicacion} - {campania}")

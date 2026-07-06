@@ -140,7 +140,19 @@ export default function InspectionPanel({ equipoId }) {
 
         setSelectedImages([]);
         setAnalisis(null);
+        setHistorial2024(null);
         setIndicacionesPrevias("");
+
+        // Fetch PGP 2024 history for display in the panel
+        try {
+          const histRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2024`);
+          if (histRes.ok) {
+            const histData = await histRes.json();
+            setHistorial2024(histData);
+          }
+        } catch (histErr) {
+          console.error("Error fetching PGP 2024 history:", histErr);
+        }
 
         if (sugData.sugerencias && sugData.sugerencias.length > 0) {
           setSugerencias(sugData.sugerencias);
@@ -590,8 +602,68 @@ export default function InspectionPanel({ equipoId }) {
           <h4>Análisis con Gemini</h4>
           
           {!analisis ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'center' }}>
-              <p style={{ color: 'var(--text-muted)', margin: 0, textAlign: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start' }}>
+              
+              {/* Box de Historial PGP 2024 previo al análisis */}
+              {historial2024 ? (
+                <div style={{
+                  padding: '1rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                  textAlign: 'left',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+                  backdropFilter: 'blur(10px)',
+                  marginBottom: '0.5rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.4rem', marginBottom: '0.1rem' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      📋 Historial PGP 2024
+                    </span>
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      backgroundColor: historial2024.estado === 'CRITICO' ? 'rgba(239, 68, 68, 0.15)' : historial2024.estado === 'REGULAR' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: historial2024.estado === 'CRITICO' ? '#fca5a5' : historial2024.estado === 'REGULAR' ? '#fcd34d' : '#a7f3d0',
+                      border: `1px solid ${historial2024.estado === 'CRITICO' ? 'rgba(239, 68, 68, 0.3)' : historial2024.estado === 'REGULAR' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                      padding: '2px 8px',
+                      borderRadius: '4px'
+                    }}>
+                      {historial2024.estado}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 600 }}>Diagnóstico Anterior:</span>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                      {renderVal(historial2024.diagnostico) || 'Sin diagnóstico previo registrado.'}
+                    </p>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 600 }}>Recomendaciones Anteriores:</span>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                      {renderVal(historial2024.recomendaciones) || 'Sin recomendaciones previas registradas.'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  padding: '0.85rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                  border: '1px dashed rgba(255, 255, 255, 0.08)',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.8rem',
+                  marginBottom: '0.5rem'
+                }}>
+                  ℹ️ Sin datos históricos registrados del PGP 2024.
+                </div>
+              )}
+
+              <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0 0', textAlign: 'center', fontSize: '0.85rem' }}>
                 Selecciona imágenes del Drive y presiona el botón.
               </p>
               

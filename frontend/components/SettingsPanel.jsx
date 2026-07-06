@@ -33,12 +33,17 @@ export default function SettingsPanel() {
   const [syncTaskId, setSyncTaskId] = useState(null);
   const [syncProgress, setSyncProgress] = useState(null);
 
+  // Estados para la gestión de Aprendizajes IA
+  const [aprendizajes, setAprendizajes] = useState([]);
+  const [aprendizajesLoading, setAprendizajesLoading] = useState(false);
+
   const isAdmin = user?.rol === 'admin';
 
   const categories = [
     { key: 'general', label: '⚙️ General' },
     { key: 'drive', label: '📁 Google Drive' },
     { key: 'ia', label: '🧠 Inteligencia Artificial' },
+    { key: 'aprendizaje_ia', label: '🎓 Aprendizajes IA' },
     { key: 'pdf', label: '📄 Rutas y PDF' },
     { key: 'reportes', label: '📊 Reportes' },
     { key: 'notificaciones', label: '🔔 Notificaciones' },
@@ -153,6 +158,60 @@ export default function SettingsPanel() {
     
     return () => clearInterval(interval);
   }, [currentTaskId, token, empresaSeleccionada]);
+
+  const fetchAprendizajes = async () => {
+    setAprendizajesLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.getAprendizajes(token);
+      setAprendizajes(data);
+    } catch (err) {
+      console.error(err);
+      setError('No se pudieron cargar las lecciones de aprendizaje de la IA.');
+    } finally {
+      setAprendizajesLoading(false);
+    }
+  };
+
+  const handleEliminarAprendizaje = async (id) => {
+    if (!confirm('¿Está seguro de que desea eliminar esta lección aprendida?')) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await apiService.deleteAprendizaje(id, token);
+      setSuccess(res.message || 'Lección de aprendizaje eliminada correctamente.');
+      fetchAprendizajes();
+    } catch (err) {
+      setError(err.message || 'Ocurrió un error al eliminar la lección.');
+    }
+  };
+
+  const formatDate = (isoString) => {
+    if (!isoString) return '-';
+    try {
+      const normalizedString = isoString.includes(' ') && !isoString.includes('T') 
+        ? isoString.replace(' ', 'T') 
+        : isoString;
+      const date = new Date(normalizedString);
+      if (isNaN(date.getTime())) return isoString;
+      return date.toLocaleString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch (e) {
+      return isoString;
+    }
+  };
+
+  useEffect(() => {
+    if (token && activeSubTab === 'aprendizaje_ia') {
+      fetchAprendizajes();
+    }
+  }, [token, activeSubTab]);
 
   // Polling del progreso de la sincronización de Drive
   useEffect(() => {
@@ -831,6 +890,93 @@ export default function SettingsPanel() {
               )}
 
             </div>
+          ) : activeSubTab === 'aprendizaje_ia' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', flex: 1 }}>
+              <div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+                  Lista de correcciones y lecciones aprendidas inyectadas al sistema para el autoaprendizaje de Gemini.
+                </p>
+              </div>
+
+              {aprendizajesLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ width: '30px', height: '30px', border: '3px solid rgba(14, 165, 233, 0.1)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cargando lecciones...</p>
+                  </div>
+                </div>
+              ) : aprendizajes.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px', padding: '2rem', color: 'var(--text-secondary)', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎓</span>
+                  <p style={{ fontSize: '0.85rem', fontStyle: 'italic', margin: 0 }}>No hay aprendizajes registrados en el sistema.</p>
+                </div>
+              ) : (
+                <div style={{ width: '100%', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)' }}>
+                        <th style={{ padding: '12px 16px', width: '180px' }}>Fecha / Registro</th>
+                        <th style={{ padding: '12px 16px', width: '200px' }}>Equipo</th>
+                        <th style={{ padding: '12px 16px' }}>Detalle / Lección</th>
+                        {isAdmin && <th style={{ padding: '12px 16px', width: '100px', textAlign: 'center' }}>Acciones</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aprendizajes.map((item) => (
+                        <tr 
+                          key={item.id} 
+                          style={{ 
+                            borderBottom: '1px solid rgba(255,255,255,0.05)',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                            {formatDate(item.created_at || item.fecha)}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: 'white' }}>
+                            {item.equipo || 'N/A'}
+                          </td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                            {item.leccion}
+                          </td>
+                          {isAdmin && (
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarAprendizaje(item.id)}
+                                style={{
+                                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  color: '#f87171',
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                  transition: 'all 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.25)';
+                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
+                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                                }}
+                              >
+                                Eliminar
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
               {filteredSettings.length === 0 ? (
@@ -929,6 +1075,27 @@ export default function SettingsPanel() {
                               {showApiKey ? '👁️ Ocultar' : '👁️ Mostrar'}
                             </button>
                           </div>
+                        ) : (item.clave === 'system_instruction' || item.clave === 'reglas_negocio') ? (
+                          <textarea
+                            id={inputId}
+                            value={value}
+                            disabled={!isFieldEditable}
+                            onChange={(e) => handleChange(item.clave, e.target.value, 'string')}
+                            rows={10}
+                            style={{
+                              width: '100%',
+                              borderColor: hasError ? 'var(--status-critical)' : 'var(--border-color)',
+                              backgroundColor: !isFieldEditable ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.2)',
+                              color: !isFieldEditable ? 'var(--text-secondary)' : 'var(--text-primary)',
+                              borderRadius: '8px',
+                              padding: '10px 12px',
+                              fontSize: '0.9rem',
+                              fontFamily: 'inherit',
+                              lineHeight: '1.5',
+                              resize: 'vertical',
+                              outline: 'none'
+                            }}
+                          />
                         ) : (
                           <input
                             id={inputId}
@@ -1032,7 +1199,7 @@ export default function SettingsPanel() {
       </div>
 
       {/* Botones de acción en la parte inferior */}
-      {isAdmin && activeSubTab !== 'campanias' && (
+      {isAdmin && activeSubTab !== 'campanias' && activeSubTab !== 'aprendizaje_ia' && (
         <div style={{
           display: 'flex',
           justifyContent: 'flex-end',

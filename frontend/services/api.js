@@ -109,5 +109,35 @@ export const apiService = {
       console.error(error);
       throw error;
     }
+  },
+
+  getAprendizajes: async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ia/aprendizaje`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Error al obtener aprendizajes');
+      return await response.json();
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  },
+
+  deleteAprendizaje: async (id, token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ia/aprendizaje/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Error al eliminar aprendizaje');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   }
 };

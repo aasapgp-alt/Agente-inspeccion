@@ -3,9 +3,10 @@ import ImageAnnotator from './ImageAnnotator';
 
 export default function AnnotationModal({ image, token, equipoId, onClose, onSave }) {
   const [annotations, setAnnotations] = useState([]);
+  const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Cargar anotaciones desde localStorage y el backend
+  // Cargar anotaciones y comentarios desde localStorage y el backend
   useEffect(() => {
     const loadAnnotations = async () => {
       if (!image || !image.id) return;
@@ -21,6 +22,7 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
           console.error("Error al cargar anotaciones de localStorage:", e);
         }
       }
+      let loadedComment = localStorage.getItem(`comment_${image.id}`) || "";
 
       // 2. Cargar desde el backend
       try {
@@ -32,11 +34,19 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
         if (res.ok) {
           const data = await res.json();
           const backendAnns = data.anotaciones?.[image.id];
+          const backendComment = data.comentarios?.[image.id] || "";
+          
           if (backendAnns && backendAnns.length > 0) {
             // Sincronizar backend con local: si en local no hay nada, usamos backend
             if (loadedAnnotations.length === 0) {
               loadedAnnotations = backendAnns;
               localStorage.setItem(`annotations_${image.id}`, JSON.stringify(backendAnns));
+            }
+          }
+          if (backendComment) {
+            if (!loadedComment) {
+              loadedComment = backendComment;
+              localStorage.setItem(`comment_${image.id}`, backendComment);
             }
           }
         }
@@ -45,13 +55,14 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
       }
 
       setAnnotations(loadedAnnotations);
+      setComment(loadedComment);
       setLoading(false);
     };
 
     loadAnnotations();
   }, [image, equipoId, token]);
 
-  const handleSave = async (updatedAnnotations) => {
+  const handleSave = async (updatedAnnotations, updatedComment) => {
     if (!image || !image.id) return;
 
     // 1. Guardar en localStorage
@@ -59,6 +70,12 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
       localStorage.setItem(`annotations_${image.id}`, JSON.stringify(updatedAnnotations));
     } else {
       localStorage.removeItem(`annotations_${image.id}`);
+    }
+
+    if (updatedComment) {
+      localStorage.setItem(`comment_${image.id}`, updatedComment);
+    } else {
+      localStorage.removeItem(`comment_${image.id}`);
     }
 
     // 2. Guardar en backend
@@ -72,7 +89,8 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
         body: JSON.stringify({
           equipo_id: equipoId,
           image_id: image.id,
-          annotations: updatedAnnotations
+          annotations: updatedAnnotations,
+          comentario: updatedComment
         })
       });
     } catch (err) {
@@ -144,8 +162,10 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
           </div>
         ) : (
           <ImageAnnotator
+            key={`${image.id}_${comment}`}
             imageUrl={imageUrl}
             initialAnnotations={annotations}
+            initialComment={comment}
             imageId={image.id}
             onSave={handleSave}
             onClose={onClose}

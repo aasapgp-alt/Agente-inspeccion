@@ -8,25 +8,26 @@ logger = logging.getLogger(__name__)
 def iniciar_generacion_reporte(inspeccion_id: int) -> dict:
     try:
         with get_db_connection() as conn:
-            cursor = conn.execute("SELECT * FROM reportes WHERE inspeccion_id = ? AND estado = 'EN_PROCESO'", (inspeccion_id,))
-            if cursor.fetchone():
+            cursor = conn.execute("SELECT estado_generacion FROM inspecciones WHERE id = ?", (inspeccion_id,))
+            row = cursor.fetchone()
+            if row and row["estado_generacion"] == "generando":
                 return {"status": "error", "message": "Generación ya en proceso"}
                 
-            cursor = conn.execute(
-                "INSERT INTO reportes (inspeccion_id, estado, fecha_inicio) VALUES (?, 'EN_PROCESO', ?)",
-                (inspeccion_id, datetime.datetime.now().isoformat())
+            conn.execute(
+                "UPDATE inspecciones SET estado_generacion = 'generando', error_generacion = NULL WHERE id = ?",
+                (inspeccion_id,)
             )
             conn.commit()
-            return {"status": "success", "reporte_id": cursor.lastrowid}
+            return {"status": "success"}
     except Exception as e:
-        logger.error(f"Error iniciando generación de reporte: {e}")
+        logger.error(f"Error iniciando generación de reporte {inspeccion_id}: {e}")
         return {"status": "error", "message": str(e)}
 
 def obtener_estado_reporte(inspeccion_id: int) -> dict:
     try:
         with get_db_connection() as conn:
             cursor = conn.execute(
-                "SELECT estado, error, fecha_fin FROM reportes WHERE inspeccion_id = ? ORDER BY id DESC LIMIT 1",
+                "SELECT estado_generacion as estado, error_generacion as error FROM inspecciones WHERE id = ?",
                 (inspeccion_id,)
             )
             row = cursor.fetchone()
@@ -41,7 +42,7 @@ def obtener_versiones_reporte(inspeccion_id: int) -> list:
     try:
         with get_db_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, estado, fecha_inicio, fecha_fin, ruta_archivo FROM reportes WHERE inspeccion_id = ? ORDER BY id DESC",
+                "SELECT id, version, ruta_pdf_local, ruta_pdf_drive, fecha_generacion FROM versiones_reportes WHERE reporte_id = (SELECT id FROM reportes WHERE equipo_id = (SELECT equipo_id FROM inspecciones WHERE id = ?) LIMIT 1) ORDER BY version DESC",
                 (inspeccion_id,)
             )
             return [dict(row) for row in cursor.fetchall()]
@@ -67,15 +68,10 @@ def guardar_reporte_en_bd(datos: dict) -> int:
 def actualizar_estado_reporte(inspeccion_id: int, estado: str, error: str = None) -> bool:
     try:
         with get_db_connection() as conn:
-            query = "UPDATE reportes SET estado = ?, fecha_fin = ?"
-            params = [estado, datetime.datetime.now().isoformat()]
-            if error:
-                query += ", error = ?"
-                params.append(error)
-            query += " WHERE inspeccion_id = ? AND estado = 'EN_PROCESO'"
-            params.append(inspeccion_id)
-            
-            conn.execute(query, params)
+            conn.execute(
+                "UPDATE inspecciones SET estado_generacion = ?, error_generacion = ? WHERE id = ?",
+                (estado, error, inspeccion_id)
+            )
             conn.commit()
             return True
     except Exception as e:
@@ -86,7 +82,19 @@ def generar_manual(inspeccion_id: int) -> dict:
     try:
         status = iniciar_generacion_reporte(inspeccion_id)
         if status['status'] == 'success':
-            actualizar_estado_reporte(inspeccion_id, "COMPLETADO")
+            # Obtener equipo_id y usuario_id
+            with get_db_connection() as conn:
+                cursor = conn.execute("SELECT equipo_id, usuario_id FROM inspecciones WHERE id = ?", (inspeccion_id,))
+                row = cursor.fetchone()
+                if not row:
+                    actualizar_estado_reporte(inspeccion_id, "ERROR", "Inspección no encontrada")
+                    return {"status": "error", "message": "Inspección no encontrada"}
+                equipo_id = row["equipo_id"]
+                user_id = row["usuario_id"] or 1
+                
+                # Generar el reporte
+                crear_reporte_individual_completo(equipo_id, conn, user_id)
+                
             return {"status": "success", "message": "Reporte generado exitosamente"}
         return status
     except Exception as e:
@@ -153,7 +161,16 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
                     temp_file_path = os.path.join(temp_dir, f"foto_{idx}_{img_id}.jpg")
                     with open(temp_file_path, "wb") as f:
                         f.write(img_bytes)
-                    fotos_locales.append(temp_file_path)
+                    
+                    # Consultar comentario de la imagen si existe
+                    cursor.execute("SELECT comentario FROM anotaciones_imagenes WHERE equipo_id = ? AND image_id = ?", (equipo_id, img_id))
+                    com_row = cursor.fetchone()
+                    comentario = com_row[0] if (com_row and com_row[0]) else ""
+                    
+                    fotos_locales.append({
+                        "path": temp_file_path,
+                        "caption": comentario
+                    })
         else:
             sugerencias = drive_sugerir_carpetas(codigo, nombre, "root")
             if sugerencias:
@@ -162,12 +179,22 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
                 imagenes = [f for f in archivos if f.get('mimeType', '').startswith('image/')]
                 
                 for idx, img in enumerate(imagenes):
-                    img_bytes = descargar_imagen(img['id'])
+                    img_id = img['id']
+                    img_bytes = descargar_imagen(img_id)
                     if img_bytes:
-                        temp_file_path = os.path.join(temp_dir, f"foto_{idx}_{img['id']}.jpg")
+                        temp_file_path = os.path.join(temp_dir, f"foto_{idx}_{img_id}.jpg")
                         with open(temp_file_path, "wb") as f:
                             f.write(img_bytes)
-                        fotos_locales.append(temp_file_path)
+                        
+                        # Consultar comentario de la imagen si existe
+                        cursor.execute("SELECT comentario FROM anotaciones_imagenes WHERE equipo_id = ? AND image_id = ?", (equipo_id, img_id))
+                        com_row = cursor.fetchone()
+                        comentario = com_row[0] if (com_row and com_row[0]) else ""
+                        
+                        fotos_locales.append({
+                            "path": temp_file_path,
+                            "caption": comentario
+                        })
     except Exception as drive_err:
         logger.error(f"Error recuperando fotos de Drive para equipo {codigo}: {drive_err}")
     

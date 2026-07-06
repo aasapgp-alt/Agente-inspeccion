@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthProvider';
 import LibroValidationModal from './LibroValidationModal';
@@ -14,6 +14,27 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
   const [equipos, setEquipos] = useState([]);
   const [filtro, setFiltro] = useState('TODOS');
+  
+  const [theme, setTheme] = useState('light');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTheme(currentTheme);
+    }
+  }, []);
+
+  const toggleTheme = (newTheme) => {
+    setTheme(newTheme);
+    if (typeof window !== 'undefined') {
+      if (newTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    }
+  };
 
   const [generandoLibro, setGenerandoLibro] = useState(false);
   const [libroProgress, setLibroProgress] = useState(null);
@@ -32,8 +53,11 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [creandoEquipo, setCreandoEquipo] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLibroProgress(null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLibroResult(null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGenerandoLibro(false);
   }, [ubicacionSeleccionada]);
 
@@ -136,7 +160,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   };
 
   // 1. Cargar Empresas al inicio
-  const fetchEmpresas = () => {
+  const fetchEmpresas = useCallback(() => {
     if (!token) return;
     fetch('http://localhost:8000/api/empresas', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => {
@@ -158,14 +182,15 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         console.error("Error fetching empresas:", err);
         setEmpresas([]);
       });
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   useEffect(() => {
     fetchEmpresas();
-  }, [token]);
+  }, [fetchEmpresas]);
 
   // 2. Cargar Ubicaciones cuando cambia la empresa
-  const fetchUbicaciones = () => {
+  const fetchUbicaciones = useCallback(() => {
     if (empresaSeleccionada && token) {
       fetch(`http://localhost:8000/api/ubicaciones?empresa_id=${empresaSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
         .then(res => {
@@ -185,17 +210,19 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
           setUbicaciones([]);
         });
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUbicaciones([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUbicacionSeleccionada('');
     }
-  };
+  }, [empresaSeleccionada, token]);
 
   useEffect(() => {
     fetchUbicaciones();
-  }, [empresaSeleccionada]);
+  }, [fetchUbicaciones]);
 
   // 3. Cargar Equipos cuando cambia la ubicación
-  const fetchEquipos = () => {
+  const fetchEquipos = useCallback(() => {
     if (ubicacionSeleccionada && token) {
       fetch(`http://localhost:8000/api/equipos?ubicacion_id=${ubicacionSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
         .then(res => res.json())
@@ -206,13 +233,14 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         })
         .catch(err => console.error("Error fetching equipos:", err));
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEquipos([]);
     }
-  };
+  }, [ubicacionSeleccionada, token]);
 
   useEffect(() => {
     fetchEquipos();
-  }, [ubicacionSeleccionada]);
+  }, [fetchEquipos]);
 
   const handleAddEmpresa = async () => {
     const nombre = prompt("Nombre de la nueva empresa:");
@@ -604,13 +632,23 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
       {/* Bottom section: Theme Toggles */}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          <span>🌙 Dark Mode</span>
-          <input type="checkbox" defaultChecked style={{ width: 'auto' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#cbd5e1', fontSize: '0.9rem' }}>
+          <span>Modo Oscuro 🌙</span>
+          <input 
+            type="checkbox" 
+            checked={theme === 'dark'} 
+            onChange={(e) => toggleTheme(e.target.checked ? 'dark' : 'light')} 
+            style={{ width: 'auto', cursor: 'pointer' }} 
+          />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          <span>☀️ Light Mode</span>
-          <input type="checkbox" style={{ width: 'auto' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#cbd5e1', fontSize: '0.9rem' }}>
+          <span>Modo Sulvy (Claro) ☀️</span>
+          <input 
+            type="checkbox" 
+            checked={theme === 'light'} 
+            onChange={(e) => toggleTheme(e.target.checked ? 'light' : 'dark')} 
+            style={{ width: 'auto', cursor: 'pointer' }} 
+          />
         </div>
       </div>
       {/* Modal para Agregar Equipo con Destino en Drive */}

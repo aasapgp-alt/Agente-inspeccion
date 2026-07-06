@@ -121,11 +121,19 @@ def init_db():
             equipo_id INTEGER NOT NULL,
             image_id TEXT NOT NULL,
             annotations TEXT NOT NULL, -- JSON string representation
+            comentario TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(equipo_id, image_id)
         );
         """)
+
+        # Verificar si la columna comentario existe en anotaciones_imagenes, y si no, agregarla
+        cursor.execute("PRAGMA table_info(anotaciones_imagenes)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "comentario" not in columns:
+            print("Agregando columna 'comentario' a la tabla anotaciones_imagenes...")
+            cursor.execute("ALTER TABLE anotaciones_imagenes ADD COLUMN comentario TEXT")
 
         # Crear tabla configuracion con soporte para migración desde esquema viejo
         print("Verificando tabla configuracion...")
@@ -190,6 +198,19 @@ def init_db():
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         """)
+
+        print("Creando tabla aprendizaje...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS aprendizaje (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipo TEXT,
+            ia_dijo TEXT,
+            inspector_corrigio TEXT,
+            leccion TEXT,
+            fecha DATE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
         
         # Crear índices
         print("Creando índices...")
@@ -201,6 +222,7 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_campanias_empresa ON campanias(empresa_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_drive_folders_drive_id ON drive_folders_cache(drive_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_drive_folders_parent_id ON drive_folders_cache(parent_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_aprendizaje_equipo ON aprendizaje(equipo)")
         
         # Insertar administrador por defecto (sin contraseña predecible)
         print("Creando usuario administrador por defecto...")
@@ -220,7 +242,7 @@ def init_db():
             print("[SEGURIDAD] Anótela y cámbiela tras el primer inicio de sesión.")
             print("[SEGURIDAD] Para fijarla, defina ADMIN_INITIAL_PASSWORD antes de init_db.")
             print("=" * 60)
-
+ 
         # Crear usuarios solicitados por el usuario
         print("Insertando usuarios semilla adicionales...")
         new_users = [
@@ -237,7 +259,7 @@ def init_db():
                 INSERT OR IGNORE INTO usuarios (username, email, password_hash, nombre_completo, rol, activo)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (username, email, pwd_hash, nombre, rol, 1))
-
+ 
         # Insertar configuraciones por defecto
         print("Insertando configuraciones por defecto...")
         default_configs = [
@@ -253,6 +275,11 @@ def init_db():
             # IA
             ("gemini_model", "gemini-3.5-flash", "string", "Modelo de Gemini utilizado para análisis de activos", "ia", 1),
             ("max_tokens", "4096", "number", "Máximo número de tokens de salida en la respuesta de la IA", "ia", 1),
+            ("system_instruction", "Eres un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA) redactando un informe técnico formal.\nDebes redactar todo de manera estrictamente impersonal y formal.\nEstá completamente prohibido usar la primera persona del singular (\"yo\", \"he verificado\", \"mi inspección\") y verbos en pasado en primera persona (no \"inspeccioné\", \"revisé\").\n- Para el DIAGNÓSTICO: Describe el estado actual o hechos únicamente en tiempo presente impersonal (ej: \"El tramo de cañería presenta...\", \"Se observa desgaste...\"). Compara con el historial PGP 2024 provisto.\n- Para las ACCIONES: Escribe en pasado impersonal, describiendo qué hizo el inspector (ej. \"Se realizó inspección externa\", \"Se realizó apertura de bridas o carreteles\", \"Se realizó inspección visual externa anual\"). Compara con la PGP 2024.\n- Para las RECOMENDACIONES: Escribe siempre las tareas a futuro usando verbos en INFINITIVO (ej: \"Continuar con...\", \"Proceder a...\", \"Informar al área...\", \"Reemplazar...\").\nNo menciones nunca limitaciones de fotos ni digas que \"no se cuenta con imágenes\" o \"no se puede evaluar\". Para cualquier zona o componente no visible, hereda o asume exactamente el diagnóstico del Historial PGP 2024 o no lo nombres.\nDebes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetando las llaves exactas.", "string", "Instrucciones del sistema para la IA (Gemini)", "ia", 1),
+            ("reglas_negocio", "REGLAS ESTRICTAS DE ANÁLISIS (obligatorias):\n1. TONO IMPERSONAL Y DIRECTIVO (FORMATO ESTÁNDAR): Redacta todo el informe de forma impersonal y objetiva. Está estrictamente prohibido usar la primera persona del singular (\"yo\", \"he verificado\", \"encuentro\", \"mi inspección\") y verbos en pasado para describir tus acciones (no \"inspeccioné\", \"revisé\", \"encontré\").\n   - Para el DIAGNÓSTICO: Utiliza el tiempo presente para describir el estado actual, hechos o situaciones del activo (ej: \"El tramo de cañería presenta...\", \"Se observa desgaste...\", \"La línea existente presta servicio desde...\").\n   - Para las ACCIONES y RECOMENDACIONES: Utiliza verbos en INFINITIVO como instrucción impersonal directiva (ej: \"Continuar con...\", \"Proceder a...\", \"Informar al área...\", \"Reemplazar elementos...\", \"Solicitar el drenaje...\").\n2. COMPONENTES SIN FOTO O NO VISIBLES: Está estrictamente prohibido redactar disculpas, justificaciones o aclarar que \"no se cuenta con fotos de la válvula\" o \"no se puede evaluar por falta de imágenes\". Si un componente o aspecto (como válvulas, anclajes, soportes, etc.) no es visible en las imágenes adjuntas:\n   - Copia exactamente el diagnóstico y estado correspondiente que figura en el \"Historial del PGP 2024\" para ese componente.\n   - O bien omite completamente cualquier mención del componente si tampoco existe en el historial.\n   - Jamás expongas dudas o limitaciones técnicas por falta de fotos en tu respuesta final.\n3. PROHIBIDO INFERIR DETERIORO INVISIBLE: Analiza ÚNICAMENTE la evidencia visual real. No asumas ni inventes desgastes que no sean claramente visibles.\n4. NORMALIZACIÓN DE ESTADOS: El estado debe ser estrictamente uno de: 'BUENO', 'REGULAR', 'CRITICO' o 'FUERA DE RUTA'.\n5. CRITICIDAD: Cualquier fisura, pérdida de fluido importante o daño estructural evidente y visible debe clasificarse como 'CRITICO'.", "string", "Reglas de negocio e instrucciones detalladas del prompt", "ia", 1),
+            ("temperature", "0.2", "number", "Temperatura (creatividad) de la IA (0.0 a 2.0)", "ia", 1),
+            ("top_p", "0.95", "number", "Top P (0.0 a 1.0)", "ia", 1),
+            ("top_k", "40", "number", "Top K (1 a 40)", "ia", 1),
             # PDF
             ("reportes_dir", "data/reportes", "string", "Ruta local del directorio de almacenamiento para reportes individuales", "pdf", 1),
             ("libros_dir", "data/libros", "string", "Ruta local del directorio de almacenamiento para libros de reportes completados", "pdf", 1),
