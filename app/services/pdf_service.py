@@ -502,8 +502,8 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
         fontSize=12,
         leading=15,
         textColor=COLORES_SULVY['primario'],
-        spaceBefore=12,
-        spaceAfter=6
+        spaceBefore=8,
+        spaceAfter=4
     )
     
     body_text_style = ParagraphStyle(
@@ -513,17 +513,19 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
         fontSize=10.5,
         leading=14.5,
         textColor=COLORES_SULVY['texto'],
-        alignment=4 # Justified
+        alignment=4, # Justified
+        spaceBefore=2,
+        spaceAfter=2
     )
     
     # 1. HEADER (Title & Acta)
     story.append(Paragraph("INFORME DE INSPECCIÓN TÉCNICA", title_style))
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 2))
     
     codigo_eq = equipo.get('codigo', equipo.get('numero', 'N/A'))
     num_acta = f"ACTA-{campania.replace(' ', '')}-{codigo_eq}"
     story.append(Paragraph(f"Acta de Inspección: {num_acta}", ParagraphStyle('DocActa', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1)))
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 6))
     
     # Line
     line_table = Table([['']], colWidths=[498], rowHeights=[1])
@@ -533,12 +535,12 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
         ('BOTTOMPADDING', (0,0), (-1,-1), 0),
     ])
     story.append(line_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 4))
     
     # Criterios y Normativas Box
     criterios_box = generar_recuadro_criterios()
     story.append(criterios_box)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 6))
     
     # 2. DATOS DEL EQUIPO
     story.append(Paragraph("DATOS DEL EQUIPO Y UBICACIÓN", section_title_style))
@@ -592,7 +594,7 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
         ('RIGHTPADDING', (0,0), (-1,-1), 6),
     ])
     story.append(eq_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 6))
     
     # 3. ESTADO (Badge)
     estado_val = str(inspeccion.get('estado', 'BUENO')).upper()
@@ -629,13 +631,13 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
         ('BOTTOMPADDING', (0,0), (-1,-1), 0),
     ])
     story.append(estado_layout)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 6))
     
     # 4. ACCIONES EJECUTADAS
     story.append(Paragraph(f"ACCIONES EJECUTADAS EN {campania}", section_title_style))
     acciones_text = inspeccion.get('acciones', 'Sin acciones registradas.')
     story.append(Paragraph(acciones_text.replace('\n', '<br/>'), body_text_style))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 6))
     
     # 5. DIAGNÓSTICO TÉCNICO
     story.append(Paragraph("DIAGNÓSTICO TÉCNICO", section_title_style))
@@ -650,7 +652,7 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     story.append(Paragraph("RECOMENDACIONES PARA PGP 2027", section_title_style))
     recom_text = inspeccion.get('recomendaciones', 'Sin recomendaciones registradas.')
     story.append(Paragraph(recom_text.replace('\n', '<br/>'), body_text_style))
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 8))
     
     # 7. REGISTRO FOTOGRÁFICO (máximo MAX_FOTOS_REPORTE imágenes)
     if fotos_locales:
@@ -736,7 +738,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
         textColor=COLORES_SULVY['primario'],
         alignment=1, # Center
         keepWithNext=True,
-        spaceAfter=12,
+        spaceAfter=6,
         orphan=2,
         widow=2
     )
@@ -749,8 +751,8 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
         leading=16,
         textColor=COLORES_SULVY['primario'],
         keepWithNext=True,
-        spaceBefore=12,
-        spaceAfter=6,
+        spaceBefore=8,
+        spaceAfter=4,
         orphan=2,
         widow=2
     )
@@ -763,8 +765,8 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
         leading=14,
         textColor=COLORES_SULVY['texto'],
         alignment=4, # Justify
-        spaceBefore=4,
-        spaceAfter=4,
+        spaceBefore=2,
+        spaceAfter=2,
         orphan=2,
         widow=2
     )
@@ -793,16 +795,16 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
 
     # 1. ESTRUCTURA DE STORY: TÍTULO PRINCIPAL
     story.append(Paragraph("INFORME DE INSPECCIÓN TÉCNICA", title_style))
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 2))
     
     codigo_eq = equipo.get('codigo', equipo.get('numero', 'N/A'))
     num_acta = f"ACTA-{campania.replace(' ', '')}-{codigo_eq}"
     story.append(Paragraph(f"Acta de Inspección: {clean_xml_text(num_acta)}", ParagraphStyle('DocActaIndividual', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1)))
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 6))
     
     # Criterios y Normativas Box (scaled to fit individual report width 468)
     story.append(generar_recuadro_criterios(width=468))
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 6))
     
     # 2. TABLA DE DATOS DEL EQUIPO (2 columns: Campo | Valor)
     fecha_insp_raw = inspeccion.get('updated_at', inspeccion.get('created_at', ''))
@@ -842,7 +844,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
         ('RIGHTPADDING', (0,0), (-1,-1), 8),
     ])
     story.append(eq_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 6))
     
     # 3. ESTADO (Badge)
     estado_val = str(inspeccion.get('estado', 'BUENO')).upper()
@@ -879,7 +881,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
         ('BOTTOMPADDING', (0,0), (-1,-1), 0),
     ])
     story.append(estado_layout)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 6))
     
     # 3. SECCIÓN 1: ACCIONES EJECUTADAS (KeepTogether)
     acciones_text = inspeccion.get('acciones', 'Sin acciones registradas.')
@@ -887,7 +889,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
     sec_acciones = [
         Paragraph(f"ACCIONES EJECUTADAS EN {campania}", subtitle_style),
         Paragraph(acciones_clean, body_text_style),
-        Spacer(1, 8)
+        Spacer(1, 4)
     ]
     story.append(KeepTogether(sec_acciones))
     
@@ -897,7 +899,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
     sec_diagnostico = [
         Paragraph("DIAGNÓSTICO TÉCNICO", subtitle_style),
         Paragraph(diagnostico_clean, body_text_style),
-        Spacer(1, 8)
+        Spacer(1, 4)
     ]
     story.append(KeepTogether(sec_diagnostico))
     
@@ -910,7 +912,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
         parent=body_text_style,
         leftIndent=20,
         firstLineIndent=-10,
-        spaceAfter=4,
+        spaceAfter=2,
         orphan=2,
         widow=2
     )
@@ -923,11 +925,11 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
                 clean_line = clean_line[1:].strip()
             clean_line = clean_line.replace('\n', '<br/>')
             p = Paragraph(f"• {clean_xml_text(clean_line)}", bullet_style)
-            sec_recom.append(KeepTogether([p]))
+            sec_recom.append(p)
     else:
         sec_recom.append(Paragraph("Sin recomendaciones registradas.", body_text_style))
     
-    sec_recom.append(Spacer(1, 8))
+    sec_recom.append(Spacer(1, 4))
     story.append(KeepTogether(sec_recom))
     
     # 6. SECCIÓN 4: FOTOS DEL CUERPO (organizadas según tabla de cantidades)
@@ -1100,10 +1102,10 @@ def generar_bloque_firma_individual() -> list:
     ])
 
     return [
-        Spacer(1, 15),
+        Spacer(1, 8),
         KeepTogether([
             firma_tabla,
-            Spacer(1, 6),
+            Spacer(1, 4),
             Paragraph("SULVY SRL", empresa_style)
         ])
     ]
