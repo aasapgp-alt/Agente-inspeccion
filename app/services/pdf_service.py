@@ -30,13 +30,17 @@ def clean_xml_text(text: str) -> str:
     escaped = escaped.replace("&lt;br/&gt;", "<br/>").replace("&lt;br&gt;", "<br/>").replace("&lt;br /&gt;", "<br/>")
     return escaped
 
-def load_and_scale_image(path: str, target_width: float) -> RLImage:
+def load_and_scale_image(path: str, target_width: float, max_height: float = 360) -> RLImage:
     try:
         from PIL import Image as PILImage
         with PILImage.open(path) as pil_img:
             orig_w, orig_h = pil_img.size
-        proportional_height = (target_width / orig_w) * orig_h
-        return RLImage(path, width=target_width, height=proportional_height, kind='proportional')
+        w = target_width
+        h = (w / orig_w) * orig_h
+        if h > max_height:
+            h = max_height
+            w = (h / orig_h) * orig_w
+        return RLImage(path, width=w, height=h, kind='proportional')
     except Exception as e:
         logger.error(f"Error loading image with PIL ({path}): {e}")
         return RLImage(path, width=target_width, height=150, kind='proportional')
