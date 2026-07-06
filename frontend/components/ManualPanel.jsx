@@ -46,6 +46,8 @@ export default function ManualPanel({ equipoId }) {
   const [folderHistory, setFolderHistory] = useState([]);
   const [items, setItems] = useState({ folders: {}, images: [] });
   const [selectedImages, setSelectedImages] = useState([]);
+  const [imageComments, setImageComments] = useState({});
+  const [imageRegistry, setImageRegistry] = useState({});
   const [rootFolderId, setRootFolderId] = useState(null);
   const [sugerencias, setSugerencias] = useState([]);
   const [autoDetected, setAutoDetected] = useState(null);
@@ -60,6 +62,15 @@ export default function ManualPanel({ equipoId }) {
       .then(r => r.json())
       .then(data => {
         setItems(prev => ({ ...prev, images: data.imagenes }));
+        if (data.imagenes) {
+          setImageRegistry(prev => {
+            const next = { ...prev };
+            data.imagenes.forEach(img => {
+              next[img.id] = img;
+            });
+            return next;
+          });
+        }
       });
   };
 
@@ -119,6 +130,8 @@ export default function ManualPanel({ equipoId }) {
         const sugData = await sugRes.json();
 
         setSelectedImages([]);
+        setImageComments({});
+        setImageRegistry({});
 
         if (sugData.sugerencias && sugData.sugerencias.length > 0) {
           setSugerencias(sugData.sugerencias);
@@ -153,8 +166,21 @@ export default function ManualPanel({ equipoId }) {
         setAcciones(renderVal(data.acciones) || '');
         setDiagnostico(renderVal(data.diagnostico) || '');
         setRecomendaciones(renderVal(data.recomendaciones) || '');
+        if (data.image_drive_ids) {
+          setSelectedImages(data.image_drive_ids);
+        }
       })
       .catch(err => console.error("Error fetching 2026 inspection:", err));
+
+    // Fetch comments and annotations
+    authFetch(`${API_BASE_URL}/anotaciones/${equipoId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.comentarios) {
+          setImageComments(data.comentarios);
+        }
+      })
+      .catch(err => console.error("Error fetching comments:", err));
 
     // 3. Fetch 2024 inspection data for reference
     authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2024`)
@@ -188,6 +214,7 @@ export default function ManualPanel({ equipoId }) {
           diagnostico: diagnostico,
           recomendaciones: recomendaciones,
           image_drive_ids: selectedImages,
+          comentarios: imageComments,
           generar_pdf: generarPdf
         })
       });
@@ -232,6 +259,7 @@ export default function ManualPanel({ equipoId }) {
           diagnostico: diagnostico,
           recomendaciones: recomendaciones,
           image_drive_ids: selectedImages,
+          comentarios: imageComments,
           generar_pdf: false
         })
       });
@@ -678,6 +706,62 @@ export default function ManualPanel({ equipoId }) {
                 </div>
               )}
             </div>
+
+            {/* Selected Images Comments Editor */}
+            {selectedImages.length > 0 && (
+              <div style={{ backgroundColor: 'var(--bg-color)', padding: '1.5rem', borderRadius: '8px', marginTop: '1.5rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  📝 Comentarios de Fotos Seleccionadas
+                </h4>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.4' }}>
+                  Escribe una leyenda para cada foto seleccionada. Estos comentarios se imprimirán debajo de las imágenes en el reporte.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  {selectedImages.map((imgId) => {
+                    const img = imageRegistry[imgId] || { id: imgId, name: `Foto (ID: ${imgId.slice(0, 8)}...)` };
+                    return (
+                      <div key={imgId} style={{ display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                        <div style={{ position: 'relative', width: '50px', height: '50px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          <img 
+                            src={`http://localhost:8000/api/drive/imagen/${imgId}?token=${token}`} 
+                            alt={img.name} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: -1 }}>
+                            🖼️
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{img.name}</span>
+                          <input 
+                            type="text" 
+                            placeholder="Escribe el comentario para esta imagen..." 
+                            value={imageComments[imgId] || ''} 
+                            onChange={(e) => {
+                              setImageComments(prev => ({
+                                ...prev,
+                                [imgId]: e.target.value
+                              }));
+                            }}
+                            className="input"
+                            style={{ 
+                              width: '100%', 
+                              padding: '0.3rem 0.5rem', 
+                              fontSize: '0.8rem', 
+                              backgroundColor: 'rgba(0,0,0,0.2)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              borderRadius: '4px',
+                              color: 'white'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

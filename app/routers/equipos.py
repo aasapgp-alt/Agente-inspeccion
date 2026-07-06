@@ -160,4 +160,11 @@ def get_equipo_inspeccion(id: int, anio: str, db: sqlite3.Connection = Depends(g
     inspeccion = db_service.obtener_inspeccion_db(id, int(anio))
     if not inspeccion:
         raise HTTPException(status_code=404, detail="Inspección no encontrada para ese equipo y año")
-    return inspeccion
+    
+    resp_data = dict(inspeccion)
+    if int(anio) == 2026:
+        from app.services.memory_service import obtener_memoria_imagenes
+        resp_data['image_drive_ids'] = obtener_memoria_imagenes(id)
+    else:
+        resp_data['image_drive_ids'] = []
+    return resp_data

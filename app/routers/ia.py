@@ -48,6 +48,7 @@ class GuardarRequest(BaseModel):
     image_drive_ids: List[str]
     generar_pdf: bool = True
     anotaciones: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    comentarios: Optional[Dict[str, str]] = None
 
 def describir_anotaciones(anotaciones: Optional[Dict[str, List[Dict[str, Any]]]], image_drive_ids: List[str]) -> str:
     if not anotaciones:
@@ -408,13 +409,35 @@ def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3
         # 2. Actualizar el estado del equipo en la tabla equipos
         cursor.execute("UPDATE equipos SET estado_actual = ? WHERE id = ?", (data.estado, data.equipo_id))
         
-        # Guardar anotaciones si vienen en el request
+        # Guardar anotaciones y comentarios si vienen en el request
+        all_image_ids = set()
         if data.anotaciones:
-            for img_id, anns in data.anotaciones.items():
-                cursor.execute("""
-                    INSERT OR REPLACE INTO anotaciones_imagenes (equipo_id, image_id, annotations, updated_at)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                """, (data.equipo_id, img_id, json.dumps(anns)))
+            all_image_ids.update(data.anotaciones.keys())
+        if data.comentarios:
+            all_image_ids.update(data.comentarios.keys())
+            
+        for img_id in all_image_ids:
+            anns = data.anotaciones.get(img_id) if data.anotaciones else None
+            comentario = data.comentarios.get(img_id) if data.comentarios else None
+            
+            # Consultar si ya existe registro
+            cursor.execute("SELECT annotations, comentario FROM anotaciones_imagenes WHERE equipo_id = ? AND image_id = ?", (data.equipo_id, img_id))
+            existing = cursor.fetchone()
+            
+            if anns is not None:
+                anns_json = json.dumps(anns)
+            else:
+                anns_json = existing[0] if existing else "[]"
+                
+            if comentario is not None:
+                comentario_val = comentario
+            else:
+                comentario_val = existing[1] if existing else ""
+                
+            cursor.execute("""
+                INSERT OR REPLACE INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (data.equipo_id, img_id, anns_json, comentario_val))
                 
         # Guardar en memoria de imagenes seleccionadas
         if data.image_drive_ids:
