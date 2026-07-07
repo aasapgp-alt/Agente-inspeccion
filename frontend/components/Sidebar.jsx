@@ -246,6 +246,13 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
   useEffect(() => {
     fetchEquipos();
+    
+    // Polling cada 20 segundos para mantener el sidebar sincronizado
+    const intervalId = setInterval(() => {
+      fetchEquipos();
+    }, 20000);
+    
+    return () => clearInterval(intervalId);
   }, [fetchEquipos]);
 
   const handleAddEmpresa = async () => {
