@@ -44,9 +44,27 @@ La plataforma está dividida en un entorno moderno y asíncrono:
 - **Control de Versiones y Polling:** La generación de reportes se maneja con estados (`pendiente`, `generando`, `completado`, `error`). La UI realiza polling en tiempo real con animaciones interactivas.
 - Si un reporte se regenera, el backend rastrea la versión (v1, v2...) y almacena la copia tanto en disco local como en Google Drive.
 
-### 5. Carga Manual
-- Para equipos que no requieran análisis fotográfico por IA, la plataforma provee un panel de **Carga Manual**.
-- El usuario puede consultar el historial de la campaña pasada e ingresar directamente las acciones ejecutadas y el diagnóstico para el año en curso.
+### 4. Flujo de Generación de Reportes PDF
+- Al completar un diagnóstico, el inspector puede guardar los datos en la BD o desencadenar la **Generación de un Reporte PDF formal**.
+- El sistema utiliza `ReportLab` para construir un acta de inspección con las fotografías, anotaciones y el veredicto técnico final.
+- **Control de Versiones y Polling:** La generación de reportes se maneja con estados (`pendiente`, `generando`, `completado`, `error`). La UI realiza polling en tiempo real con animaciones interactivas.
+- Si un reporte se regenera, el backend rastrea la versión (v1, v2...) y almacena la copia tanto en disco local como en Google Drive.
+
+### 5. Planificación de Itinerarios Diarios (Rutas)
+- **Asignación de Rutas:** Desde el panel web, los Administradores y Supervisores pueden planificar itinerarios diarios para los inspectores, buscando equipos e indexándolos en un itinerario con un orden de inspección dinámico.
+- **Seguridad por Rol:** La vista de itinerarios está filtrada: los inspectores solo visualizan sus propias tareas programadas para el día y no tienen permisos de creación o eliminación.
+
+### 6. Bot de Telegram Interactivo (Asíncrono y de Manos Libres)
+- **Long Polling asíncrono:** Corriendo en segundo plano (`httpx`), permite realizar la inspección interactiva directamente desde el móvil en la planta.
+- **Auto-Vinculación Inteligente:** Vinculación rápida simplemente enviando tu nombre de usuario o correo al bot sin salir de Telegram, o mediante un botón seguro en el Sidebar web que autocompleta el enlace.
+- **Navegación Cíclica:** Acceso a ficha técnica del equipo, carga estructurada de fotos en subcarpetas de Google Drive (`Succión`, `Impulsión` o `General`), consulta de historial completo y chat técnico con Gemini.
+- **Audio a Texto (Manos Libres):** Conversión automática de notas de voz enviadas al bot en texto legible mediante Gemini para facilitar el reporte en planta.
+- **Menú de Respuestas Persistente:** Teclado en pantalla fija con botones nativos para facilitar la navegación a los operarios.
+
+### 7. Panel de Gestión de Usuarios (Exclusivo Admin)
+- Registro directo de nuevos usuarios (Username, Nombre, Correo, Password, Rol).
+- Habilitación/Deshabilitación de cuentas en tiempo real (con expulsión de sesiones activas).
+- Modificación en vivo de roles de usuarios (`inspector`, `supervisor`, `admin`) directo desde la lista.
 
 ---
 
@@ -56,10 +74,10 @@ La plataforma está dividida en un entorno moderno y asíncrono:
 /frontend         → React/Next.js (InspectionPanel, ManualPanel, ReportsPanel,
                     AssetHistory, SettingsPanel, AuditPanel, GlobalDashboard)
 /app              → FastAPI (main.py como punto de entrada)
-  /routers        → ia.py, auth.py, drive.py, audit.py, campanias.py, ...
-  /services       → db_service, drive_service, pdf_service, gemini_service
+  /routers        → ia.py, auth.py, drive.py, audit.py, campanias.py, itinerarios.py
+  /services       → db_service, drive_service, pdf_service, gemini_service, telegram_service
   /config         → Prompts y reglas de negocio para la IA (prompts.py)
-/scripts          → Inicialización y migración de la BD (init_db.py, migrate_*.py)
+/scripts          → Inicialización y migración de la BD (init_db.py, migrate_*.py, crear_itinerario.py)
 /data             → SQLite local (inspecciones.db) + PDFs generados
 /Informes_Generados → Respaldo físico local de todos los PDFs transaccionados
 ```
@@ -103,4 +121,4 @@ npm run dev
 # → http://localhost:3000
 ```
 
-> **Nota:** Se requiere un archivo `mycreds.txt` con credenciales OAuth de Google Drive y una API Key de Gemini configurada en la BD (panel Configuración).
+> **Nota:** Se requiere un archivo `mycreds.txt` con credenciales OAuth de Google Drive y una API Key de Gemini configurada en la BD (panel Configuración). Además, el bot requiere la variable `TELEGRAM_BOT_TOKEN` configurada en el archivo `.env`.
