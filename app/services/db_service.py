@@ -139,7 +139,12 @@ def obtener_estadisticas_db(empresa_id: int = None) -> dict:
 def obtener_historial_equipo_db(equipo_id: int) -> list:
     try:
         with get_db_connection() as conn:
-            cursor = conn.execute("SELECT * FROM historial_equipos WHERE equipo_id = ? ORDER BY fecha DESC", (equipo_id,))
+            cursor = conn.execute("""
+                SELECT id, equipo_id, anio as campania, estado, acciones, diagnostico, recomendaciones, created_at
+                FROM inspecciones 
+                WHERE equipo_id = ? 
+                ORDER BY anio DESC
+            """, (equipo_id,))
             return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logger.error(f"Error al obtener historial equipo {equipo_id}: {e}")
@@ -183,3 +188,97 @@ def get_config_value_db(clave: str, default: Any = None) -> Any:
     except Exception as e:
         logger.error(f"Error al obtener configuracion '{clave}' de la base de datos: {e}")
         return default
+
+def obtener_usuario_telegram(telegram_id: int) -> dict:
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.execute("""
+                SELECT ut.*, u.username, u.nombre_completo, u.rol, u.empresa
+                FROM usuarios_telegram ut
+                JOIN usuarios u ON ut.usuario_id = u.id
+                WHERE ut.telegram_id = ?
+            """, (telegram_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Error al obtener usuario de telegram {telegram_id}: {e}")
+        return None
+
+def vincular_usuario_telegram(telegram_id: int, chat_id: int, usuario_id: int) -> bool:
+    try:
+        with get_db_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO usuarios_telegram (telegram_id, chat_id, usuario_id)
+                VALUES (?, ?, ?)
+            """, (telegram_id, chat_id, usuario_id))
+            conn.execute("DELETE FROM telegram_otp WHERE usuario_id = ?", (usuario_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Error al vincular usuario de telegram {telegram_id}: {e}")
+        return False
+
+def generar_otp_telegram(usuario_id: int) -> str:
+    import random
+    from datetime import datetime, timedelta, timezone
+    otp = f"{random.randint(100000, 999999)}"
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    try:
+        with get_db_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO telegram_otp (usuario_id, otp, expires_at)
+                VALUES (?, ?, ?)
+            """, (usuario_id, otp, expires_at))
+            conn.commit()
+            return otp
+    except Exception as e:
+        logger.error(f"Error al generar OTP de telegram para usuario {usuario_id}: {e}")
+        return ""
+
+def validar_otp_telegram(otp: str) -> Optional[int]:
+    from datetime import datetime, timezone
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.execute("SELECT usuario_id, expires_at FROM telegram_otp WHERE otp = ?", (otp,))
+            row = cursor.fetchone()
+            if row:
+                expires_at = datetime.fromisoformat(row["expires_at"])
+                if expires_at > datetime.now(timezone.utc):
+                    return row["usuario_id"]
+                else:
+                    conn.execute("DELETE FROM telegram_otp WHERE otp = ?", (otp,))
+                    conn.commit()
+    except Exception as e:
+        logger.error(f"Error al validar OTP de telegram: {e}")
+    return None
+
+def obtener_itinerario_diario(usuario_id: int, fecha: str) -> list:
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.execute("""
+                SELECT pid.*, e.codigo, e.nombre, e.estado_actual
+                FROM plan_inspeccion_diaria pid
+                JOIN equipos e ON pid.equipo_id = e.id
+                WHERE pid.usuario_id = ? AND pid.fecha = ?
+                ORDER BY pid.orden ASC
+            """, (usuario_id, fecha))
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"Error al obtener itinerario diario {usuario_id} - {fecha}: {e}")
+        return []
+
+def actualizar_estado_itinerario(usuario_id: int, fecha: str, equipo_id: int, estado: str) -> bool:
+    from datetime import datetime
+    completado_at = datetime.now().isoformat() if estado == "COMPLETADO" else None
+    try:
+        with get_db_connection() as conn:
+            conn.execute("""
+                UPDATE plan_inspeccion_diaria
+                SET estado = ?, completado_at = ?
+                WHERE usuario_id = ? AND fecha = ? AND equipo_id = ?
+            """, (estado, completado_at, usuario_id, fecha, equipo_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Error al actualizar estado de itinerario {usuario_id} - {fecha} - {equipo_id}: {e}")
+        return False

@@ -29,7 +29,7 @@ if os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("1", "true", "yes"):
     except ImportError:
         pass
 
-from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router, campanias, audit
+from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router, campanias, audit, itinerarios
 from app.services.db_service import get_db_connection
 from app.core.security import hash_password, verify_access_token
 
@@ -78,6 +78,16 @@ async def startup_event():
             logger.info("Migración de auditoría y carga de usuarios realizada.")
         except Exception as mig_err:
             logger.error(f"Error al correr la migración de auditoría: {mig_err}")
+            
+        # Inicializar bot de Telegram en segundo plano
+        try:
+            from app.services.telegram_service import start_telegram_bot
+            import asyncio
+            asyncio.create_task(start_telegram_bot())
+            logger.info("Bot de Telegram iniciado en segundo plano (Long Polling).")
+        except Exception as tg_err:
+            logger.error(f"Error al iniciar el bot de Telegram en startup: {tg_err}")
+            
     except Exception as e:
         logger.error(f"Error al inicializar la base de datos: {e}")
 
@@ -96,6 +106,7 @@ app.include_router(anotaciones.router)
 app.include_router(settings_router.router)
 app.include_router(campanias.router)
 app.include_router(audit.router)
+app.include_router(itinerarios.router)
 
 # Endpoint Health
 @app.get("/api/health", tags=["health"])

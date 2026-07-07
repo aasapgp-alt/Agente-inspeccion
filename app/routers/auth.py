@@ -199,3 +199,29 @@ def toggle_usuario(user_id: int, db: sqlite3.Connection = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/usuarios/{user_id}/role", dependencies=[Depends(require_role("admin"))])
+def update_user_role(user_id: int, rol: str, db: sqlite3.Connection = Depends(get_db)):
+    if rol not in ["inspector", "supervisor", "admin"]:
+        raise HTTPException(status_code=400, detail="Rol inválido")
+        
+    cursor = db.cursor()
+    cursor.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+    try:
+        cursor.execute("UPDATE usuarios SET rol = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (rol, user_id))
+        db.commit()
+        return {"message": f"Rol de usuario actualizado a {rol} correctamente", "rol": rol}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/telegram-otp")
+def get_telegram_otp(current_user: dict = Depends(get_current_user)):
+    from app.services import db_service
+    otp = db_service.generar_otp_telegram(current_user["id"])
+    if not otp:
+        raise HTTPException(status_code=500, detail="No se pudo generar el código de vinculación")
+    return {"otp": otp}

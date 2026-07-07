@@ -211,6 +211,44 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
+
+        print("Creando tablas para Telegram e Itinerarios...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios_telegram (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER UNIQUE NOT NULL,
+            chat_id INTEGER NOT NULL,
+            usuario_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+        );
+        """)
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS telegram_otp (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER UNIQUE NOT NULL,
+            otp TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY(usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+        );
+        """)
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plan_inspeccion_diaria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER NOT NULL,
+            fecha DATE NOT NULL,
+            equipo_id INTEGER NOT NULL,
+            orden INTEGER NOT NULL,
+            estado TEXT DEFAULT 'PENDIENTE' CHECK(estado IN ('PENDIENTE', 'COMPLETADO', 'OMITIDO')),
+            completado_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+            FOREIGN KEY(equipo_id) REFERENCES equipos(id) ON DELETE CASCADE,
+            UNIQUE(usuario_id, fecha, equipo_id)
+        );
+        """)
         
         # Crear índices
         print("Creando índices...")
@@ -223,6 +261,9 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_drive_folders_drive_id ON drive_folders_cache(drive_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_drive_folders_parent_id ON drive_folders_cache(parent_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_aprendizaje_equipo ON aprendizaje(equipo)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_telegram_id ON usuarios_telegram(telegram_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_telegram_otp_code ON telegram_otp(otp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_plan_inspeccion_diaria_fecha ON plan_inspeccion_diaria(usuario_id, fecha)")
         
         # Insertar administrador por defecto (sin contraseña predecible)
         print("Creando usuario administrador por defecto...")
@@ -287,7 +328,8 @@ def init_db():
             ("reporte_campania", "PGP 2026", "string", "Nombre de la campaña de inspección por defecto en los reportes", "reportes", 1),
             # Notificaciones
             ("notificaciones_habilitadas", "true", "boolean", "Habilitar el envío de notificaciones del sistema", "notificaciones", 1),
-            ("notificaciones_email", "alertas@empresa.com", "string", "Dirección de correo electrónico para alertas del sistema", "notificaciones", 1)
+            ("notificaciones_email", "alertas@empresa.com", "string", "Dirección de correo electrónico para alertas del sistema", "notificaciones", 1),
+            ("telegram_bot_token", "", "string", "Token de la API del Bot de Telegram", "notificaciones", 1)
         ]
         
         for clave, valor, tipo, descripcion, categoria, editable in default_configs:

@@ -37,6 +37,26 @@ export default function SettingsPanel() {
   const [aprendizajes, setAprendizajes] = useState([]);
   const [aprendizajesLoading, setAprendizajesLoading] = useState(false);
 
+  // Estados para la gestión de Itinerarios
+  const [itinerarios, setItinerarios] = useState([]);
+  const [itinerariosLoading, setItinerariosLoading] = useState(false);
+  const [usuariosItinerario, setUsuariosItinerario] = useState([]);
+  const [equiposItinerario, setEquiposItinerario] = useState([]);
+  const [selectedUsuario, setSelectedUsuario] = useState('');
+  const [selectedFecha, setSelectedFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedEquipos, setSelectedEquipos] = useState([]);
+  const [filtroEquipos, setFiltroEquipos] = useState('');
+
+  // Estados para la gestión de Usuarios (Solo Admin)
+  const [usuarios, setUsuarios] = useState([]);
+  const [usuariosLoading, setUsuariosLoading] = useState(false);
+  const [nuevoUsername, setNuevoUsername] = useState('');
+  const [nuevoEmail, setNuevoEmail] = useState('');
+  const [nuevoNombreCompleto, setNuevoNombreCompleto] = useState('');
+  const [nuevoPassword, setNuevoPassword] = useState('');
+  const [nuevoRol, setNuevoRol] = useState('inspector');
+  const [nuevaEmpresa, setNuevaEmpresa] = useState('');
+
   const isAdmin = user?.rol === 'admin';
 
   const categories = [
@@ -44,6 +64,8 @@ export default function SettingsPanel() {
     { key: 'drive', label: '📁 Google Drive' },
     { key: 'ia', label: '🧠 Inteligencia Artificial' },
     { key: 'aprendizaje_ia', label: '🎓 Aprendizajes IA' },
+    { key: 'itinerarios', label: '📅 Itinerarios' },
+    ...(user?.rol === 'admin' ? [{ key: 'usuarios', label: '👥 Usuarios' }] : []),
     { key: 'pdf', label: '📄 Rutas y PDF' },
     { key: 'reportes', label: '📊 Reportes' },
     { key: 'notificaciones', label: '🔔 Notificaciones' },
@@ -212,6 +234,214 @@ export default function SettingsPanel() {
       fetchAprendizajes();
     }
   }, [token, activeSubTab]);
+
+  const fetchItinerariosData = async () => {
+    setItinerariosLoading(true);
+    setError(null);
+    try {
+      const resIt = await fetch('http://localhost:8000/api/itinerarios', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resIt.ok) {
+        const data = await resIt.json();
+        setItinerarios(data.itinerarios || []);
+      }
+
+      const resUs = await fetch('http://localhost:8000/api/itinerarios/usuarios', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resUs.ok) {
+        const data = await resUs.json();
+        setUsuariosItinerario(data.usuarios || []);
+        if (data.usuarios && data.usuarios.length > 0 && !selectedUsuario) {
+          setSelectedUsuario(data.usuarios[0].username);
+        }
+      }
+
+      const resEq = await fetch('http://localhost:8000/api/itinerarios/equipos', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resEq.ok) {
+        const data = await resEq.json();
+        setEquiposItinerario(data.equipos || []);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('No se pudieron cargar los datos de los itinerarios.');
+    } finally {
+      setItinerariosLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token && activeSubTab === 'itinerarios') {
+      fetchItinerariosData();
+    }
+  }, [token, activeSubTab]);
+
+  const handleCrearItinerario = async (e) => {
+    e.preventDefault();
+    if (!selectedUsuario) return alert("Debe seleccionar un inspector");
+    if (!selectedFecha) return alert("Debe seleccionar una fecha");
+    if (selectedEquipos.length === 0) return alert("Debe seleccionar al menos un equipo para la ruta");
+
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch('http://localhost:8000/api/itinerarios', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: selectedUsuario,
+          fecha: selectedFecha,
+          equipos_codigos: selectedEquipos.map(eq => eq.codigo)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Error al crear itinerario");
+      }
+      setSuccess("¡Itinerario de ruta creado con éxito!");
+      setSelectedEquipos([]);
+      fetchItinerariosData();
+    } catch (err) {
+      setError(err.message || "Error al crear el itinerario");
+    }
+  };
+
+  const handleEliminarItinerario = async (username, fecha) => {
+    if (!confirm(`¿Está seguro de que desea eliminar la ruta de ${username} para el día ${fecha}?`)) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/itinerarios?username=${username}&fecha=${fecha}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Error al eliminar itinerario");
+      }
+      setSuccess("Itinerario eliminado correctamente.");
+      fetchItinerariosData();
+    } catch (err) {
+      setError(err.message || "Error al eliminar el itinerario");
+    }
+  };
+
+  const fetchUsuarios = async () => {
+    setUsuariosLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('http://localhost:8000/api/auth/usuarios', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsuarios(data);
+      } else {
+        setError('No se pudo cargar la lista de usuarios.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Error al obtener los usuarios.');
+    } finally {
+      setUsuariosLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token && activeSubTab === 'usuarios' && user?.rol === 'admin') {
+      fetchUsuarios();
+    }
+  }, [token, activeSubTab]);
+
+  const handleCrearUsuario = async (e) => {
+    e.preventDefault();
+    if (!nuevoUsername.trim() || !nuevoEmail.trim() || !nuevoNombreCompleto.trim() || !nuevoPassword.trim()) {
+      return alert("Debe completar todos los campos obligatorios.");
+    }
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch('http://localhost:8000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: nuevoUsername.trim(),
+          email: nuevoEmail.trim(),
+          password: nuevoPassword,
+          nombre_completo: nuevoNombreCompleto.trim(),
+          rol: nuevoRol,
+          empresa: nuevaEmpresa.trim() || null
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Error al registrar el usuario");
+      }
+      setSuccess("¡Usuario creado exitosamente!");
+      setNuevoUsername('');
+      setNuevoEmail('');
+      setNuevoNombreCompleto('');
+      setNuevoPassword('');
+      setNuevoRol('inspector');
+      setNuevaEmpresa('');
+      fetchUsuarios();
+    } catch (err) {
+      setError(err.message || "Error al registrar el usuario");
+    }
+  };
+
+  const handleToggleUsuario = async (userId) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/auth/usuarios/${userId}/toggle`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Error al cambiar estado del usuario");
+      }
+      setSuccess(data.message);
+      fetchUsuarios();
+    } catch (err) {
+      setError(err.message || "Error al cambiar estado");
+    }
+  };
+
+  const handleCambiarRolUsuario = async (userId, nuevoRol) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/auth/usuarios/${userId}/role?rol=${nuevoRol}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Error al actualizar rol del usuario");
+      }
+      setSuccess(data.message);
+      fetchUsuarios();
+    } catch (err) {
+      setError(err.message || "Error al actualizar rol");
+    }
+  };
 
   // Polling del progreso de la sincronización de Drive
   useEffect(() => {
@@ -977,6 +1207,405 @@ export default function SettingsPanel() {
                 </div>
               )}
             </div>
+          ) : activeSubTab === 'itinerarios' ? (
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '2rem', flexWrap: 'wrap', width: '100%', flex: 1 }}>
+              
+              {/* Formulario de Creación (Solo Admins y Supervisores) */}
+              {(user?.rol === 'admin' || user?.rol === 'supervisor') && (
+                <div className="glass-panel" style={{ flex: '1 1 350px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', height: 'fit-content' }}>
+                  <h4 style={{ fontSize: '1.1rem', color: 'var(--accent-primary)', margin: 0, fontWeight: 700 }}>📅 Asignar Ruta Diaria</h4>
+                  
+                  <form onSubmit={handleCrearItinerario} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Inspector / Operador</label>
+                      <select 
+                        value={selectedUsuario} 
+                        onChange={(e) => setSelectedUsuario(e.target.value)}
+                        style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                      >
+                        <option value="">-- Seleccionar Inspector --</option>
+                        {usuariosItinerario.map(u => (
+                          <option key={u.id} value={u.username}>{u.nombre_completo} ({u.username}) - {u.rol}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Fecha de la Ruta</label>
+                      <input 
+                        type="date" 
+                        value={selectedFecha} 
+                        onChange={(e) => setSelectedFecha(e.target.value)}
+                        style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Equipos Seleccionados en Orden ({selectedEquipos.length})</label>
+                      
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', minHeight: '60px', padding: '0.8rem', backgroundColor: 'rgba(0,0,0,0.2)', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
+                        {selectedEquipos.length === 0 ? (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Haz clic en los equipos de abajo para agregarlos en orden...</span>
+                        ) : (
+                          selectedEquipos.map((eq, index) => (
+                            <span 
+                              key={eq.id} 
+                              onClick={() => setSelectedEquipos(selectedEquipos.filter(e => e.id !== eq.id))}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', backgroundColor: 'var(--accent-primary)', color: 'white', padding: '4px 10px', borderRadius: '20px', cursor: 'pointer', transition: 'filter 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(0.8)'}
+                              onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
+                            >
+                              <strong>{index + 1}.</strong> {eq.codigo}
+                              <span style={{ fontWeight: 'bold', fontSize: '0.75rem', opacity: 0.8 }}>×</span>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Seleccionar Equipos</label>
+                      <input 
+                        type="text" 
+                        placeholder="🔍 Filtrar equipos por código o nombre..." 
+                        value={filtroEquipos}
+                        onChange={(e) => setFiltroEquipos(e.target.value)}
+                        style={{ backgroundColor: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'white', padding: '6px 10px', borderRadius: '6px', fontSize: '0.85rem', outline: 'none', width: '100%' }}
+                      />
+                      
+                      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.2rem', backgroundColor: 'rgba(0,0,0,0.15)', padding: '0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        {equiposItinerario
+                          .filter(eq => 
+                            eq.codigo.toLowerCase().includes(filtroEquipos.toLowerCase()) || 
+                            eq.nombre.toLowerCase().includes(filtroEquipos.toLowerCase())
+                          )
+                          .slice(0, 30)
+                          .map(eq => {
+                            const yaSeleccionado = selectedEquipos.some(e => e.id === eq.id);
+                            return (
+                              <div 
+                                key={eq.id}
+                                onClick={() => {
+                                  if (yaSeleccionado) {
+                                    setSelectedEquipos(selectedEquipos.filter(e => e.id !== eq.id));
+                                  } else {
+                                    setSelectedEquipos([...selectedEquipos, eq]);
+                                  }
+                                }}
+                                style={{ 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  padding: '6px 10px', 
+                                  borderRadius: '4px', 
+                                  fontSize: '0.8rem', 
+                                  cursor: 'pointer',
+                                  backgroundColor: yaSeleccionado ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
+                                  border: yaSeleccionado ? '1px solid rgba(14, 165, 233, 0.3)' : '1px solid transparent',
+                                  color: yaSeleccionado ? 'var(--text-primary)' : 'var(--text-secondary)'
+                                }}
+                                onMouseEnter={(e) => { if(!yaSeleccionado) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)'; }}
+                                onMouseLeave={(e) => { if(!yaSeleccionado) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                              >
+                                <span><strong>{eq.codigo}</strong> - {eq.nombre}</span>
+                                <span style={{ fontWeight: 'bold' }}>{yaSeleccionado ? '✓' : '+'}</span>
+                              </div>
+                            );
+                          })
+                        }
+                        {equiposItinerario.length === 0 && (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '0.5rem' }}>No hay equipos disponibles.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      style={{ marginTop: '0.5rem', backgroundColor: 'var(--accent-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, width: '100%' }}
+                    >
+                      🚀 Crear / Sobrescribir Ruta
+                  </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Listado de Rutas Activas */}
+              <div style={{ flex: (user?.rol === 'admin' || user?.rol === 'supervisor') ? '2 2 450px' : '1 1 100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h4 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
+                  {user?.rol === 'inspector' ? '📅 Mis Rutas Planificadas' : '📅 Historial de Rutas Planificadas'}
+                </h4>
+                
+                {itinerariosLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+                    <div style={{ width: '24px', height: '24px', border: '3px solid rgba(14, 165, 233, 0.1)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : itinerarios.filter(it => (user?.rol === 'inspector' ? it.username === user.username : true)).length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '8px', color: 'var(--text-secondary)' }}>
+                    <p style={{ margin: 0, fontSize: '0.85rem', fontStyle: 'italic' }}>
+                      {user?.rol === 'inspector' ? 'No tienes itinerarios de inspección asignados.' : 'No hay itinerarios de inspección programados.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)' }}>
+                          <th style={{ padding: '12px 16px' }}>Fecha</th>
+                          {user?.rol !== 'inspector' && <th style={{ padding: '12px 16px' }}>Inspector</th>}
+                          <th style={{ padding: '12px 16px' }}>Ruta de Inspección (Equipos)</th>
+                          {(user?.rol === 'admin' || user?.rol === 'supervisor') && <th style={{ padding: '12px 16px', width: '100px', textAlign: 'center' }}>Acciones</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(
+                          itinerarios
+                            .filter(it => (user?.rol === 'inspector' ? it.username === user.username : true))
+                            .reduce((groups, item) => {
+                              const key = `${item.fecha}_${item.username}`;
+                              if (!groups[key]) groups[key] = [];
+                              groups[key].push(item);
+                              return groups;
+                            }, {})
+                        ).map(([groupKey, items]) => {
+                          const sample = items[0];
+                          return (
+                            <tr 
+                              key={groupKey} 
+                              style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                            >
+                              <td style={{ padding: '12px 16px', whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                {sample.fecha}
+                              </td>
+                              {user?.rol !== 'inspector' && (
+                                <td style={{ padding: '12px 16px', fontWeight: 600, color: 'white' }}>
+                                  {sample.nombre_completo}
+                                </td>
+                              )}
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                  {items.map(it => {
+                                    const isDone = it.estado === 'COMPLETADO';
+                                    return (
+                                      <span 
+                                        key={it.id} 
+                                        style={{ 
+                                          fontSize: '0.75rem', 
+                                          backgroundColor: isDone ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                                          color: isDone ? '#4ade80' : '#f87171', 
+                                          border: isDone ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                                          padding: '2px 8px', 
+                                          borderRadius: '4px' 
+                                        }}
+                                        title={`${it.equipo_nombre} (${it.estado})`}
+                                      >
+                                        {it.codigo}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              {(user?.rol === 'admin' || user?.rol === 'supervisor') && (
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEliminarItinerario(sample.username, sample.fecha)}
+                                    style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                                  >
+                                    Eliminar
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : activeSubTab === 'usuarios' ? (
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '2rem', flexWrap: 'wrap', width: '100%', flex: 1 }}>
+              
+              {/* Formulario de Creación de Usuario */}
+              <div className="glass-panel" style={{ flex: '1 1 350px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', height: 'fit-content' }}>
+                <h4 style={{ fontSize: '1.1rem', color: 'var(--accent-primary)', margin: 0, fontWeight: 700 }}>👥 Registrar Nuevo Usuario</h4>
+                
+                <form onSubmit={handleCrearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Nombre de Usuario (Username) *</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={nuevoUsername}
+                      onChange={(e) => setNuevoUsername(e.target.value)}
+                      placeholder="ej: jdoe"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Nombre Completo *</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={nuevoNombreCompleto}
+                      onChange={(e) => setNuevoNombreCompleto(e.target.value)}
+                      placeholder="ej: John Doe"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Correo Electrónico *</label>
+                    <input 
+                      type="email" 
+                      required
+                      value={nuevoEmail}
+                      onChange={(e) => setNuevoEmail(e.target.value)}
+                      placeholder="ej: jdoe@empresa.com"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Contraseña *</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={nuevoPassword}
+                      onChange={(e) => setNuevoPassword(e.target.value)}
+                      placeholder="••••••••"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Rol del Sistema</label>
+                    <select 
+                      value={nuevoRol} 
+                      onChange={(e) => setNuevoRol(e.target.value)}
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                    >
+                      <option value="inspector">Inspector / Operador</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="admin">Administrador</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Empresa (Opcional)</label>
+                    <input 
+                      type="text" 
+                      value={nuevaEmpresa}
+                      onChange={(e) => setNuevaEmpresa(e.target.value)}
+                      placeholder="ej: Arauco"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    style={{ marginTop: '0.5rem', backgroundColor: 'var(--accent-primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, width: '100%' }}
+                  >
+                    👥 Crear Usuario
+                  </button>
+                </form>
+              </div>
+
+              {/* Tabla de Usuarios */}
+              <div style={{ flex: '2 2 450px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h4 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>👥 Usuarios Registrados</h4>
+                
+                {usuariosLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+                    <div style={{ width: '24px', height: '24px', border: '3px solid rgba(14, 165, 233, 0.1)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)' }}>
+                          <th style={{ padding: '12px 16px' }}>Usuario</th>
+                          <th style={{ padding: '12px 16px' }}>Nombre</th>
+                          <th style={{ padding: '12px 16px' }}>Email</th>
+                          <th style={{ padding: '12px 16px' }}>Rol</th>
+                          <th style={{ padding: '12px 16px' }}>Estado</th>
+                          <th style={{ padding: '12px 16px', width: '120px', textAlign: 'center' }}>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usuarios.map(u => (
+                          <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', opacity: u.activo ? 1 : 0.6 }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 600, color: 'white' }}>
+                              @{u.username}
+                            </td>
+                            <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>
+                              {u.nombre_completo}
+                            </td>
+                            <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
+                              {u.email}
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <select
+                                value={u.rol}
+                                onChange={(e) => handleCambiarRolUsuario(u.id, e.target.value)}
+                                style={{
+                                  backgroundColor: 'rgba(0,0,0,0.3)',
+                                  border: '1px solid var(--border-color)',
+                                  color: 'white',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.8rem',
+                                  outline: 'none',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value="inspector">inspector</option>
+                                <option value="supervisor">supervisor</option>
+                                <option value="admin">admin</option>
+                              </select>
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{ 
+                                fontSize: '0.75rem', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px',
+                                backgroundColor: u.activo ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                                color: u.activo ? '#4ade80' : '#f87171',
+                                border: u.activo ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+                              }}>
+                                {u.activo ? 'Activo' : 'Inactivo'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleUsuario(u.id)}
+                                style={{ 
+                                  backgroundColor: u.activo ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)', 
+                                  border: u.activo ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)', 
+                                  color: u.activo ? '#f87171' : '#4ade80', 
+                                  padding: '5px 10px', 
+                                  borderRadius: '6px', 
+                                  cursor: 'pointer', 
+                                  fontSize: '0.8rem', 
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {u.activo ? 'Desactivar' : 'Activar'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
               {filteredSettings.length === 0 ? (
@@ -1199,7 +1828,7 @@ export default function SettingsPanel() {
       </div>
 
       {/* Botones de acción en la parte inferior */}
-      {isAdmin && activeSubTab !== 'campanias' && activeSubTab !== 'aprendizaje_ia' && (
+      {isAdmin && activeSubTab !== 'campanias' && activeSubTab !== 'aprendizaje_ia' && activeSubTab !== 'itinerarios' && activeSubTab !== 'usuarios' && (
         <div style={{
           display: 'flex',
           justifyContent: 'flex-end',

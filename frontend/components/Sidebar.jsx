@@ -48,6 +48,33 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [validationAlerts, setValidationAlerts] = useState([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
+  const [telegramOTP, setTelegramOTP] = useState('');
+  const [generandoTelegramOTP, setGenerandoTelegramOTP] = useState(false);
+
+  const handleGenerarTelegramOTP = async () => {
+    setGenerandoTelegramOTP(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/auth/telegram-otp', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTelegramOTP(data.otp);
+      } else {
+        alert("Error al generar el código de vinculación");
+      }
+    } catch (err) {
+      console.error("Error generating Telegram OTP:", err);
+      alert("Error de conexión");
+    } finally {
+      setGenerandoTelegramOTP(false);
+    }
+  };
+
   // Estados para Modal de Agregar Equipo con Drive
   const [showAddEquipoModal, setShowAddEquipoModal] = useState(false);
   const [nuevoEquipoNombre, setNuevoEquipoNombre] = useState('');
@@ -639,6 +666,52 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
                 )}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Telegram Linking */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem', paddingBottom: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#cbd5e1', fontSize: '0.9rem' }}>
+          <span>Vinculación de Telegram 📱</span>
+          <button 
+            onClick={handleGenerarTelegramOTP}
+            disabled={generandoTelegramOTP}
+            className="btn btn-secondary"
+            style={{ padding: '4px 10px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            {generandoTelegramOTP ? 'Generando...' : '🔑 Vincular Bot'}
+          </button>
+        </div>
+        {telegramOTP && (
+          <div style={{ 
+            backgroundColor: 'rgba(56, 189, 248, 0.1)', 
+            border: '1px solid rgba(56, 189, 248, 0.2)', 
+            padding: '0.8rem', 
+            borderRadius: '8px', 
+            fontSize: '0.8rem', 
+            color: '#f8fafc',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.4rem',
+            marginTop: '0.3rem'
+          }}>
+            <div>Código OTP: <strong style={{ fontSize: '1rem', color: '#38bdf8' }}>{telegramOTP}</strong></div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Válido por 10 minutos.</div>
+            <a 
+              href={`https://t.me/Jarbbis_bot?start=${telegramOTP}`} 
+              target="_blank" 
+              rel="noreferrer" 
+              style={{ 
+                color: '#38bdf8', 
+                textDecoration: 'underline', 
+                fontWeight: 'bold', 
+                marginTop: '0.2rem',
+                display: 'block'
+              }}
+            >
+              Abrir en Telegram
+            </a>
           </div>
         )}
       </div>
