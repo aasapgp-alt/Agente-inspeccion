@@ -1,0 +1,469 @@
+Auditoría de Seguridad — Agente Inspector PGP
+Fecha: 2026-07-17
+Alcance: Backend FastAPI (app/), Frontend Next.js (frontend/), configuración
+Metodología: revisión manual de código + grep patterns de vulnerabilidades conocidas
+
+🔴 Resumen ejecutivo — Top 5 críticos
+#	Severidad	Hallazgo	Ubicación
+1	Critical	SSRF en /api/drive/proxy_thumbnail (sin validar url, SSL off)	app/routers/drive.py:40-50
+2	Critical	SSL deshabilitado globalmente en cliente de Drive (no condicional)	app/services/drive_service.py:10-15
+3	High	Password default admin/admin123 sembrado en cada instalación	scripts/init_db.py
+4	High	Sin rate limiting en /api/auth/login → brute force sin freno	app/routers/auth.py:54-93
+5	High	Token JWT en query string de imágenes Drive + check de token débil	app/routers/drive.py:60-90
+Otros 11 hallazgos detallados abajo (Medium / Low / Info).
+
+📋 Tabla completa de hallazgos
+ID	Sev	Categoría	Archivo:Línea	Título
+F-01	Critical	SSRF	app/routers/drive.py:40-50	/proxy_thumbnail acepta URL arbitraria + SSL off
+F-02	Critical	Crypto/TLS	app/services/drive_service.py:10-15	SSL bypass unconditional en httplib2
+F-03	High	Auth	scripts/init_db.py	Default admin admin/admin123
+F-04	High	Auth	app/routers/auth.py:54-93	Sin rate limit en login
+F-05	High	Auth/Input	app/routers/drive.py:91-114	Token en query string, check trivial
+F-06	High	Input validation	app/core/config.py:33	JWT_ALGORITHM configurable (riesgo alg confusion)
+F-07	High	Hardcoded config	app/services/drive_service.py:30	Service account path hardcoded Windows
+F-08	Medium	SQL Injection	app/services/db_service.py:77, app/routers/campanias.py:174	f-string en cláusulas SET/UPDATE
+F-09	Medium	Info disclosure	app/routers/auth.py:142, 191	detail=str(e) en errores 500
+F-10	Medium	Security headers	app/main.py	Sin CSP / X-Frame-Options / X-Content-Type-Options
+F-11	Medium	Auth	app/core/security.py:75-91	JWT expira en 24h (sin refresh)
+F-12	Medium	DoS	app/routers/ia.py	Sin rate limit en /analizar (consume API Gemini)
+F-13	Low	Logging	app/routers/ia.py:213-217, app/core/dependencies.py:101	print() con datos sensibles en vez de logger
+F-14	Low	Auth	app/core/security.py:23-31	Formato hash custom (no estándar passlib)
+F-15	Low	Logging	app/routers/ia.py:213-217	Respuesta de Gemini completa en print()
+F-16	Info	Lifecycle	app/main.py:75-77	init_db() corre en cada startup
+🔍 Detalle de cada hallazgo
+F-01 (Critical) — SSRF en /api/drive/proxy_thumbnail
+Evidencia:
+
+python
+
+Copy
+# app/routers/drive.py:40-50
+
+@router.get("/proxy_thumbnail")
+
+def proxy_thumbnail(url: str, token: Optional[str] = Query(None), db: sqlite3.Connection = Depends(get_db)):
+
+    if not token:
+
+        raise HTTPException(status_code=401, detail="Token no provisto")
+
+    try:
+
+        import requests
+
+        res = requests.get(url, verify=False, timeout=10)   # ⚠️ SSL off + URL arbitraria
+
+        if res.status_code == 200:
+
+            return Response(content=res.content, media_type="image/jpeg")
+
+        return Response(status_code=res.status_code)
+Impacto: Un usuario autenticado (incluso Inspector, el rol más bajo) puede:
+
+
+Acceder al metadata service de la nube (http://169.254.169.254/latest/meta-data/iam/security-credentials/) y robar credenciales de la cuenta de servicio
+
+Escanear la red interna del servidor (puertos, servicios, bases de datos)
+
+Pivotar a otros servicios backend sin restricción
+
+Bypass de firewalls perimetrales
+
+Remediación:
+
+1.
+Eliminar el endpoint o restringirlo a una whitelist de hosts permitidos (solo *.googleusercontent.com, drive.google.com).
+2.
+Si se mantiene: validar urlparse(url).hostname contra la whitelist, rechazar IPs privadas (RFC 1918), loopback, link-local.
+3.
+Quitar verify=False (siempre).
+4.
+Bloquear redirecciones (allow_redirects=False).
+python
+
+Copy
+from urllib.parse import urlparse
+
+ALLOWED_HOSTS = {"lh3.googleusercontent.com", "drive.google.com"}
+
+
+parsed = urlparse(url)
+
+if parsed.hostname not in ALLOWED_HOSTS:
+
+    raise HTTPException(400, "Host no permitido")
+
+# Resolver y bloquear IPs privadas/loopback antes de hacer requests.get
+
+res = requests.get(url, timeout=5, allow_redirects=False)  # SIN verify=False
+F-02 (Critical) — SSL bypass unconditional en httplib2
+Evidencia:
+
+python
+
+Copy
+# app/services/drive_service.py:10-15
+
+import httplib2
+
+orig_init = httplib2.Http.__init__
+
+def new_init(self, *args, **kwargs):
+
+    kwargs['disable_ssl_certificate_validation'] = True
+
+    orig_init(self, *args, **kwargs)
+
+httplib2.Http.__init__ = new_init
+Impacto: Se ejecuta al importar el módulo y aplica a todas las llamadas httplib2 del proceso, no solo a Drive. En producción, toda la comunicación con Google Drive es MITM-vulnerable. Un atacante en la misma red puede interceptar y modificar archivos PDF de inspección, fotos, credenciales OAuth, etc.
+
+Remediación:
+
+
+Quitar el monkeypatch. La flag DISABLE_SSL_VERIFY (F-INFO) ya está disponible para entornos Windows con problemas de certificados, y debe ser opt-in.
+
+Si los certificados de Google dan problemas en Windows, usar certifi.where() correctamente (ya está en línea 17) o distribuir el bundle de CA.
+
+F-03 (High) — Default password admin/admin123
+Evidencia: init_db.py siembra un usuario admin con password admin123. Está documentado en el README y en .env.example (ADMIN_INITIAL_PASSWORD).
+
+Impacto: Cualquier despliegue que olvide cambiar el password es inmediatamente compromisable. Es el primer usuario que un atacante prueba.
+
+Remediación:
+
+1.
+Nunca crear un password default. Si ADMIN_INITIAL_PASSWORD está vacío, forzar al usuario a setearlo en el primer login (flujo de onboarding obligatorio).
+2.
+Bloquear el primer login si el password es uno de los defaults conocidos (admin123, password, admin).
+3.
+Agregar check en init_db.py que rechace correr si ADMIN_INITIAL_PASSWORD == "admin123".
+4.
+Loguear en auditoría cualquier login con password default.
+F-04 (High) — Sin rate limiting en login
+Evidencia: app/routers/auth.py:54-93 no tiene throttle, captcha, ni lockout.
+
+Impacto: Brute force de passwords sin freno. Combinado con F-03, un atacante puede probar admin/admin123 a velocidad de red.
+
+Remediación:
+
+
+Implementar rate limit por IP y por username (ej: slowapi o fastapi-limiter).
+
+Sugerencia: 5 intentos/min por IP, 3 intentos/hora por username, lockout temporal de 15 min.
+
+Loguear todos los intentos fallidos en auditoría (ya se hace) y alertar después de N fallos.
+
+python
+
+Copy
+from slowapi import Limiter
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+@router.post("/login")
+
+@limiter.limit("5/minute")
+
+def login(...): ...
+F-05 (High) — Token JWT en query string + check trivial
+Evidencia:
+
+python
+
+Copy
+# app/routers/drive.py:60-90
+
+@router.get("/proxy_thumbnail")
+
+def proxy_thumbnail(url: str, token: Optional[str] = Query(None), ...):
+
+    if not token:
+
+        raise HTTPException(status_code=401, detail="Token no provisto")  # ⚠️ Solo verifica presencia
+
+
+@router.get("/imagen/{file_id}")
+
+def get_imagen(file_id: str, token: Optional[str] = Query(None), ...):
+
+    if not token:
+
+        raise HTTPException(status_code=401, detail="Token no provisto")   # ⚠️ Igual
+Impacto:
+
+1.
+Token en URL: queda en logs de proxy, browser history, Referer headers, server access logs. Es un patrón OWASP A01:2021 (Broken Access Control).
+2.
+Check trivial: si token es cualquier string no vacío, pasa. Aunque get_imagen después valida con get_user_from_token, el de proxy_thumbnail no valida nada del token.
+Remediación:
+
+1.
+Mover el Authorization: Bearer a header (que ya es lo que usa el resto de la API).
+2.
+Para <img> que no soportan headers, firmar URLs de corta duración (signed URLs, tipo S3 presigned) en vez de pasar el token.
+3.
+Si el endpoint se mantiene, validar el token igual que el resto de la API.
+F-06 (High) — JWT_ALGORITHM configurable via env
+Evidencia:
+
+python
+
+Copy
+# app/core/config.py:33
+
+JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+Y en security.py:100:
+
+python
+
+Copy
+algorithms=[settings.JWT_ALGORITHM]   # ⚠️ Lista con un solo algoritmo
+Impacto: Si JWT_ALGORITHM se setea a none o a un algoritmo distinto al esperado, abre la puerta a algorithm confusion attacks. Un atacante puede forjar tokens firmados con HS256 cuando se espera RS256 con clave pública como secreto (clásico de JWT).
+
+Remediación:
+
+
+Hardcodear el algoritmo: algorithms=["HS256"].
+
+Eliminar la env var. No hay razón operativa para cambiarlo.
+
+F-07 (High) — Service account path hardcoded Windows
+Evidencia:
+
+python
+
+Copy
+# app/services/drive_service.py:30
+
+service_json_path = "c:\\Agente-Inspector\\service_account.json"
+Impacto:
+
+1.
+No portable (Linux/macOS/Docker no funcionan).
+2.
+Si el path es predecible y el filesystem es accesible para otros usuarios, el JSON de credenciales es legible.
+3.
+Anti-pattern: el path de una credencial sensible no debería estar en el código.
+Remediación:
+
+
+Leer de env var: SERVICE_ACCOUNT_JSON_PATH=os.getenv(...).
+
+Mejor: leer de settings.yaml (ya mencionado en CLAUDE.md) con permisos 0600.
+
+F-08 (Medium) — f-string en SQL dinámico
+Evidencia:
+
+python
+
+Copy
+# app/services/db_service.py:77
+
+conn.execute(f"UPDATE equipos SET {set_clause} WHERE id = ?", params)
+
+
+# app/routers/campanias.py:174
+
+cursor.execute(f"UPDATE campanias SET {', '.join(updates)} WHERE id = ?", params)
+Impacto: En estos casos, set_clause y updates vienen de whitelist interna (columnas hardcoded), no de input del usuario. Pero el patrón es peligroso — un día alguien agrega una columna desde input y se introduce SQLi sin querer.
+
+Remediación:
+
+
+Refactor a sqlalchemy.sql.update() o similar que use expresiones tipadas.
+
+Si se queda con f-strings, validar con un allowlist explícito: if col not in ALLOWED_COLUMNS: raise.
+
+F-09 (Medium) — Error messages verbose
+Evidencia:
+
+python
+
+Copy
+# app/routers/auth.py:142, 191
+
+raise HTTPException(status_code=500, detail=str(e))
+Impacto: En errores no-controlados, el mensaje de la excepción puede incluir paths internos, queries SQL, nombres de archivos, etc.
+
+Remediación:
+
+
+Loguear el error completo con logger.error(..., exc_info=True).
+
+Devolver al cliente un mensaje genérico: detail="Error interno. Ref: <request_id>".
+
+El global exception handler en main.py:67-74 ya hace esto, pero los handlers locales lo sobreescriben.
+
+F-10 (Medium) — Sin security headers
+Evidencia: app/main.py no configura headers de seguridad.
+
+Remediación: Agregar middleware custom o secure headers:
+
+python
+
+Copy
+@app.middleware("http")
+
+async def add_security_headers(request, call_next):
+
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    response.headers["X-Frame-Options"] = "DENY"
+
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data: https://*.googleusercontent.com; ..."
+
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    return response
+F-11 (Medium) — JWT expira en 24h, sin refresh
+Evidencia: JWT_EXPIRATION_HOURS = 24 default.
+
+Impacto: Ventana de 24h si un token se filtra. Sin refresh tokens, no hay revocación temprana posible desde el cliente.
+
+Remediación:
+
+
+Bajar a 1-2h + implementar refresh tokens.
+
+O implementar token rotation: cada N minutos el cliente pide uno nuevo.
+
+Sliding sessions: extender expiración en cada request legítimo.
+
+F-12 (Medium) — Sin rate limit en endpoints costosos
+Evidencia: /api/ia/analizar y /api/drive/sincronizar consumen API quota (Gemini, Drive). No tienen throttle.
+
+Impacto: Abuso o bug puede agotar quota y generar costos. DoS económico.
+
+Remediación: Rate limit por usuario (ej: 20 análisis/hora, 3 sincronizaciones/hora).
+
+F-13 (Low) — print() con datos sensibles
+Evidencia:
+
+python
+
+Copy
+# app/routers/ia.py:213-217
+
+print(">>> RAW RESP_TEXT:", res_text)
+
+print(">>> PARSED ANALISIS_DATA:", analisis_data)
+
+
+# app/core/dependencies.py:101
+
+print(f"DEBUG: user_role={user_role} (type={type(user_role)}), rol={rol} (type={type(rol)})")
+Impacto: Respuesta cruda de Gemini puede incluir info de clientes (nombres de equipos, ubicaciones). En un container con stdout redirigido a un agregador de logs, queda expuesta.
+
+Remediación: Reemplazar print por logger.debug() o eliminar.
+
+F-14 (Low) — Hash format custom
+Evidencia: pbkdf2:sha256:100000$salt$hash (formato propio).
+
+Impacto: Funcional pero no portable. Si en el futuro quieren migrar a passlib o argon2, hay que escribir un verificador custom.
+
+Remediación: Considerar migrar a argon2id (más seguro, resistente a GPU/ASIC) o al menos a passlib con formato estándar.
+
+F-15 (Low) — Respuesta Gemini completa en print
+Ver F-13. La respuesta puede contener info del cliente (nombres de equipos, descripciones de fallas). Es un leak de datos en logs.
+
+F-16 (Info) — init_db() corre en cada startup
+Evidencia: app/main.py:75-77 ejecuta init_db() en cada arranque.
+
+Impacto: No es vuln pero es anti-pattern. init_db debería correr una sola vez (en deploy), no en cada restart del server.
+
+Remediación: Mover a un script de deploy / entrypoint.sh. En el server, solo verificar que la BD existe.
+
+✅ Lo que está bien (verificado)
+
+✅ secrets.compare_digest para comparación de passwords (no ==)
+
+✅ PBKDF2 con 100k iterations (estándar OWASP)
+
+✅ Sesiones revocables (no stateless JWT)
+
+✅ Roles se revalidan contra la BD en cada request, no solo en el JWT
+
+✅ SQL parametrizado en queries donde los valores vienen del usuario
+
+✅ .gitignore cubre .env, *service-account*.json, settings.yaml, praxis-effort-*.json
+
+✅ No usa eval/exec/pickle/yaml.load/subprocess
+
+✅ CORS limitado a localhost:3000 y localhost:3001 (en dev)
+
+✅ Auditoría de login/logout/modificaciones implementada
+
+✅ Tokens hasheados (no en plaintext en BD)
+
+🎯 Plan de remediación priorizado
+Esta semana (Critical)
+1.
+ F-01: Eliminar /proxy_thumbnail o restringir a whitelist
+2.
+ F-02: Quitar el monkeypatch de httplib2
+3.
+ F-05: Sacar tokens de query strings, usar signed URLs
+Este mes (High)
+1.
+ F-03: Forzar cambio de password en primer login, bloquear defaults
+2.
+ F-04: Implementar rate limit en /auth/login
+3.
+ F-06: Hardcodear algoritmo JWT
+4.
+ F-07: Mover service account path a env var
+Próximo sprint (Medium)
+1.
+ F-08: Refactor SQL dinámico a whitelist explícita
+2.
+ F-09: Limpiar mensajes de error en handlers
+3.
+ F-10: Agregar security headers middleware
+4.
+ F-11: Reducir JWT expiration + refresh tokens
+5.
+ F-12: Rate limit en /ia/analizar y /drive/sincronizar
+Backlog (Low)
+1.
+ F-13/15: Reemplazar print() por logger.debug()
+2.
+ F-14: Evaluar migración a Argon2id
+3.
+ F-16: Mover init_db() a script de deploy
+📎 Verificación de archivos sensibles en git
+text
+
+Copy
+$ git ls-files | grep -iE "secret|password|credential|service.account|mycreds|settings\.yaml|\.env$|\.json$"
+
+.env.example                                          ← OK (es template)
+
+few_shot_ejemplos.json                                ← OK (no es sensible)
+
+frontend/jsconfig.json                                ← OK (config Next)
+
+frontend/package.json                                 ← OK
+
+frontend/package-lock.json                            ← OK
+
+inspector_perfil.json                                 ← OK (perfil IA, no secretos)
+✅ Ningún archivo sensible está siendo trackeado. El .gitignore está bien configurado.
+
+🔗 Referencias OWASP
+
+A01:2021 — Broken Access Control → F-01, F-05
+
+A02:2021 — Cryptographic Failures → F-02, F-11, F-14
+
+A03:2021 — Injection → F-08
+
+A05:2021 — Security Misconfiguration → F-02, F-10, F-16
+
+A07:2021 — Identification & Authentication Failures → F-03, F-04, F-06
+
+A09:2021 — Security Logging & Monitoring Failures → F-13, F-15
