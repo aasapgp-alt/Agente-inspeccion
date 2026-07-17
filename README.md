@@ -78,16 +78,6 @@ La plataforma está dividida en un entorno moderno y asíncrono:
 
 ## 👤 Usuarios del Sistema (Semilla)
 
-| Usuario | Rol |
-|---------|-----|
-| `admin` | Admin |
-| `cristaldoiq` | Admin |
-| `mpaltrinieri` | Inspector |
-| `hpaltrinieri` | Inspector |
-| `eirioni` | Inspector |
-| `gabrielng2005` | Inspector |
-| `anahivillalba_06` | Inspector |
-
 ---
 
 ## 🚀 Inicio Rápido
