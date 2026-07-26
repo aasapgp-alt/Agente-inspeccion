@@ -392,11 +392,20 @@ def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3
             cursor.execute("SELECT estado, diagnostico, recomendaciones FROM inspecciones WHERE id = ?", (inspeccion_id,))
             prev = cursor.fetchone()
             es_modificacion = True
-            cursor.execute("""
-                UPDATE inspecciones
-                SET estado = ?, acciones = ?, diagnostico = ?, recomendaciones = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """, (data.estado, data.acciones, data.diagnostico, data.recomendaciones, inspeccion_id))
+            
+            if not data.generar_pdf:
+                # Marcamos como pendiente si se guardaron cambios sin generar PDF (PDF desactualizado)
+                cursor.execute("""
+                    UPDATE inspecciones
+                    SET estado = ?, acciones = ?, diagnostico = ?, recomendaciones = ?, updated_at = CURRENT_TIMESTAMP, estado_generacion = 'pendiente'
+                    WHERE id = ?
+                """, (data.estado, data.acciones, data.diagnostico, data.recomendaciones, inspeccion_id))
+            else:
+                cursor.execute("""
+                    UPDATE inspecciones
+                    SET estado = ?, acciones = ?, diagnostico = ?, recomendaciones = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (data.estado, data.acciones, data.diagnostico, data.recomendaciones, inspeccion_id))
         else:
             cursor.execute("""
                 INSERT INTO inspecciones (equipo_id, anio, estado, acciones, diagnostico, recomendaciones, created_at, updated_at, estado_generacion)

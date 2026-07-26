@@ -172,3 +172,35 @@ def update_settings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al actualizar configuraciones: {str(e)}"
         )
+
+@router.get("/manual", response_model=Dict[str, Any])
+def get_manual(current_user: dict = Depends(get_current_user)):
+    """
+    Lee y retorna el contenido del archivo MANUAL.md.
+    Cualquier usuario autenticado puede consumirlo.
+    """
+    import os
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        manual_path = os.path.join(base_dir, "MANUAL.md")
+        if not os.path.exists(manual_path):
+            manual_path = "MANUAL.md"
+            
+        if not os.path.exists(manual_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Archivo MANUAL.md no encontrado."
+            )
+            
+        with open(manual_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return {"content": content}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error al leer MANUAL.md: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al leer MANUAL.md: {str(e)}"
+        )
+

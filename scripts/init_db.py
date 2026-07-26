@@ -23,6 +23,84 @@ def init_db():
     try:
         # Habilitar claves foráneas
         cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Crear tabla empresas
+        print("Creando tabla empresas...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS empresas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL,
+            descripcion TEXT,
+            activo BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        cursor.execute("INSERT OR IGNORE INTO empresas (id, nombre, descripcion) VALUES (1, 'Arauco', 'Empresa Arauco');")
+
+        # Crear tabla ubicaciones
+        print("Creando tabla ubicaciones...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ubicaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empresa_id INTEGER NOT NULL,
+            nombre TEXT NOT NULL,
+            codigo TEXT,
+            descripcion TEXT,
+            activo BOOLEAN DEFAULT 1,
+            drive_folder_id TEXT,
+            FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE,
+            UNIQUE(empresa_id, nombre)
+        );
+        """)
+
+        # Crear tabla equipos
+        print("Creando tabla equipos...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS equipos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ubicacion_id INTEGER NOT NULL,
+            codigo TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            tag TEXT,
+            material TEXT,
+            criticidad TEXT,
+            fluido TEXT,
+            presion_diseno REAL,
+            temperatura_diseno REAL,
+            estado_actual TEXT DEFAULT 'PENDIENTE',
+            activo BOOLEAN DEFAULT 1,
+            fecha_instalacion DATE,
+            fabricante TEXT,
+            modelo TEXT,
+            FOREIGN KEY (ubicacion_id) REFERENCES ubicaciones(id) ON DELETE CASCADE,
+            UNIQUE(ubicacion_id, codigo)
+        );
+        """)
+
+        # Crear tabla inspecciones
+        print("Creando tabla inspecciones...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inspecciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipo_id INTEGER,
+            anio INTEGER,
+            estado TEXT,
+            acciones TEXT,
+            diagnostico TEXT,
+            recomendaciones TEXT,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            reporte_generado BOOLEAN,
+            ruta_pdf_local TEXT,
+            ruta_pdf_drive TEXT,
+            drive_file_id TEXT,
+            fecha_generacion_reporte DATETIME,
+            tipo_reporte TEXT,
+            numero_acta TEXT,
+            estado_generacion TEXT,
+            FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE
+        );
+        """)
         
         # Crear tabla usuarios
         print("Creando tabla usuarios...")
@@ -352,7 +430,17 @@ def init_db():
                     INSERT OR IGNORE INTO campanias (empresa_id, nombre, descripcion, activa)
                     VALUES (?, ?, ?, ?)
                 """, (emp_id, nombre, desc, activa))
-            
+        # Verificar si la columna drive_folder_id existe en ubicaciones, y si no, agregarla
+        print("Verificando columna drive_folder_id en la tabla ubicaciones...")
+        try:
+            cursor.execute("PRAGMA table_info(ubicaciones)")
+            columns = {row[1] for row in cursor.fetchall()}
+            if columns and "drive_folder_id" not in columns:
+                print("Agregando columna 'drive_folder_id' a la tabla ubicaciones...")
+                cursor.execute("ALTER TABLE ubicaciones ADD COLUMN drive_folder_id TEXT")
+        except Exception as alter_err:
+            print(f"Error al verificar/alterar tabla ubicaciones: {alter_err}")
+
         conn.commit()
         print("¡Base de datos inicializada correctamente!")
         

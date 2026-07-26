@@ -152,3 +152,18 @@ def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_curren
         return {"sugerencias": sugerencias}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class FolderCreate(BaseModel):
+    nombre: str
+    parent_id: Optional[str] = "root"
+
+@router.post("/crear_carpeta", response_model=Dict[str, Any])
+def create_folder(folder: FolderCreate, current_user: dict = Depends(get_current_user)):
+    try:
+        from app.services.drive_service import obtener_o_crear_carpeta_drive
+        folder_id = obtener_o_crear_carpeta_drive(folder.nombre, folder.parent_id)
+        if folder_id == "mock_folder_id" or folder_id == "root":
+            return {"id": folder_id, "title": folder.nombre, "message": "Carpeta creada (o modo mock)"}
+        return {"id": folder_id, "title": folder.nombre, "message": "Carpeta creada exitosamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

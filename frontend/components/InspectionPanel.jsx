@@ -5,6 +5,7 @@ import VersionHistoryModal from './VersionHistoryModal';
 import AnnotationModal from './AnnotationModal';
 
 const API_BASE_URL = 'http://localhost:8000/api';
+const DRIVE_FALLBACK_FOLDER_ID = '19OdKrn1SLDLSuMj8e73q-8tovcw-CJA_';
 
 const renderVal = (val) => {
   if (!val) return '';
@@ -61,6 +62,7 @@ export default function InspectionPanel({ equipoId }) {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [annotatingImage, setAnnotatingImage] = useState(null);
   const [annotationsRefreshKey, setAnnotationsRefreshKey] = useState(0);
+  const [maximizedPanel, setMaximizedPanel] = useState(null); // 'drive', 'ia', or null
 
   useEffect(() => {
     if (analisis) {
@@ -80,6 +82,7 @@ export default function InspectionPanel({ equipoId }) {
   const [sugerencias, setSugerencias] = useState([]);
   const [autoDetected, setAutoDetected] = useState(null);
   const [indicacionesPrevias, setIndicacionesPrevias] = useState("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
   // Polling for report generation status
   useEffect(() => {
@@ -168,11 +171,12 @@ export default function InspectionPanel({ equipoId }) {
 
         setSugerencias(sugData.sugerencias || []);
         setAutoDetected(null);
-        if (currentRootId) {
-          setCurrentFolderId(currentRootId);
-          setFolderHistory([{ id: currentRootId, name: 'Root' }]);
-          fetchContents(currentRootId);
-        }
+        
+        // Fallback to the PGP directory folder if no highly relevant suggestion is found
+        const fallbackId = DRIVE_FALLBACK_FOLDER_ID;
+        setCurrentFolderId(fallbackId);
+        setFolderHistory([{ id: fallbackId, name: 'Inicio PGP' }]);
+        fetchContents(fallbackId);
       } catch (err) {
         console.error("Error initializing folder for equipo:", err);
       }
@@ -268,6 +272,51 @@ export default function InspectionPanel({ equipoId }) {
       console.error(e);
     }
     setIsAnalyzing(false);
+  };
+
+  const handleCrearCarpetaEquipo = async () => {
+    if (!equipo) return;
+    const parentFolder = folderHistory[folderHistory.length - 1];
+    const parentId = parentFolder ? parentFolder.id : 'root';
+    const folderName = equipo.nombre || equipo.equipo;
+    
+    setIsCreatingFolder(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/drive/crear_carpeta`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          nombre: folderName,
+          parent_id: parentId
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Carpeta '${folderName}' creada exitosamente.`);
+        
+        // Auto-select and navigate to the newly created folder
+        const newFolderObj = { id: data.id, name: data.title };
+        setCurrentFolderId(data.id);
+        setFolderHistory([...folderHistory, newFolderObj]);
+        fetchContents(data.id);
+        setAutoDetected(newFolderObj);
+        
+        // Update suggestions list
+        setSugerencias([{ id: data.id, name: data.title, score: 100 }]);
+      } else {
+        const errData = await res.json();
+        alert('Error al crear carpeta: ' + (errData.detail || 'Desconocido'));
+      }
+    } catch (err) {
+      console.error('Error creating folder:', err);
+      alert('Error de red al crear carpeta');
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
   const handleGuardar = async (generarPdf = true) => {
@@ -388,13 +437,27 @@ export default function InspectionPanel({ equipoId }) {
         <p style={{ margin: 0, color: 'var(--text-muted)' }}>{equipo?.area} - Número: {equipo?.numero}</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', flex: 1 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: maximizedPanel ? '1fr' : '1fr 1fr',
+        gap: '1rem',
+        flex: 1
+      }}>
         
         {/* Drive Browser */}
-        <div style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', overflowY: 'auto', maxHeight: '600px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <h4 style={{ margin: 0 }}>Explorador de Drive</h4>
+        {maximizedPanel !== 'ia' && (
+          <div style={{
+            backgroundColor: 'var(--bg-color)',
+            padding: '1rem',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: maximizedPanel === 'drive' ? '850px' : '600px',
+            height: maximizedPanel === 'drive' ? '800px' : 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <h4 style={{ margin: 0 }}>Explorador de Drive</h4>
               {/* Contador de imágenes anotadas en el panel */}
               {(() => {
                 let annotatedCount = 0;
@@ -418,8 +481,67 @@ export default function InspectionPanel({ equipoId }) {
                 }
                 return null;
               })()}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {folderHistory.length > 1 && <button onClick={goBack} className="btn" style={{ padding: '0.2rem 0.5rem' }}>⬅ Atrás</button>}
+                <button
+                  type="button"
+                  onClick={() => setMaximizedPanel(maximizedPanel === 'drive' ? null : 'drive')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '1.1rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    transition: 'color 0.2s, background 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = 'var(--accent-primary)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--text-secondary)';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                  title={maximizedPanel === 'drive' ? 'Minimizar' : 'Maximizar'}
+                >
+                  {maximizedPanel === 'drive' ? '🗗' : '🗖'}
+                </button>
+              </div>
             </div>
-            {folderHistory.length > 1 && <button onClick={goBack} className="btn" style={{ padding: '0.2rem 0.5rem' }}>⬅ Atrás</button>}
+
+            {/* Scrollable content container */}
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
+
+              {/* Breadcrumbs for Drive Browser */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '0.75rem',
+            color: 'var(--text-secondary)',
+            marginBottom: '0.75rem',
+            backgroundColor: 'rgba(255,255,255,0.02)',
+            padding: '4px 8px',
+            borderRadius: '4px'
+          }}>
+            {folderHistory.map((folder, idx) => (
+              <span key={folder.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {idx > 0 && <span>&gt;</span>}
+                <span style={{
+                  color: idx === folderHistory.length - 1 ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  fontWeight: idx === folderHistory.length - 1 ? '600' : 'normal'
+                }}>
+                  {folder.name}
+                </span>
+              </span>
+            ))}
           </div>
 
           {sugerencias.length > 0 && (
@@ -460,6 +582,45 @@ export default function InspectionPanel({ equipoId }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {!autoDetected && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '0.8rem',
+              backgroundColor: 'rgba(234, 179, 8, 0.1)',
+              border: '1px solid rgba(234, 179, 8, 0.3)',
+              borderRadius: '6px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem'
+            }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>⚠️</span>
+                <span>No se encontró una carpeta de Drive para este equipo.</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                Navegue en el explorador inferior al área correspondiente y presione el botón para crear la carpeta.
+              </div>
+              <button
+                type="button"
+                onClick={handleCrearCarpetaEquipo}
+                disabled={isCreatingFolder}
+                style={{
+                  alignSelf: 'flex-start',
+                  backgroundColor: 'var(--accent-primary)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                {isCreatingFolder ? 'Creando...' : `📁 Crear carpeta '${equipo?.nombre || 'equipo'}' en '${folderHistory[folderHistory.length - 1]?.name || 'Inicio PGP'}'`}
+              </button>
             </div>
           )}
           
@@ -595,14 +756,58 @@ export default function InspectionPanel({ equipoId }) {
               </li>
             ))}
           </ul>
-        </div>
+            </div>
+          </div>
+        )}
 
         {/* IA Panel */}
-        <div style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', overflowY: 'auto', maxHeight: '600px', display: 'flex', flexDirection: 'column' }}>
-          <h4>Análisis con Gemini</h4>
-          
-          {!analisis ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start' }}>
+        {maximizedPanel !== 'drive' && (
+          <div style={{
+            backgroundColor: 'var(--bg-color)',
+            padding: '1rem',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: maximizedPanel === 'ia' ? '850px' : '600px',
+            height: maximizedPanel === 'ia' ? '800px' : 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
+              <h4 style={{ margin: 0 }}>Análisis con Gemini</h4>
+              <button
+                type="button"
+                onClick={() => setMaximizedPanel(maximizedPanel === 'ia' ? null : 'ia')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '1.1rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px',
+                  borderRadius: '4px',
+                  transition: 'color 0.2s, background 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'var(--accent-primary)';
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title={maximizedPanel === 'ia' ? 'Minimizar' : 'Maximizar'}
+              >
+                {maximizedPanel === 'ia' ? '🗗' : '🗖'}
+              </button>
+            </div>
+
+            {/* Scrollable content container */}
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
+              
+              {!analisis ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start' }}>
               
               {/* Box de Historial PGP 2024 previo al análisis */}
               {historial2024 ? (
@@ -907,7 +1112,9 @@ export default function InspectionPanel({ equipoId }) {
               )}
             </div>
           )}
-        </div>
+            </div>
+          </div>
+        )}
       </div>
       
       {showHistoryModal && inspeccionId && (

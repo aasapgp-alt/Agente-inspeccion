@@ -3,8 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthProvider';
 import LibroValidationModal from './LibroValidationModal';
+import DriveFolderSelector from './DriveFolderSelector';
 
-export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, onChangeTab }) {
+export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, onChangeTab, selectedUbicacionId, onSelectUbicacion }) {
   const { user, token } = useAuth();
   const [empresas, setEmpresas] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
@@ -16,6 +17,14 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [filtro, setFiltro] = useState('TODOS');
   
   const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    if (selectedUbicacionId !== undefined && selectedUbicacionId !== null) {
+      setUbicacionSeleccionada(selectedUbicacionId.toString());
+    } else if (selectedUbicacionId === null || selectedUbicacionId === '') {
+      setUbicacionSeleccionada('');
+    }
+  }, [selectedUbicacionId]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -46,6 +55,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [libroProgress, setLibroProgress] = useState(null);
   const [libroResult, setLibroResult] = useState(null);
   const [validationAlerts, setValidationAlerts] = useState([]);
+  const [validationKpis, setValidationKpis] = useState(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
   const [telegramOTP, setTelegramOTP] = useState('');
@@ -81,9 +91,16 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const [nuevoEquipoCodigo, setNuevoEquipoCodigo] = useState('');
   const [crearCarpetaDrive, setCrearCarpetaDrive] = useState(true);
   const [parentFolderId, setParentFolderId] = useState('');
-  const [driveAreas, setDriveAreas] = useState([]);
-  const [driveAreasLoading, setDriveAreasLoading] = useState(false);
   const [creandoEquipo, setCreandoEquipo] = useState(false);
+
+  // Estados para Modal de Agregar Ubicación con Drive
+  const [showAddUbiModal, setShowAddUbiModal] = useState(false);
+  const [nuevaUbiNombre, setNuevaUbiNombre] = useState('');
+  const [nuevaUbiCodigo, setNuevaUbiCodigo] = useState('');
+  const [nuevaUbiDescripcion, setNuevaUbiDescripcion] = useState('');
+  const [crearUbiCarpetaDrive, setCrearUbiCarpetaDrive] = useState(true);
+  const [ubiParentFolderId, setUbiParentFolderId] = useState('');
+  const [creandoUbi, setCreandoUbi] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -123,6 +140,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         setLibroProgress(null);
         if (valRes.ok) {
           const valData = await valRes.json();
+          setValidationKpis(valData.kpis || null);
           if (valData.alertas && valData.alertas.length > 0) {
             setValidationAlerts(valData.alertas);
             setShowValidationModal(true);
@@ -138,6 +156,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
     setShowValidationModal(false);
     setValidationAlerts([]);
+    setValidationKpis(null);
     setGenerandoLibro(true);
     setLibroResult(null);
     setLibroProgress("Generando...");
@@ -294,74 +313,122 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     else alert("Error al agregar empresa");
   };
 
-  const handleAddUbicacion = async () => {
+  const handleOpenAddUbiModal = () => {
     if (!empresaSeleccionada) return alert("Selecciona una empresa primero");
-    const nombre = prompt("Nombre de la nueva ubicación técnica:");
-    if (!nombre) return;
-    const res = await fetch('http://localhost:8000/api/ubicaciones', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ nombre, empresa_id: parseInt(empresaSeleccionada) })
-    });
-    if (res.ok) fetchUbicaciones();
-    else alert("Error al agregar ubicación");
+    setNuevaUbiNombre('');
+    setNuevaUbiCodigo('');
+    setNuevaUbiDescripcion('');
+    setCrearUbiCarpetaDrive(true);
+    setUbiParentFolderId('');
+    setShowAddUbiModal(true);
   };
 
-  const handleOpenAddEquipoModal = async () => {
-    if (!ubicacionSeleccionada) return alert("Selecciona una ubicación primero");
+  const handleSaveUbicacion = async (e) => {
+    e.preventDefault();
+    if (!nuevaUbiNombre.trim()) return alert("Debe ingresar el nombre de la ubicación técnica");
     
+    setCreandoUbi(true);
+    try {
+      let finalFolderId = null;
+      if (crearUbiCarpetaDrive) {
+        const parentId = ubiParentFolderId || 'root';
+        const folderName = nuevaUbiNombre.trim();
+        
+        const folderRes = await fetch('http://localhost:8000/api/drive/crear_carpeta', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            nombre: folderName,
+            parent_id: parentId
+          })
+        });
+        
+        if (folderRes.ok) {
+          const folderData = await folderRes.json();
+          finalFolderId = folderData.id;
+        } else {
+          const errData = await folderRes.json();
+          console.error("Error al crear carpeta en Drive para ubicación:", errData);
+          if (!confirm("No se pudo crear la carpeta en Google Drive. ¿Desea crear la ubicación técnica de todas formas sin carpeta de Drive?")) {
+            setCreandoUbi(false);
+            return;
+          }
+        }
+      }
+      
+      const res = await fetch('http://localhost:8000/api/ubicaciones', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ 
+          nombre: nuevaUbiNombre.trim(), 
+          empresa_id: parseInt(empresaSeleccionada),
+          codigo: nuevaUbiCodigo.trim() || null,
+          descripcion: nuevaUbiDescripcion.trim() || null,
+          drive_folder_id: finalFolderId
+        })
+      });
+      
+      if (res.ok) {
+        setShowAddUbiModal(false);
+        fetchUbicaciones();
+      } else {
+        const errData = await res.json();
+        alert("Error al agregar ubicación: " + (errData.detail || "Desconocido"));
+      }
+    } catch (err) {
+      console.error("Error saving ubicación:", err);
+      alert("Error de red al agregar ubicación");
+    } finally {
+      setCreandoUbi(false);
+    }
+  };
+
+  const handleDeleteUbicacion = async () => {
+    if (!ubicacionSeleccionada) return;
+    const ubiObj = ubicaciones.find(u => u.id.toString() === ubicacionSeleccionada.toString());
+    if (!ubiObj) return;
+    
+    if (confirm(`¿Está seguro de que desea eliminar el área / ubicación técnica "${ubiObj.nombre}"?`)) {
+      try {
+        const res = await fetch(`http://localhost:8000/api/ubicaciones/${ubicacionSeleccionada}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          alert("Área / ubicación técnica eliminada correctamente");
+          setUbicacionSeleccionada('');
+          fetchUbicaciones();
+        } else {
+          const errData = await res.json();
+          alert("Error al eliminar: " + (errData.detail || "Desconocido"));
+        }
+      } catch (err) {
+        console.error("Error deleting ubicación:", err);
+        alert("Error de conexión al eliminar el área / ubicación");
+      }
+    }
+  };
+
+  const handleOpenAddEquipoModal = () => {
+    if (!ubicacionSeleccionada) return alert("Selecciona una ubicación primero");
     setNuevoEquipoNombre('');
     setNuevoEquipoCodigo('');
     setCrearCarpetaDrive(true);
     setParentFolderId('');
-    setDriveAreas([]);
     setShowAddEquipoModal(true);
-    
-    setDriveAreasLoading(true);
-    try {
-      const rootRes = await fetch('http://localhost:8000/api/drive/root', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (rootRes.ok) {
-        const rootData = await rootRes.json();
-        const rootId = rootData.root_id;
-        
-        const carpetasRes = await fetch(`http://localhost:8000/api/drive/carpetas?parent_id=${rootId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (carpetasRes.ok) {
-          const carpetasData = await carpetasRes.json();
-          const list = Object.entries(carpetasData.carpetas).map(([title, id]) => ({ id, title }));
-          setDriveAreas(list);
-          
-          // Mapeo automático sugerido
-          const ubiObj = ubicaciones.find(u => u.id.toString() === ubicacionSeleccionada);
-          if (ubiObj) {
-            const ubiNombreNorm = ubiObj.nombre.toLowerCase();
-            const matchingArea = list.find(area => {
-              const areaTitle = area.title.toLowerCase();
-              return areaTitle.includes(ubiNombreNorm) || ubiNombreNorm.includes(areaTitle.replace(/^\d+-/, '').trim());
-            });
-            if (matchingArea) {
-              setParentFolderId(matchingArea.id);
-            } else if (list.length > 0) {
-              setParentFolderId(list[0].id);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Error loading drive areas:", err);
-    } finally {
-      setDriveAreasLoading(false);
-    }
   };
 
   const handleSaveEquipo = async (e) => {
     e.preventDefault();
     if (!nuevoEquipoNombre.trim()) return alert("Debe ingresar el nombre del equipo");
     if (!nuevoEquipoCodigo.trim()) return alert("Debe ingresar el código del equipo");
-    if (crearCarpetaDrive && !parentFolderId) return alert("Debe seleccionar una carpeta área de destino en Google Drive");
+    if (crearCarpetaDrive && !parentFolderId) return alert("Debe seleccionar una carpeta de destino en Google Drive");
     
     setCreandoEquipo(true);
     try {
@@ -415,8 +482,31 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   return (
     <div className="sidebar glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '2px' }}>ASISTENTE DE INSPECCIÓN</div>
+        <div style={{ textAlign: 'center', marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+          <a 
+            href="https://www.sulvy.com/es/" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ 
+              display: 'block', 
+              width: '120px', 
+              transition: 'transform 0.2s',
+              cursor: 'pointer'
+            }} 
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'} 
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            <img 
+              src="/sulvy_logo.png" 
+              alt="Sulvy Logo" 
+              style={{ 
+                width: '100%', 
+                height: 'auto', 
+                filter: theme === 'dark' ? 'brightness(0) invert(1)' : 'none' 
+              }} 
+            />
+          </a>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '1px', marginTop: '0.5rem' }}>ASISTENTE DE INSPECCIÓN</div>
           <div style={{ fontSize: '0.65rem', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)' }}>ASSET MANAGEMENT · v1.0</div>
         </div>
 
@@ -435,7 +525,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
               borderRadius: (activeTab !== 'REPORTS' && activeTab !== 'SETTINGS' && activeTab !== 'AUDIT') ? '4px 8px 8px 4px' : 'none', 
               padding: '12px' 
             }}>
-            Global Map
+            📊 Dashboard Global
           </button>
           <button 
             onClick={() => {
@@ -509,13 +599,22 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
         <div style={{ marginBottom: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ubicación Técnica:</label>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Área / Ubicación Técnica:</label>
             {user?.rol === 'admin' && (
-              <button onClick={handleAddUbicacion} style={{ background: 'transparent', color: 'var(--accent-primary)', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>+</button>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button onClick={handleOpenAddUbiModal} style={{ background: 'transparent', color: 'var(--accent-primary)', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }} title="Añadir área">+</button>
+                {ubicacionSeleccionada && (
+                  <button onClick={handleDeleteUbicacion} style={{ background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: '0.95rem', padding: 0 }} title="Eliminar área seleccionada">🗑️</button>
+                )}
+              </div>
             )}
           </div>
-          <select value={ubicacionSeleccionada} onChange={(e) => setUbicacionSeleccionada(e.target.value)}>
-            <option value="">-- Seleccionar Ubicación --</option>
+          <select value={ubicacionSeleccionada} onChange={(e) => {
+            const val = e.target.value;
+            setUbicacionSeleccionada(val);
+            if (onSelectUbicacion) onSelectUbicacion(val);
+          }}>
+            <option value="">-- Seleccionar Área --</option>
             {ubicaciones.map(ubi => (
               <option key={ubi.id} value={ubi.id}>{ubi.nombre}</option>
             ))}
@@ -618,11 +717,13 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
             {showValidationModal && (
               <LibroValidationModal 
                 alertas={validationAlerts}
+                kpis={validationKpis}
                 onConfirm={() => handleGenerarLibro(null, false)}
                 onConfirmAprobados={() => handleGenerarLibro(null, true)}
                 onClose={() => {
                   setShowValidationModal(false);
                   setValidationAlerts([]);
+                  setValidationKpis(null);
                 }}
               />
             )}
@@ -837,31 +938,12 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
                 {crearCarpetaDrive && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem' }}>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Seleccionar Carpeta Área Destino</label>
-                    {driveAreasLoading ? (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Cargando carpetas de Drive...</span>
-                    ) : (
-                      <select
-                        value={parentFolderId}
-                        onChange={(e) => setParentFolderId(e.target.value)}
-                        disabled={creandoEquipo}
-                        style={{
-                          backgroundColor: 'rgba(0,0,0,0.4)',
-                          border: '1px solid var(--border-color)',
-                          color: 'var(--text-primary)',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.85rem',
-                          outline: 'none',
-                          width: '100%'
-                        }}
-                      >
-                        <option value="">-- Seleccionar Carpeta Área --</option>
-                        {driveAreas.map(area => (
-                          <option key={area.id} value={area.id}>{area.title}</option>
-                        ))}
-                      </select>
-                    )}
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Seleccionar Carpeta Destino (Área/Línea)</label>
+                    <DriveFolderSelector 
+                      token={token} 
+                      onSelectFolder={(folderId, folderTitle) => setParentFolderId(folderId)}
+                      initialFolderId=""
+                    />
                   </div>
                 )}
               </div>
@@ -918,6 +1000,180 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
                   ) : (
                     'Guardar Equipo'
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Agregar Ubicación Técnica */}
+      {showAddUbiModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '500px',
+            padding: '2rem',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.25rem'
+          }}>
+            <h3 style={{ fontSize: '1.2rem', color: 'var(--accent-primary)', fontWeight: 700, margin: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
+              Añadir Nueva Ubicación Técnica
+            </h3>
+
+            <form onSubmit={handleSaveUbicacion} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Nombre de la Ubicación</label>
+                <input
+                  type="text"
+                  value={nuevaUbiNombre}
+                  onChange={(e) => setNuevaUbiNombre(e.target.value)}
+                  placeholder="PLANTA DE SALMUERA"
+                  required
+                  disabled={creandoUbi}
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Código / Prefijo (Opcional)</label>
+                <input
+                  type="text"
+                  value={nuevaUbiCodigo}
+                  onChange={(e) => setNuevaUbiCodigo(e.target.value)}
+                  placeholder="30-"
+                  disabled={creandoUbi}
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Descripción (Opcional)</label>
+                <textarea
+                  value={nuevaUbiDescripcion}
+                  onChange={(e) => setNuevaUbiDescripcion(e.target.value)}
+                  placeholder="Ubicación técnica correspondiente al área de salmueras..."
+                  disabled={creandoUbi}
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                    resize: 'vertical',
+                    minHeight: '60px'
+                  }}
+                />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+                backgroundColor: 'rgba(255,255,255,0.01)',
+                border: '1px solid rgba(255,255,255,0.05)',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginTop: '0.25rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="crearUbiCarpetaCheck"
+                    checked={crearUbiCarpetaDrive}
+                    onChange={(e) => setCrearUbiCarpetaDrive(e.target.checked)}
+                    disabled={creandoUbi}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="crearUbiCarpetaCheck" style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600, cursor: 'pointer' }}>
+                    Crear carpeta en Google Drive
+                  </label>
+                </div>
+
+                {crearUbiCarpetaDrive && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Seleccionar Carpeta Padre en Drive (Opcional)</label>
+                    <DriveFolderSelector 
+                      token={token} 
+                      onSelectFolder={(folderId, folderTitle) => setUbiParentFolderId(folderId)}
+                      initialFolderId=""
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Botones de Acción */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddUbiModal(false)}
+                  disabled={creandoUbi}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'var(--text-secondary)',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 600
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creandoUbi}
+                  style={{
+                    backgroundColor: 'var(--accent-primary)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  {creandoUbi ? 'Guardando...' : 'Guardar Ubicación'}
                 </button>
               </div>
             </form>

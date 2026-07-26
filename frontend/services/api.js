@@ -139,5 +139,18 @@ export const apiService = {
       console.error(error);
       throw error;
     }
+  },
+
+  getManual: async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/manual`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Error al obtener el manual');
+      return await response.json();
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   }
 };

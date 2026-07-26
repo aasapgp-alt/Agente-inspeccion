@@ -79,7 +79,33 @@ export default function Login() {
         background: 'rgba(30, 41, 59, 0.65)',
         backdropFilter: 'blur(20px)',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* Sulvy Logo Link */}
+          <a 
+            href="https://www.sulvy.com/es/" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ 
+              display: 'block', 
+              width: '130px', 
+              marginBottom: '1.25rem', 
+              transition: 'transform 0.2s',
+              cursor: 'pointer'
+            }} 
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'} 
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            <img 
+              src="/sulvy_logo.png" 
+              alt="Sulvy Logo" 
+              style={{ 
+                width: '100%', 
+                height: 'auto', 
+                filter: 'brightness(0) invert(1)' 
+              }} 
+            />
+          </a>
+
           {/* Logo Icon */}
           <div style={{
             display: 'inline-flex',

@@ -62,10 +62,10 @@ def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db)
             # Determinar parent folder ID
             parent_id = equipo.parent_folder_id
             if not parent_id:
-                cursor_loc = db.execute("SELECT nombre FROM ubicaciones WHERE id = ?", (equipo.ubicacion_id,))
+                cursor_loc = db.execute("SELECT nombre, drive_folder_id FROM ubicaciones WHERE id = ?", (equipo.ubicacion_id,))
                 loc_row = cursor_loc.fetchone()
                 if loc_row:
-                    parent_id = buscar_carpeta_area_por_nombre(loc_row["nombre"])
+                    parent_id = loc_row["drive_folder_id"] or buscar_carpeta_area_por_nombre(loc_row["nombre"])
             
             if parent_id:
                 try:

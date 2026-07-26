@@ -62,6 +62,18 @@ def get_drive_instance():
 def listar_carpetas(carpeta_id: str) -> list:
     drive = get_drive_instance()
     if not drive:
+        # Intentar consultar caché local de Drive primero
+        try:
+            from app.services.db_service import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT drive_id as id, nombre as title FROM drive_folders_cache WHERE parent_id = ?", (carpeta_id,))
+                rows = [dict(row) for row in cursor.fetchall()]
+                if rows:
+                    return rows
+        except Exception as db_err:
+            logger.warning(f"Error consultando caché local en listar_carpetas mock: {db_err}")
+
         # MOCK DATA
         if carpeta_id == "root":
             return [
@@ -148,7 +160,19 @@ def buscar_carpeta(nombre: str, carpeta_id: str) -> str:
 def obtener_o_crear_carpeta_drive(nombre: str, parent_id: str = "root") -> str:
     drive = get_drive_instance()
     if not drive:
-        return "mock_folder_id"
+        import uuid
+        folder_id = f"mock_folder_{uuid.uuid4().hex[:8]}"
+        try:
+            from app.services.db_service import get_db_connection
+            with get_db_connection() as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """, (folder_id, nombre, parent_id))
+                conn.commit()
+        except Exception as cache_err:
+            logger.warning(f"Error al guardar carpeta mock en caché: {cache_err}")
+        return folder_id
     try:
         folder_id = buscar_carpeta(nombre, parent_id)
         if folder_id:
@@ -256,6 +280,12 @@ def indexar_todas_las_carpetas_drive(db_conn, task_id: str = None, progress_stor
             progress_store[task_id] = {"status": "failed", "progress": 100, "mensaje": f"Error: {str(e)}"}
         return False
 
+def remover_prefijo_secuencia(titulo: str) -> str:
+    if not titulo:
+        return ""
+    # Remover prefijos como '01-', '02- ', '11A- ', '101B- '
+    return re.sub(r'^\d{1,3}[a-zA-Z]*-\s*', '', titulo)
+
 def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
     drive = get_drive_instance()
 
@@ -317,7 +347,8 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
 
             if clean_words_norm:
                 for r in cache_rows:
-                    title_norm = clean_word(r["title"])
+                    title_without_prefix = remover_prefijo_secuencia(r["title"])
+                    title_norm = clean_word(title_without_prefix)
                     if any(w in title_norm for w in clean_words_norm):
                         sugeridas_raw.append(r)
 
@@ -343,8 +374,9 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
         eq_words = set(clean_word(w) for w in re.split(r'\W+', nombre) if len(w) >= 2)
 
         for c in sugeridas_raw:
-            title_clean = clean_word(c['title'])
-            folder_words = set(clean_word(w) for w in re.split(r'\W+', c['title']) if len(w) >= 2)
+            title_without_prefix = remover_prefijo_secuencia(c['title'])
+            title_clean = clean_word(title_without_prefix)
+            folder_words = set(clean_word(w) for w in re.split(r'\W+', title_without_prefix) if len(w) >= 2)
 
             # Score base: Jaccard overlap entre palabras del nombre y carpeta
             overlap_score = 0.0
@@ -440,7 +472,8 @@ def buscar_carpeta_area_por_nombre(ubicacion_nombre: str) -> Optional[str]:
         mejor_score = 0
         
         for f in folders:
-            folder_title_norm = _normalizar_texto(f['title'])
+            title_without_prefix = remover_prefijo_secuencia(f['title'])
+            folder_title_norm = _normalizar_texto(title_without_prefix)
             score = 0
             for palabra in palabras_busqueda:
                 if palabra in folder_title_norm:

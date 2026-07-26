@@ -226,7 +226,7 @@ def get_report_versiones(inspeccion_id: int, db: sqlite3.Connection = Depends(ge
 def generar_manual_route(inspeccion_id: int, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         from app.services.reporte_service import generar_manual
-        res = generar_manual(inspeccion_id)
+        res = generar_manual(inspeccion_id, user_id=current_user.get("id", 1))
         if res.get("status") == "success":
             return {"message": res.get("message", "Reporte generado"), "reporte_id": res.get("reporte_id")}
         else:

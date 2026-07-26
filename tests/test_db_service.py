@@ -70,7 +70,7 @@ def _crear_tabla_inspecciones():
     with get_db_connection() as conn:
         conn.execute(
             """
-            CREATE TABLE inspecciones (
+            CREATE TABLE IF NOT EXISTS inspecciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 equipo_id INTEGER,
                 anio INTEGER,
@@ -78,6 +78,8 @@ def _crear_tabla_inspecciones():
             )
             """
         )
+        conn.execute("INSERT OR IGNORE INTO ubicaciones (id, empresa_id, nombre) VALUES (1, 1, 'Test Ubi');")
+        conn.execute("INSERT OR IGNORE INTO equipos (id, ubicacion_id, codigo, nombre) VALUES (1, 1, 'EQ1', 'Equipo 1'), (3, 1, 'EQ3', 'Equipo 3'), (7, 1, 'EQ7', 'Equipo 7');")
         conn.commit()
 
 

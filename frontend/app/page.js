@@ -9,6 +9,9 @@ import Login from '../components/Login';
 import ReportsPanel from '../components/ReportsPanel';
 import SettingsPanel from '../components/SettingsPanel';
 import AuditPanel from '../components/AuditPanel';
+import HelpModal from '../components/HelpModal';
+import GlobalDashboard from '../components/GlobalDashboard';
+
 
 export default function Home() {
   return (
@@ -22,8 +25,10 @@ function DashboardContent() {
   const { user, loading, logout } = useAuth();
   const [equipoSeleccionado, setEquipoSeleccionado] = useState(null);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState(null);
+  const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState('');
   const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL, FACTORY, HISTORY, REPORTS, SETTINGS
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Inicialización diferida: la fecha puede diferir entre servidor y cliente,
   // por eso se marca con suppressHydrationWarning en el render.
@@ -63,6 +68,8 @@ function DashboardContent() {
           if (id) setActiveTab('FACTORY');
         }}
         onSelectEmpresa={setEmpresaSeleccionada}
+        selectedUbicacionId={ubicacionSeleccionada}
+        onSelectUbicacion={setUbicacionSeleccionada}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
       />
@@ -86,8 +93,39 @@ function DashboardContent() {
             </nav>
           </div>
 
-          <div className="header-right">
+          <div className="header-right" style={{ display: 'flex', alignItems: 'center' }}>
+            {/* Sulvy header logo */}
+            <a 
+              href="https://www.sulvy.com/es/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              style={{ 
+                display: 'block', 
+                width: '60px', 
+                marginRight: '1rem',
+                transition: 'transform 0.2s',
+                cursor: 'pointer'
+              }} 
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'} 
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <img 
+                src="/sulvy_logo.png" 
+                alt="Sulvy Logo" 
+                style={{ 
+                  width: '100%', 
+                  height: 'auto',
+                  // Adaptive brightness filter based on modern UI aesthetics
+                  filter: 'brightness(0.95)'
+                }} 
+              />
+            </a>
+
             <span className="header-clock" suppressHydrationWarning>{fecha}</span>
+
+            <button className="btn-help" onClick={() => setShowHelp(true)} title="Manual de Uso / Ayuda" aria-label="Manual de Uso">
+              ❓
+            </button>
 
             {/* Chip de perfil con menú desplegable */}
             <div className="user-chip" onClick={() => setShowUserMenu(!showUserMenu)}>
@@ -124,11 +162,12 @@ function DashboardContent() {
                 <ManualPanel equipoId={equipoSeleccionado} />
               </div>
             ) : (
-              <div className="empty-state">
-                <span className="empty-state__icon">📝</span>
-                <h2>Carga manual</h2>
-                <p>Selecciona un activo en el panel lateral para comenzar el registro manual.</p>
-              </div>
+              <GlobalDashboard 
+                empresaId={empresaSeleccionada} 
+                onSelectEquipo={setEquipoSeleccionado} 
+                onSelectUbicacion={setUbicacionSeleccionada}
+                onChangeTab={setActiveTab} 
+              />
             )
           )}
 
@@ -166,6 +205,7 @@ function DashboardContent() {
 
         </div>
       </div>
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </main>
   );
 }

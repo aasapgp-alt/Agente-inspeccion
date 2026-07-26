@@ -78,19 +78,18 @@ def actualizar_estado_reporte(inspeccion_id: int, estado: str, error: str = None
         logger.error(f"Error actualizando estado de reporte {inspeccion_id}: {e}")
         return False
 
-def generar_manual(inspeccion_id: int) -> dict:
+def generar_manual(inspeccion_id: int, user_id: int = 1) -> dict:
     try:
         status = iniciar_generacion_reporte(inspeccion_id)
         if status['status'] == 'success':
-            # Obtener equipo_id y usuario_id
+            # Obtener equipo_id
             with get_db_connection() as conn:
-                cursor = conn.execute("SELECT equipo_id, usuario_id FROM inspecciones WHERE id = ?", (inspeccion_id,))
+                cursor = conn.execute("SELECT equipo_id FROM inspecciones WHERE id = ?", (inspeccion_id,))
                 row = cursor.fetchone()
                 if not row:
                     actualizar_estado_reporte(inspeccion_id, "ERROR", "Inspección no encontrada")
                     return {"status": "error", "message": "Inspección no encontrada"}
                 equipo_id = row["equipo_id"]
-                user_id = row["usuario_id"] or 1
                 
                 # Generar el reporte
                 crear_reporte_individual_completo(equipo_id, conn, user_id)

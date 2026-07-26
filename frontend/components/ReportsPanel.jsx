@@ -36,6 +36,7 @@ export default function ReportsPanel() {
   const [generandoLibro, setGenerandoLibro] = useState(false);
   const [libroProgress, setLibroProgress] = useState(null);
   const [validationAlerts, setValidationAlerts] = useState([]);
+  const [validationKpis, setValidationKpis] = useState(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Version history modal state
@@ -340,6 +341,7 @@ export default function ReportsPanel() {
         setLibroProgress(null);
         if (valRes.ok) {
           const valData = await valRes.json();
+          setValidationKpis(valData.kpis || null);
           if (valData.alertas && valData.alertas.length > 0) {
             setValidationAlerts(valData.alertas);
             setShowValidationModal(true);
@@ -355,6 +357,7 @@ export default function ReportsPanel() {
 
     setShowValidationModal(false);
     setValidationAlerts([]);
+    setValidationKpis(null);
     setGenerandoLibro(true);
     setLibroProgress("Generando...");
 
@@ -790,11 +793,13 @@ export default function ReportsPanel() {
                 {showValidationModal && (
                   <LibroValidationModal 
                     alertas={validationAlerts}
+                    kpis={validationKpis}
                     onConfirm={() => handleGenerarLibroArea(null, false)}
                     onConfirmAprobados={() => handleGenerarLibroArea(null, true)}
                     onClose={() => {
                       setShowValidationModal(false);
                       setValidationAlerts([]);
+                      setValidationKpis(null);
                     }}
                   />
                 )}

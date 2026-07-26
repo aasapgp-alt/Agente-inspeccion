@@ -488,10 +488,29 @@ def validar_libro(
                     "tipo": "critico",
                     "mensaje": "No hay equipos activos en esta ubicación.",
                     "detalles": "Debe agregar al menos un equipo activo antes de generar el libro."
-                }]
+                }],
+                "kpis": {
+                    "total_equipos": 0,
+                    "inspeccionados": 0,
+                    "buenos": 0,
+                    "regulares": 0,
+                    "criticos": 0,
+                    "fuera_ruta": 0,
+                    "ica": 0.0,
+                    "icd": 100.0
+                }
             }
         
         alertas = []
+        total_equipos = len(equipos)
+        inspeccionados_count = 0
+        buenos_count = 0
+        regulares_count = 0
+        criticos_count = 0
+        fuera_ruta_count = 0
+        
+        equipos_con_falla = 0  # CRITICO o REGULAR
+        equipos_con_falla_completos = 0  # CRITICO o REGULAR con fotos y recomendaciones válidas
         
         # 3. Validar inspecciones, recomendaciones y fotos
         from app.services.memory_service import obtener_memoria_imagenes
@@ -517,13 +536,29 @@ def validar_libro(
                 })
                 continue
             
+            inspeccionados_count += 1
             insp = dict(insp_row)
             estado = str(insp.get("estado", "BUENO")).upper()
             
-            # 3.2 Recomendaciones obligatorias para REGULAR / CRITICO
-            if "REGULAR" in estado or "CRIT" in estado:
+            is_falla = False
+            if "CRIT" in estado:
+                criticos_count += 1
+                is_falla = True
+            elif "REGULAR" in estado:
+                regulares_count += 1
+                is_falla = True
+            elif "FUERA" in estado:
+                fuera_ruta_count += 1
+            else:
+                buenos_count += 1
+                
+            if is_falla:
+                equipos_con_falla += 1
+                
+                # 3.2 Recomendaciones obligatorias para REGULAR / CRITICO
                 recom = (insp.get("recomendaciones") or "").strip()
-                if not recom or len(recom) < 5:
+                has_recom = recom and len(recom) >= 5
+                if not has_recom:
                     alertas.append({
                         "tipo": "sin_recomendaciones",
                         "mensaje": f"El equipo {codigo_eq} ({estado}) no tiene recomendaciones o el texto es demasiado corto.",
@@ -553,12 +588,31 @@ def validar_libro(
                         "mensaje": f"El equipo {codigo_eq} ({estado}) no tiene fotos asociadas.",
                         "detalles": "Se recomienda subir registro fotográfico de la patología."
                     })
+                
+                if has_recom and has_photos:
+                    equipos_con_falla_completos += 1
+        
+        ica = round((criticos_count / total_equipos) * 100, 1) if total_equipos > 0 else 0.0
+        icd = round((equipos_con_falla_completos / equipos_con_falla) * 100, 1) if equipos_con_falla > 0 else 100.0
+        
+        kpis = {
+            "total_equipos": total_equipos,
+            "inspeccionados": inspeccionados_count,
+            "buenos": buenos_count,
+            "regulares": regulares_count,
+            "criticos": criticos_count,
+            "fuera_ruta": fuera_ruta_count,
+            "ica": ica,
+            "icd": icd
+        }
         
         has_critico = any(a["tipo"] == "critico" for a in alertas)
         return {
             "valid": not has_critico,
-            "alertas": alertas
+            "alertas": alertas,
+            "kpis": kpis
         }
     except Exception as e:
         logger.error(f"Error al validar libro para ubicación {ubicacion_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error en la validación: {str(e)}")
+
