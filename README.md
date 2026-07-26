@@ -44,12 +44,6 @@ La plataforma está dividida en un entorno moderno y asíncrono:
 - **Control de Versiones y Polling:** La generación de reportes se maneja con estados (`pendiente`, `generando`, `completado`, `error`). La UI realiza polling en tiempo real con animaciones interactivas.
 - Si un reporte se regenera, el backend rastrea la versión (v1, v2...) y almacena la copia tanto en disco local como en Google Drive.
 
-### 4. Flujo de Generación de Reportes PDF
-- Al completar un diagnóstico, el inspector puede guardar los datos en la BD o desencadenar la **Generación de un Reporte PDF formal**.
-- El sistema utiliza `ReportLab` para construir un acta de inspección con las fotografías, anotaciones y el veredicto técnico final.
-- **Control de Versiones y Polling:** La generación de reportes se maneja con estados (`pendiente`, `generando`, `completado`, `error`). La UI realiza polling en tiempo real con animaciones interactivas.
-- Si un reporte se regenera, el backend rastrea la versión (v1, v2...) y almacena la copia tanto en disco local como en Google Drive.
-
 ### 5. Planificación de Itinerarios Diarios (Rutas)
 - **Asignación de Rutas:** Desde el panel web, los Administradores y Supervisores pueden planificar itinerarios diarios para los inspectores, buscando equipos e indexándolos en un itinerario con un orden de inspección dinámico.
 - **Seguridad por Rol:** La vista de itinerarios está filtrada: los inspectores solo visualizan sus propias tareas programadas para el día y no tienen permisos de creación o eliminación.
@@ -95,16 +89,6 @@ La plataforma está dividida en un entorno moderno y asíncrono:
 ---
 
 ## 👤 Usuarios del Sistema (Semilla)
-
-| Usuario | Rol |
-|---------|-----|
-| `admin` | Admin |
-| `cristaldoiq` | Admin |
-| `mpaltrinieri` | Inspector |
-| `hpaltrinieri` | Inspector |
-| `eirioni` | Inspector |
-| `gabrielng2005` | Inspector |
-| `anahivillalba_06` | Inspector |
 
 ---
 
