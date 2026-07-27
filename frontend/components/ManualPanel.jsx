@@ -227,6 +227,7 @@ export default function ManualPanel({ equipoId }) {
       }
 
       const data = await res.json();
+      window.dispatchEvent(new CustomEvent('inspeccion_actualizada'));
       if (generarPdf) {
         setSaveStatus({ type: 'success', text: `Guardado y PDF generado: ${data.pdf_status}` });
       } else {
@@ -234,6 +235,7 @@ export default function ManualPanel({ equipoId }) {
         // Desaparecer mensaje después de 3 segundos
         setTimeout(() => setSaveStatus(null), 3000);
       }
+
     } catch (e) {
       console.error(e);
       setSaveStatus({ type: 'error', text: "Error de conexión al guardar." });

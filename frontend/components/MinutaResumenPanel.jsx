@@ -3,11 +3,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthProvider';
 
-export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
+export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEquipoAndTab }) {
   const { token } = useAuth();
   const [data, setData] = useState([]);
   const [empresas, setEmpresas] = useState([]);
+  const [campanias, setCampanias] = useState([]);
   const [empresaId, setEmpresaId] = useState(empresaIdInicial);
+  const [campania, setCampania] = useState('');
   const [search, setSearch] = useState('');
   const [criticidadFiltro, setCriticidadFiltro] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,25 +30,54 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
     loadEmpresas();
   }, []);
 
-  // Cargar datos de la minuta resumen
+  // Cargar campañas disponibles para la empresa seleccionada
   useEffect(() => {
+    async function loadCampanias() {
+      try {
+        const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
+        const url = empresaId ? `http://localhost:8000/api/campanias?empresa_id=${empresaId}` : 'http://localhost:8000/api/campanias';
+        const res = await fetch(url, {
+          headers: activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}
+        });
+        if (res.ok) {
+          const list = await res.json();
+          setCampanias(list);
+        }
+      } catch (err) {
+        console.error('Error cargando campañas:', err);
+      }
+    }
+    loadCampanias();
+  }, [empresaId, token]);
+
+  // Cargar datos de la minuta resumen dinámicamente
+  const fetchData = async () => {
     const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
     if (!activeToken) return;
 
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, activeToken);
-        setData(result || []);
-      } catch (err) {
-        console.error('Error cargando Minuta Resumen:', err);
-      } finally {
-        setLoading(false);
-      }
+    setLoading(true);
+    try {
+      const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, campania, activeToken);
+      setData(result || []);
+    } catch (err) {
+      console.error('Error cargando Minuta Resumen:', err);
+    } finally {
+      setLoading(false);
     }
-    fetchData();
-  }, [empresaId, search, criticidadFiltro, token]);
+  };
 
+  useEffect(() => {
+    fetchData();
+  }, [empresaId, search, criticidadFiltro, campania, token]);
+
+  // Escuchar eventos globales de inspección actualizada para refrescar automáticamente
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchData();
+    };
+    window.addEventListener('inspeccion_actualizada', handleRefresh);
+    return () => window.removeEventListener('inspeccion_actualizada', handleRefresh);
+  }, [empresaId, search, criticidadFiltro, campania, token]);
 
   // Cálculos de métricas KPI
   const stats = useMemo(() => {
@@ -80,7 +111,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Minuta_Resumen_PGP_${empresaId || 'Todas'}.csv`);
+    link.setAttribute('download', `Minuta_Resumen_PGP_${empresaId || 'Todas'}_${campania || 'Actual'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -97,35 +128,54 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--accent-primary)', fontWeight: 700, marginBottom: '0.2rem' }}>
-            Minuta Resumen PGP 2024 - 2026
+            Minuta Resumen PGP {campania ? `· ${campania}` : '· Dinámica'}
           </div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
             Tabla Resumen de Inspecciones Técnicas
           </h1>
           <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '0.3rem 0 0 0' }}>
-            Consolidado general de estado de conservación, criticidades y programas de mantenimiento preventivo.
+            Consolidado general sincronizado en tiempo real con el registro de inspecciones y campañas PGP.
           </p>
         </div>
 
-        <button
-          onClick={exportToCSV}
-          style={{
-            backgroundColor: 'rgba(34, 197, 94, 0.15)',
-            border: '1px solid rgba(34, 197, 94, 0.3)',
-            color: '#4ade80',
-            padding: '10px 18px',
-            borderRadius: '10px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontSize: '0.88rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            transition: 'all 0.2s'
-          }}
-        >
-          📊 Exportar a Excel (CSV)
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={fetchData}
+            style={{
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              color: '#38bdf8',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontSize: '0.88rem'
+            }}
+            title="Refrescar matriz resumen"
+          >
+            🔄 Actualizar
+          </button>
+
+          <button
+            onClick={exportToCSV}
+            style={{
+              backgroundColor: 'rgba(34, 197, 94, 0.15)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              color: '#4ade80',
+              padding: '10px 18px',
+              borderRadius: '10px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontSize: '0.88rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            📊 Exportar a Excel (CSV)
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards Summary */}
@@ -161,7 +211,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
       <div className="glass-panel" style={{ padding: '1rem', borderRadius: '12px', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         
         {/* Selector de Empresa */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '1 1 200px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '1 1 180px' }}>
           <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Empresa</label>
           <select
             value={empresaId}
@@ -179,6 +229,29 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
             <option value="">Todas las Empresas</option>
             {empresas.map(emp => (
               <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Selector de Campaña PGP */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '1 1 180px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Campaña / Parada Anual</label>
+          <select
+            value={campania}
+            onChange={(e) => setCampania(e.target.value)}
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '0.88rem',
+              outline: 'none'
+            }}
+          >
+            <option value="">Todas / Última Inspección</option>
+            {campanias.map(c => (
+              <option key={c.id || c.nombre} value={c.nombre}>{c.nombre}</option>
             ))}
           </select>
         </div>
@@ -207,7 +280,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
         </div>
 
         {/* Buscador general */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '2 1 250px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '2 1 220px' }}>
           <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Buscar por TAG, Informe o Área</label>
           <input
             type="text"
@@ -233,7 +306,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
         {loading ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
             <div className="spinner" style={{ margin: '0 auto 1rem auto' }} />
-            Cargando matriz resumen PGP...
+            Sincronizando minuta resumen con inspecciones...
           </div>
         ) : data.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -255,6 +328,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
                   <th style={{ padding: '12px 14px' }}>OBSERVACIONES</th>
                   <th style={{ padding: '12px 10px', textAlign: 'center' }}>NIVEL CRITIC.</th>
                   <th style={{ padding: '12px 14px', textAlign: 'center' }}>PROX. INSPEC.</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>ACCIONES</th>
                 </tr>
               </thead>
               <tbody>
@@ -414,6 +488,30 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
                         }}>
                           {prox}
                         </span>
+                      </td>
+
+                      {/* ACCIONES DE INTERACCIÓN DIRECTA */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => {
+                            if (onSelectEquipoAndTab) {
+                              onSelectEquipoAndTab(row.equipo_id, 'MANUAL');
+                            }
+                          }}
+                          style={{
+                            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            color: '#38bdf8',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                          title="Cargar / Editar Inspección para este equipo"
+                        >
+                          ✏️ Inspeccionar
+                        </button>
                       </td>
 
                     </tr>

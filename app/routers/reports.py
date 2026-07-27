@@ -57,8 +57,23 @@ def get_minuta_resumen(
 ):
     """
     Retorna la lista estructurada para la Minuta Resumen PGP (Tabla estilo Pág. 15 del reporte).
+    Soporta filtrado dinámico por campaña y empresa en tiempo real.
     """
-    query = """
+    import re
+    anio_target = None
+    if campania:
+        match = re.search(r'\b(20\d{2})\b', campania)
+        if match:
+            anio_target = int(match.group(1))
+
+    if anio_target:
+        join_clause = "LEFT JOIN inspecciones i ON i.equipo_id = e.id AND i.anio = ?"
+        join_param = [anio_target]
+    else:
+        join_clause = "LEFT JOIN inspecciones i ON i.id = (SELECT id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)"
+        join_param = []
+
+    query = f"""
         SELECT 
             e.id as equipo_id,
             e.codigo as tag,
@@ -83,10 +98,10 @@ def get_minuta_resumen(
         FROM equipos e
         JOIN ubicaciones u ON e.ubicacion_id = u.id
         JOIN empresas emp ON u.empresa_id = emp.id
-        LEFT JOIN inspecciones i ON i.equipo_id = e.id
+        {join_clause}
         WHERE 1=1
     """
-    params = []
+    params = join_param.copy()
     if empresa_id:
         query += " AND u.empresa_id = ?"
         params.append(empresa_id)
@@ -112,7 +127,13 @@ def get_minuta_resumen(
     for row in rows:
         r = dict(row)
         
-        informe_val = r.get("informe") or f"ARC MDA-24{str(idx).zfill(2)}"
+        informe_val = r.get("informe")
+        if not informe_val:
+            if r.get("empresa_id") == 170:
+                informe_val = f"ARC MDA-24{str(idx).zfill(2)}"
+            else:
+                informe_val = f"ACTA-{r.get('tag')}-{anio_target or 2024}"
+
         recom_flag = "SI" if (r.get("recomendaciones") and len(r.get("recomendaciones").strip()) > 2) else "NO"
         
         acciones_str = (r.get("acciones") or "").lower()

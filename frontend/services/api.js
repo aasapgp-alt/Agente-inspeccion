@@ -154,13 +154,14 @@ export const apiService = {
     }
   },
 
-  getMinutaResumen: async (empresaId, search, criticidad, token) => {
+  getMinutaResumen: async (empresaId, search, criticidad, campania, token) => {
     try {
       const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
       const params = new URLSearchParams();
       if (empresaId) params.append('empresa_id', empresaId);
       if (search) params.append('search', search);
       if (criticidad) params.append('criticidad', criticidad);
+      if (campania) params.append('campania', campania);
 
       const headers = {};
       if (authToken) {
@@ -180,6 +181,7 @@ export const apiService = {
       return [];
     }
   }
+
 };
 
 

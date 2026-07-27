@@ -194,8 +194,15 @@ function DashboardContent() {
           )}
 
           {activeTab === 'MINUTA' && (
-            <MinutaResumenPanel empresaIdInicial={empresaSeleccionada} />
+            <MinutaResumenPanel
+              empresaIdInicial={empresaSeleccionada}
+              onSelectEquipoAndTab={(eqId, targetTab) => {
+                setEquipoSeleccionado(eqId);
+                setActiveTab(targetTab || 'MANUAL');
+              }}
+            />
           )}
+
 
           {activeTab === 'REPORTS' && (
             <ReportsPanel />
