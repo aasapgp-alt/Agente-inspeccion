@@ -30,10 +30,13 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
 
   // Cargar datos de la minuta resumen
   useEffect(() => {
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
+    if (!activeToken) return;
+
     async function fetchData() {
       setLoading(true);
       try {
-        const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, token);
+        const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, activeToken);
         setData(result || []);
       } catch (err) {
         console.error('Error cargando Minuta Resumen:', err);
@@ -43,6 +46,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
     }
     fetchData();
   }, [empresaId, search, criticidadFiltro, token]);
+
 
   // Cálculos de métricas KPI
   const stats = useMemo(() => {
