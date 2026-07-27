@@ -152,5 +152,24 @@ export const apiService = {
       console.error(error);
       throw error;
     }
+  },
+
+  getMinutaResumen: async (empresaId, search, criticidad, token) => {
+    try {
+      const params = new URLSearchParams();
+      if (empresaId) params.append('empresa_id', empresaId);
+      if (search) params.append('search', search);
+      if (criticidad) params.append('criticidad', criticidad);
+
+      const response = await fetch(`${API_BASE_URL}/reportes/minuta_resumen?${params.toString()}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error('Error fetching minuta resumen');
+      return await response.json();
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
   }
 };
+

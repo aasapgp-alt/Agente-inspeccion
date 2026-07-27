@@ -1,0 +1,426 @@
+'use client';
+import { useState, useEffect, useMemo } from 'react';
+import { apiService } from '../services/api';
+import { useAuth } from './AuthProvider';
+
+export default function MinutaResumenPanel({ empresaIdInicial = 170 }) {
+  const { token } = useAuth();
+  const [data, setData] = useState([]);
+  const [empresas, setEmpresas] = useState([]);
+  const [empresaId, setEmpresaId] = useState(empresaIdInicial);
+  const [search, setSearch] = useState('');
+  const [criticidadFiltro, setCriticidadFiltro] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  // Cargar empresas para el selector
+  useEffect(() => {
+    async function loadEmpresas() {
+      try {
+        const res = await fetch('http://localhost:8000/api/empresas');
+        if (res.ok) {
+          const list = await res.json();
+          setEmpresas(list);
+        }
+      } catch (err) {
+        console.error('Error cargando empresas:', err);
+      }
+    }
+    loadEmpresas();
+  }, []);
+
+  // Cargar datos de la minuta resumen
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, token);
+        setData(result || []);
+      } catch (err) {
+        console.error('Error cargando Minuta Resumen:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [empresaId, search, criticidadFiltro, token]);
+
+  // Cálculos de métricas KPI
+  const stats = useMemo(() => {
+    const total = data.length;
+    const condicionales = data.filter(d => (d.observaciones || '').toLowerCase().includes('condicional') || d.estado === 'REGULAR').length;
+    const nivel1 = data.filter(d => str(d.criticidad) === '1').length;
+    const pgp25 = data.filter(d => (d.proxima_inspeccion || '').includes('PGP-25')).length;
+    return { total, condicionales, nivel1, pgp25 };
+  }, [data]);
+
+  // Exportar a CSV
+  const exportToCSV = () => {
+    if (!data.length) return;
+    const headers = ['Nº', 'TAG', 'Equipo', 'Sector', 'Informe', 'Recom', 'Acc. Correctivas', 'Acc. Preventivas', 'Comentarios', 'Observaciones', 'Criticidad', 'Próx. Inspección'];
+    const rows = data.map(d => [
+      d.numero,
+      `"${d.tag}"`,
+      `"${d.equipo_nombre || ''}"`,
+      `"${d.sector}"`,
+      `"${d.informe}"`,
+      d.recom,
+      d.acciones_correctivas,
+      d.acciones_preventivas,
+      `"${d.comentarios}"`,
+      `"${d.observaciones}"`,
+      d.criticidad,
+      `"${d.proxima_inspeccion}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Minuta_Resumen_PGP_${empresaId || 'Todas'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  function str(val) {
+    return val !== undefined && val !== null ? String(val) : '';
+  }
+
+  return (
+    <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflowY: 'auto' }}>
+      
+      {/* Encabezado del Panel */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--accent-primary)', fontWeight: 700, marginBottom: '0.2rem' }}>
+            Minuta Resumen PGP 2024 - 2026
+          </div>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+            Tabla Resumen de Inspecciones Técnicas
+          </h1>
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '0.3rem 0 0 0' }}>
+            Consolidado general de estado de conservación, criticidades y programas de mantenimiento preventivo.
+          </p>
+        </div>
+
+        <button
+          onClick={exportToCSV}
+          style={{
+            backgroundColor: 'rgba(34, 197, 94, 0.15)',
+            border: '1px solid rgba(34, 197, 94, 0.3)',
+            color: '#4ade80',
+            padding: '10px 18px',
+            borderRadius: '10px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontSize: '0.88rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          📊 Exportar a Excel (CSV)
+        </button>
+      </div>
+
+      {/* KPI Cards Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
+        
+        <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '14px', borderLeft: '4px solid #38bdf8' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Total Equipos en Matriz</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.2rem' }}>{stats.total}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.2rem' }}>Relevados en PGP</div>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '14px', borderLeft: '4px solid #f59e0b' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Servicio Condicional</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f59e0b', marginTop: '0.2rem' }}>{stats.condicionales}</div>
+          <div style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '0.2rem' }}>Requieren intervención técnica</div>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '14px', borderLeft: '4px solid #ef4444' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Criticidad Nivel 1 (Alta)</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ef4444', marginTop: '0.2rem' }}>{stats.nivel1}</div>
+          <div style={{ fontSize: '0.75rem', color: '#f87171', marginTop: '0.2rem' }}>Monitoreo prioritario</div>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '14px', borderLeft: '4px solid #ec4899' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Inspección Urgente PGP 2025</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ec4899', marginTop: '0.2rem' }}>{stats.pgp25}</div>
+          <div style={{ fontSize: '0.75rem', color: '#f472b6', marginTop: '0.2rem' }}>Próxima parada anual</div>
+        </div>
+
+      </div>
+
+      {/* Barra de Filtros y Búsqueda */}
+      <div className="glass-panel" style={{ padding: '1rem', borderRadius: '12px', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        
+        {/* Selector de Empresa */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '1 1 200px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Empresa</label>
+          <select
+            value={empresaId}
+            onChange={(e) => setEmpresaId(e.target.value)}
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '0.88rem',
+              outline: 'none'
+            }}
+          >
+            <option value="">Todas las Empresas</option>
+            {empresas.map(emp => (
+              <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Selector de Criticidad */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '1 1 150px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Nivel de Criticidad</label>
+          <select
+            value={criticidadFiltro}
+            onChange={(e) => setCriticidadFiltro(e.target.value)}
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '0.88rem',
+              outline: 'none'
+            }}
+          >
+            <option value="">Todas las Criticidades</option>
+            <option value="1">Nivel 1 (Crítico)</option>
+            <option value="2">Nivel 2 (Medio)</option>
+            <option value="3">Nivel 3 (Bajo)</option>
+          </select>
+        </div>
+
+        {/* Buscador general */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '2 1 250px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Buscar por TAG, Informe o Área</label>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Ej: T-2240, ARC MDA, Sorbent..."
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '0.88rem',
+              outline: 'none'
+            }}
+          />
+        </div>
+
+      </div>
+
+      {/* Tabla Principal Estilo Pág. 15 del Reporte Unificado */}
+      <div className="glass-panel" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+        {loading ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <div className="spinner" style={{ margin: '0 auto 1rem auto' }} />
+            Cargando matriz resumen PGP...
+          </div>
+        ) : data.length === 0 ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            🔍 No se encontraron registros de inspección con los filtros seleccionados.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'rgba(15, 23, 42, 0.85)', borderBottom: '2px solid rgba(255, 255, 255, 0.1)', color: '#94a3b8' }}>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', width: '40px' }}>Nº</th>
+                  <th style={{ padding: '12px 14px', fontWeight: 700, color: '#f8fafc' }}>TAG</th>
+                  <th style={{ padding: '12px 14px' }}>SECTOR</th>
+                  <th style={{ padding: '12px 14px' }}>INFORME</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>RECOM.</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>ACC. CORRECT.</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>ACC. PREVENT.</th>
+                  <th style={{ padding: '12px 14px' }}>COMENTARIOS</th>
+                  <th style={{ padding: '12px 14px' }}>OBSERVACIONES</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>NIVEL CRITIC.</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>PROX. INSPEC.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((row, i) => {
+                  const crit = str(row.criticidad);
+                  const prox = str(row.proxima_inspeccion);
+                  
+                  // Estilos de badge para criticidad (idéntico a Pág. 15)
+                  const critBg = crit === '1' ? '#ef4444' : crit === '2' ? '#f59e0b' : '#22c55e';
+                  const critColor = '#ffffff';
+
+                  // Estilos para Próxima Inspección
+                  let proxBg = 'rgba(255, 255, 255, 0.1)';
+                  let proxColor = '#e2e8f0';
+
+                  if (prox.includes('PGP-25')) {
+                    proxBg = '#be123c'; // Rojo/rosa destacado Pág. 15
+                    proxColor = '#ffffff';
+                  } else if (prox.includes('PGP-26')) {
+                    proxBg = '#d97706'; // Dorado/Naranja
+                    proxColor = '#ffffff';
+                  } else if (prox.includes('PGP-29')) {
+                    proxBg = '#15803d'; // Verde
+                    proxColor = '#ffffff';
+                  }
+
+                  return (
+                    <tr 
+                      key={row.equipo_id || i}
+                      style={{ 
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                        backgroundColor: i % 2 === 0 ? 'rgba(255, 255, 255, 0.015)' : 'transparent',
+                        transition: 'background-color 0.15s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.06)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = i % 2 === 0 ? 'rgba(255, 255, 255, 0.015)' : 'transparent'}
+                    >
+                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                        {row.numero}
+                      </td>
+
+                      <td style={{ padding: '12px 14px', fontWeight: 800, color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                        {row.tag}
+                      </td>
+
+                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {row.sector}
+                      </td>
+
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        {row.ruta_pdf_local || row.ruta_pdf_drive ? (
+                          <a
+                            href={row.ruta_pdf_drive || `http://localhost:8000/${row.ruta_pdf_local}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              color: '#34d399',
+                              fontWeight: 700,
+                              textDecoration: 'underline',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem'
+                            }}
+                            title="Abrir Reporte PDF"
+                          >
+                            📄 {row.informe}
+                          </a>
+                        ) : (
+                          <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                            {row.informe}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* RECOM */}
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          backgroundColor: row.recom === 'SI' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          color: row.recom === 'SI' ? '#34d399' : '#94a3b8'
+                        }}>
+                          {row.recom}
+                        </span>
+                      </td>
+
+                      {/* ACCIONES CORRECTIVAS */}
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          backgroundColor: row.acciones_correctivas === 'SI' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          color: row.acciones_correctivas === 'SI' ? '#fbbf24' : '#94a3b8'
+                        }}>
+                          {row.acciones_correctivas}
+                        </span>
+                      </td>
+
+                      {/* ACCIONES PREVENTIVAS */}
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          backgroundColor: row.acciones_preventivas === 'SI' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          color: row.acciones_preventivas === 'SI' ? '#38bdf8' : '#94a3b8'
+                        }}>
+                          {row.acciones_preventivas}
+                        </span>
+                      </td>
+
+                      {/* COMENTARIOS */}
+                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', minWidth: '180px' }}>
+                        {row.comentarios}
+                      </td>
+
+                      {/* OBSERVACIONES */}
+                      <td style={{ padding: '12px 14px', color: '#cbd5e1', fontWeight: row.observaciones ? 600 : 400, minWidth: '220px' }}>
+                        {row.observaciones || '-'}
+                      </td>
+
+                      {/* NIVEL CRITICIDAD */}
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          width: '26px',
+                          height: '26px',
+                          lineHeight: '26px',
+                          borderRadius: '50%',
+                          backgroundColor: critBg,
+                          color: critColor,
+                          fontWeight: 800,
+                          fontSize: '0.85rem',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                        }}>
+                          {crit}
+                        </span>
+                      </td>
+
+                      {/* PROXIMA INSPECCION */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          backgroundColor: proxBg,
+                          color: proxColor,
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          letterSpacing: '0.02em',
+                          whiteSpace: 'nowrap',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        }}>
+                          {prox}
+                        </span>
+                      </td>
+
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}

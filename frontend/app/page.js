@@ -11,7 +11,7 @@ import SettingsPanel from '../components/SettingsPanel';
 import AuditPanel from '../components/AuditPanel';
 import HelpModal from '../components/HelpModal';
 import GlobalDashboard from '../components/GlobalDashboard';
-
+import MinutaResumenPanel from '../components/MinutaResumenPanel';
 
 export default function Home() {
   return (
@@ -26,7 +26,7 @@ function DashboardContent() {
   const [equipoSeleccionado, setEquipoSeleccionado] = useState(null);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState(null);
   const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState('');
-  const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL, FACTORY, HISTORY, REPORTS, SETTINGS
+  const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL, FACTORY, HISTORY, REPORTS, SETTINGS, MINUTA
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -58,7 +58,9 @@ function DashboardContent() {
     { id: 'MANUAL', label: 'Carga manual' },
     { id: 'FACTORY', label: 'Inspección IA' },
     { id: 'HISTORY', label: 'Historial de activos' },
+    { id: 'MINUTA', label: 'Minuta Resumen PGP' },
   ];
+
 
   return (
     <main className="container">
@@ -191,9 +193,14 @@ function DashboardContent() {
             <AssetHistory empresaId={empresaSeleccionada} />
           )}
 
+          {activeTab === 'MINUTA' && (
+            <MinutaResumenPanel empresaIdInicial={empresaSeleccionada} />
+          )}
+
           {activeTab === 'REPORTS' && (
             <ReportsPanel />
           )}
+
 
           {activeTab === 'SETTINGS' && (
             <SettingsPanel />

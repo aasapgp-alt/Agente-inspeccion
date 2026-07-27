@@ -543,6 +543,22 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
           </button>
           <button 
             onClick={() => {
+              if (onChangeTab) onChangeTab('MINUTA');
+            }}
+            style={{ 
+              textAlign: 'left', 
+              background: activeTab === 'MINUTA' ? 'rgba(255,255,255,0.1)' : 'transparent', 
+              color: activeTab === 'MINUTA' ? 'white' : 'var(--text-secondary)', 
+              borderLeft: activeTab === 'MINUTA' ? '4px solid var(--accent-primary)' : 'none', 
+              borderRadius: activeTab === 'MINUTA' ? '4px 8px 8px 4px' : 'none', 
+              padding: '12px',
+              cursor: 'pointer'
+            }}>
+            📋 Minuta Resumen
+          </button>
+
+          <button 
+            onClick={() => {
               if (onChangeTab) onChangeTab('SETTINGS');
             }}
             style={{ 
