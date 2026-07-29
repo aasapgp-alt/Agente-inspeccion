@@ -168,15 +168,11 @@ def get_minuta_resumen(
                 observaciones = ("Incluye Anexo para Recinto de Contención. " + observaciones).strip()
 
         crit = str(r.get("criticidad") or "2")
-        prox_insp = "PGP-26"
-        if crit == "1":
-            prox_insp = "PGP-25"
-        elif crit == "3":
-            prox_insp = "PGP-29"
-        if r.get("estado") == "REGULAR":
-            prox_insp = "PGP-25(4)" if r.get("tag") in ["T-2280", "T-3109", "T-3224", "T-3225", "T-3230"] else "PGP-25"
-        if r.get("tag") in ["T-2270", "T-3350", "T-5002", "T-5001", "T-5011", "R-3317"]:
-            prox_insp = "PGP-25(3)"
+        anio_base = r.get("anio") or 2026
+
+        # Definir la próxima inspección como Próxima PGP según criticidad
+        prox_insp = "Próxima PGP"
+
             
         resumen_list.append({
             "numero": idx,
@@ -542,142 +538,7 @@ def exportar_reportes_zip(
         remove_temp_file(temp_zip_path)
         raise HTTPException(status_code=500, detail=f"Error al generar archivo ZIP: {str(e)}")
 
-@router.get("/minuta_resumen", response_model=List[Dict[str, Any]])
-def get_minuta_resumen(
-    empresa_id: Optional[int] = Query(None),
-    campania: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    criticidad: Optional[str] = Query(None),
-    db: sqlite3.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Retorna la lista estructurada para la Minuta Resumen PGP (Tabla estilo Pág. 15 del reporte).
-    """
-    query = """
-        SELECT 
-            e.id as equipo_id,
-            e.codigo as tag,
-            e.nombre as equipo_nombre,
-            e.criticidad,
-            e.material,
-            e.fluido,
-            u.nombre as sector,
-            u.id as ubicacion_id,
-            emp.nombre as empresa_nombre,
-            emp.id as empresa_id,
-            i.id as inspeccion_id,
-            i.anio,
-            i.estado,
-            i.acciones,
-            i.diagnostico,
-            i.recomendaciones,
-            i.numero_acta as informe,
-            i.ruta_pdf_local,
-            i.ruta_pdf_drive,
-            i.drive_file_id
-        FROM equipos e
-        JOIN ubicaciones u ON e.ubicacion_id = u.id
-        JOIN empresas emp ON u.empresa_id = emp.id
-        LEFT JOIN inspecciones i ON i.equipo_id = e.id
-        WHERE 1=1
-    """
-    params = []
-    if empresa_id:
-        query += " AND u.empresa_id = ?"
-        params.append(empresa_id)
-        
-    if criticidad:
-        query += " AND e.criticidad = ?"
-        params.append(criticidad)
-        
-    if search:
-        query += " AND (e.codigo LIKE ? OR e.nombre LIKE ? OR u.nombre LIKE ? OR i.numero_acta LIKE ?)"
-        like_str = f"%{search}%"
-        params.extend([like_str, like_str, like_str, like_str])
-        
-    query += " ORDER BY e.id ASC"
-    
-    cursor = db.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    
-    resumen_list = []
-    idx = 1
-    
-    for row in rows:
-        r = dict(row)
-        
-        informe_val = r.get("informe") or f"ARC MDA-24{str(idx).zfill(2)}"
-        recom_flag = "SI" if (r.get("recomendaciones") and len(r.get("recomendaciones").strip()) > 2) else "NO"
-        
-        acciones_str = (r.get("acciones") or "").lower()
-        acc_correct = "SI" if ("correctiv" in acciones_str or "reparaci" in acciones_str or "servicio condicional" in (r.get("observaciones") or "").lower() or r.get("estado") == "REGULAR" or r.get("estado") == "CRITICO") else "NO"
-        acc_prevent = "SI" if ("preventiv" in acciones_str or "inspecci" in acciones_str or r.get("estado") in ["BUENO", "REGULAR", "CRITICO"]) else "NO"
-        
-        sector_nombre = r.get("sector") or ""
-        sector_abrev = sector_nombre
-        if "Servicios Auxiliares" in sector_nombre:
-            sector_abrev = "SA"
-        elif "Sorbent" in sector_nombre:
-            sector_abrev = "SA Sorbent"
-        elif "Tratamiento de agua" in sector_nombre:
-            sector_abrev = "Tratamiento de agua"
-        elif "HCl" in sector_nombre:
-            sector_abrev = "SA"
-            
-        comentarios = "Inspección interior y exterior"
-        if "cerrado" in (r.get("diagnostico") or "").lower() or ("exterior" in (r.get("acciones") or "").lower() and not "interior" in (r.get("acciones") or "").lower()):
-            comentarios = "Inspección exterior. TK cerrado"
-            
-        observaciones = ""
-        diag_obs = (r.get("diagnostico") or "").upper()
-        if "CONDICIONAL" in diag_obs or "CONDICIONAL" in (r.get("acciones") or "").upper() or r.get("estado") == "REGULAR":
-            observaciones = "Servicio condicional."
-        if "AISLADO" in diag_obs or "AISLADO" in (r.get("acciones") or "").upper():
-            observaciones = ("TK AISLADO. " + observaciones).strip()
-        if "SUCIO" in diag_obs:
-            observaciones = (observaciones + " INTERIOR MUY SUCIO.").strip()
-        if "RECINTO" in diag_obs or "HCL" in (r.get("tag") or ""):
-            if "Recinto" not in observaciones:
-                observaciones = ("Incluye Anexo para Recinto de Contención. " + observaciones).strip()
 
-        crit = str(r.get("criticidad") or "2")
-        prox_insp = "PGP-26"
-        if crit == "1":
-            prox_insp = "PGP-25"
-        elif crit == "3":
-            prox_insp = "PGP-29"
-        if r.get("estado") == "REGULAR":
-            prox_insp = "PGP-25(4)" if r.get("tag") in ["T-2280", "T-3109", "T-3224", "T-3225", "T-3230"] else "PGP-25"
-        if r.get("tag") in ["T-2270", "T-3350", "T-5002", "T-5001", "T-5011", "R-3317"]:
-            prox_insp = "PGP-25(3)"
-            
-        resumen_list.append({
-            "numero": idx,
-            "equipo_id": r["equipo_id"],
-            "tag": r["tag"],
-            "equipo_nombre": r["equipo_nombre"],
-            "sector": sector_abrev,
-            "sector_completo": sector_nombre,
-            "empresa_nombre": r["empresa_nombre"],
-            "empresa_id": r["empresa_id"],
-            "informe": informe_val,
-            "recom": recom_flag,
-            "acciones_correctivas": acc_correct,
-            "acciones_preventivas": acc_prevent,
-            "comentarios": comentarios,
-            "observaciones": observaciones,
-            "criticidad": crit,
-            "proxima_inspeccion": prox_insp,
-            "estado": r.get("estado") or "PENDIENTE",
-            "ruta_pdf_local": r.get("ruta_pdf_local"),
-            "ruta_pdf_drive": r.get("ruta_pdf_drive"),
-            "drive_file_id": r.get("drive_file_id")
-        })
-        idx += 1
-        
-    return resumen_list
 
 @router.get("/{reporte_id}/versiones", response_model=List[Dict[str, Any]])
 def get_versiones_reporte(

@@ -466,31 +466,33 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
     switch (geometry.type) {
       case 'RECTANGLE':
         return (
-          <svg key={data?.id || 'active'} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
+          <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
             <rect
-              x={`${geometry.x}%`}
-              y={`${geometry.y}%`}
-              width={`${geometry.width}%`}
-              height={`${geometry.height}%`}
+              x={geometry.x}
+              y={geometry.y}
+              width={geometry.width}
+              height={geometry.height}
               stroke={color}
               strokeWidth={strokeWidth / zoom}
               strokeDasharray={strokeDashArray}
               fill={active ? 'rgba(255,255,255,0.08)' : 'transparent'}
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
         );
       case 'CIRCLE':
         return (
-          <svg key={data?.id || 'active'} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
+          <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
             <ellipse
-              cx={`${geometry.x + geometry.width / 2}%`}
-              cy={`${geometry.y + geometry.height / 2}%`}
-              rx={`${geometry.width / 2}%`}
-              ry={`${geometry.height / 2}%`}
+              cx={geometry.x + geometry.width / 2}
+              cy={geometry.y + geometry.height / 2}
+              rx={geometry.width / 2}
+              ry={geometry.height / 2}
               stroke={color}
               strokeWidth={strokeWidth / zoom}
               strokeDasharray={strokeDashArray}
               fill={active ? 'rgba(255,255,255,0.08)' : 'transparent'}
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
         );
@@ -500,15 +502,16 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
         const x2 = geometry.x2 !== undefined ? geometry.x2 : x1;
         const y2 = geometry.y2 !== undefined ? geometry.y2 : y1;
         return (
-          <svg key={data?.id || 'active'} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
+          <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
             <line
-              x1={`${x1}%`}
-              y1={`${y1}%`}
-              x2={`${x2}%`}
-              y2={`${y2}%`}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
               stroke={color}
               strokeWidth={strokeWidth / zoom}
               strokeDasharray={strokeDashArray}
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
         );
@@ -524,6 +527,8 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
         return (
           <svg
             key={data?.id || 'active'}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}
           >
             <defs>
@@ -541,12 +546,13 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
               </marker>
             </defs>
             <line
-              x1={`${x1}%`}
-              y1={`${y1}%`}
-              x2={`${x2}%`}
-              y2={`${y2}%`}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
               stroke={color}
               strokeWidth={strokeWidth}
+              vectorEffect="non-scaling-stroke"
               markerEnd={`url(#${markerId})`}
             />
           </svg>
@@ -554,12 +560,12 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
       }
       case 'TEXT':
         return (
-          <svg key={data?.id || 'active'} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
+          <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
             <foreignObject
-              x={`${geometry.x}%`}
-              y={`${geometry.y}%`}
-              width={`${geometry.width || 0}%`}
-              height={`${geometry.height || 0}%`}
+              x={geometry.x}
+              y={geometry.y}
+              width={geometry.width || 0}
+              height={geometry.height || 0}
             >
               <div style={{
                 width: '100%',
@@ -813,6 +819,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
                 renderHighlight={({ key, annotation: ann, active }) => renderAnnotationShape(ann, active)}
                 renderSelector={({ annotation: selAnn }) => renderAnnotationShape(selAnn, true)}
                 renderEditor={renderEditor}
+                zoom={zoom}
                 style={{ maxWidth: '100%', maxHeight: '100%' }}
               />
             )}

@@ -17,8 +17,12 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
   // Cargar empresas para el selector
   useEffect(() => {
     async function loadEmpresas() {
+      const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
+      if (!activeToken) return;
       try {
-        const res = await fetch('http://localhost:8000/api/empresas');
+        const res = await fetch('http://localhost:8000/api/empresas', {
+          headers: { 'Authorization': `Bearer ${activeToken}` }
+        });
         if (res.ok) {
           const list = await res.json();
           setEmpresas(list);
@@ -28,7 +32,14 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
       }
     }
     loadEmpresas();
-  }, []);
+  }, [token]);
+
+  // Sincronizar empresaId desde el prop inicial (Sidebar)
+  useEffect(() => {
+    if (empresaIdInicial !== undefined && empresaIdInicial !== null) {
+      setEmpresaId(empresaIdInicial);
+    }
+  }, [empresaIdInicial]);
 
   // Cargar campañas disponibles para la empresa seleccionada
   useEffect(() => {
@@ -79,24 +90,28 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
     return () => window.removeEventListener('inspeccion_actualizada', handleRefresh);
   }, [empresaId, search, criticidadFiltro, campania, token]);
 
+  // Empresa activa resuelta
+  const empresaActivaObj = empresas.find(e => String(e.id) === String(empresaId));
+  const nombreEmpresaActiva = empresaActivaObj ? empresaActivaObj.nombre : (empresaId ? `Empresa ${empresaId}` : 'Todas las Empresas');
+
   // Cálculos de métricas KPI
   const stats = useMemo(() => {
     const total = data.length;
     const condicionales = data.filter(d => (d.observaciones || '').toLowerCase().includes('condicional') || d.estado === 'REGULAR').length;
     const nivel1 = data.filter(d => str(d.criticidad) === '1').length;
-    const pgp25 = data.filter(d => (d.proxima_inspeccion || '').includes('PGP-25')).length;
-    return { total, condicionales, nivel1, pgp25 };
+    const proximaPrioritaria = data.filter(d => str(d.criticidad) === '1' || (d.proxima_inspeccion || '').includes('Prioritaria')).length;
+    return { total, condicionales, nivel1, proximaPrioritaria };
   }, [data]);
 
   // Exportar a CSV
   const exportToCSV = () => {
     if (!data.length) return;
-    const headers = ['Nº', 'TAG', 'Equipo', 'Sector', 'Informe', 'Recom', 'Acc. Correctivas', 'Acc. Preventivas', 'Comentarios', 'Observaciones', 'Criticidad', 'Próx. Inspección'];
+    const headers = ['Nº', 'TAG', 'Sector', 'Descripción Ubicación Técnica', 'Informe Ref.', 'Recom', 'Acc. Correctivas', 'Acc. Preventivas', 'Comentarios', 'Observaciones', 'Criticidad', 'Próx. Inspección'];
     const rows = data.map(d => [
       d.numero,
       `"${d.tag}"`,
-      `"${d.equipo_nombre || ''}"`,
       `"${d.sector}"`,
+      `"${d.equipo_nombre || ''}"`,
       `"${d.informe}"`,
       d.recom,
       d.acciones_correctivas,
@@ -122,7 +137,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
   }
 
   return (
-    <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%', overflowY: 'auto' }}>
       
       {/* Encabezado del Panel */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
@@ -130,8 +145,13 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
           <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--accent-primary)', fontWeight: 700, marginBottom: '0.2rem' }}>
             Minuta Resumen PGP {campania ? `· ${campania}` : '· Dinámica'}
           </div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-            Tabla Resumen de Inspecciones Técnicas
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <span>Tabla Resumen de Inspecciones Técnicas</span>
+            {empresaId && (
+              <span style={{ fontSize: '1.1rem', color: '#38bdf8', fontWeight: 700, backgroundColor: 'rgba(56, 189, 248, 0.12)', padding: '2px 10px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                🏢 {nombreEmpresaActiva}
+              </span>
+            )}
           </h1>
           <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '0.3rem 0 0 0' }}>
             Consolidado general sincronizado en tiempo real con el registro de inspecciones y campañas PGP.
@@ -200,8 +220,8 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
         </div>
 
         <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '14px', borderLeft: '4px solid #ec4899' }}>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Inspección Urgente PGP 2025</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ec4899', marginTop: '0.2rem' }}>{stats.pgp25}</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Reinspección Prioritaria (1 Año)</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ec4899', marginTop: '0.2rem' }}>{stats.proximaPrioritaria}</div>
           <div style={{ fontSize: '0.75rem', color: '#f472b6', marginTop: '0.2rem' }}>Próxima parada anual</div>
         </div>
 
@@ -314,21 +334,21 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
               <thead>
-                <tr style={{ backgroundColor: 'rgba(15, 23, 42, 0.85)', borderBottom: '2px solid rgba(255, 255, 255, 0.1)', color: '#94a3b8' }}>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', width: '40px' }}>Nº</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 700, color: '#f8fafc' }}>TAG</th>
-                  <th style={{ padding: '12px 14px' }}>SECTOR</th>
-                  <th style={{ padding: '12px 14px' }}>INFORME</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>RECOM.</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>ACC. CORRECT.</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>ACC. PREVENT.</th>
-                  <th style={{ padding: '12px 14px' }}>COMENTARIOS</th>
-                  <th style={{ padding: '12px 14px' }}>OBSERVACIONES</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>NIVEL CRITIC.</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>PROX. INSPEC.</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'center' }}>ACCIONES</th>
+                <tr style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderBottom: '2px solid rgba(255, 255, 255, 0.1)', color: '#94a3b8', fontSize: '0.75rem' }}>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', width: '30px' }}>Nº</th>
+                  <th style={{ padding: '8px 8px', fontWeight: 700, color: '#f8fafc' }}>TAG</th>
+                  <th style={{ padding: '8px 8px' }}>SECTOR</th>
+                  <th style={{ padding: '8px 8px', maxWidth: '220px' }}>DESCRIPCIÓN UBICACIÓN TÉCNICA</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center' }}>RECOM.</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center' }}>ACC. CORRECT.</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center' }}>ACC. PREVENT.</th>
+                  <th style={{ padding: '8px 8px', maxWidth: '150px' }}>COMENTARIOS</th>
+                  <th style={{ padding: '8px 8px', maxWidth: '170px' }}>OBSERVACIONES</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center' }}>NIVEL CRITIC.</th>
+                  <th style={{ padding: '8px 8px', textAlign: 'center' }}>PROX. INSPEC.</th>
+                  <th style={{ padding: '8px 8px', textAlign: 'center' }}>ACCIONES</th>
                 </tr>
               </thead>
               <tbody>
@@ -341,17 +361,17 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                   const critColor = '#ffffff';
 
                   // Estilos para Próxima Inspección
-                  let proxBg = 'rgba(255, 255, 255, 0.1)';
-                  let proxColor = '#e2e8f0';
+                  let proxBg = 'rgba(56, 189, 248, 0.15)';
+                  let proxColor = '#38bdf8';
 
-                  if (prox.includes('PGP-25')) {
-                    proxBg = '#be123c'; // Rojo/rosa destacado Pág. 15
+                  if (crit === '1' || prox.includes('Prioritaria') || prox.includes('1 año')) {
+                    proxBg = '#be123c'; // Rojo/rosa destacado (Criticidad 1)
                     proxColor = '#ffffff';
-                  } else if (prox.includes('PGP-26')) {
-                    proxBg = '#d97706'; // Dorado/Naranja
+                  } else if (crit === '2' || prox.includes('2 años')) {
+                    proxBg = '#d97706'; // Dorado/Naranja (Criticidad 2)
                     proxColor = '#ffffff';
-                  } else if (prox.includes('PGP-29')) {
-                    proxBg = '#15803d'; // Verde
+                  } else if (crit === '3' || prox.includes('5 años')) {
+                    proxBg = '#15803d'; // Verde (Criticidad 3)
                     proxColor = '#ffffff';
                   }
 
@@ -366,19 +386,19 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.06)'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = i % 2 === 0 ? 'rgba(255, 255, 255, 0.015)' : 'transparent'}
                     >
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                      <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 600, color: 'var(--text-tertiary)' }}>
                         {row.numero}
                       </td>
 
-                      <td style={{ padding: '12px 14px', fontWeight: 800, color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '8px 8px', fontWeight: 800, color: '#38bdf8', whiteSpace: 'nowrap' }}>
                         {row.tag}
                       </td>
 
-                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '8px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                         {row.sector}
                       </td>
 
-                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '8px 8px', whiteSpace: 'normal', maxWidth: '240px', wordBreak: 'break-word' }}>
                         {row.ruta_pdf_local || row.ruta_pdf_drive ? (
                           <a
                             href={row.ruta_pdf_drive || `http://localhost:8000/${row.ruta_pdf_local}`}
@@ -390,25 +410,26 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                               textDecoration: 'underline',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '0.3rem'
+                              gap: '0.2rem',
+                              lineHeight: '1.2'
                             }}
-                            title="Abrir Reporte PDF"
+                            title={`Abrir Reporte PDF (${row.informe})`}
                           >
-                            📄 {row.informe}
+                            📄 {row.equipo_nombre || row.informe}
                           </a>
                         ) : (
-                          <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                            {row.informe}
+                          <span style={{ color: '#e2e8f0', fontWeight: 600, lineHeight: '1.2' }}>
+                            {row.equipo_nombre || row.informe || '-'}
                           </span>
                         )}
                       </td>
 
                       {/* RECOM */}
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 4px', textAlign: 'center' }}>
                         <span style={{
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
                           fontWeight: 700,
                           backgroundColor: row.recom === 'SI' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
                           color: row.recom === 'SI' ? '#34d399' : '#94a3b8'
@@ -418,11 +439,11 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                       </td>
 
                       {/* ACCIONES CORRECTIVAS */}
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 4px', textAlign: 'center' }}>
                         <span style={{
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
                           fontWeight: 700,
                           backgroundColor: row.acciones_correctivas === 'SI' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
                           color: row.acciones_correctivas === 'SI' ? '#fbbf24' : '#94a3b8'
@@ -432,11 +453,11 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                       </td>
 
                       {/* ACCIONES PREVENTIVAS */}
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 4px', textAlign: 'center' }}>
                         <span style={{
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
                           fontWeight: 700,
                           backgroundColor: row.acciones_preventivas === 'SI' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
                           color: row.acciones_preventivas === 'SI' ? '#38bdf8' : '#94a3b8'
@@ -446,27 +467,27 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                       </td>
 
                       {/* COMENTARIOS */}
-                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', minWidth: '180px' }}>
+                      <td style={{ padding: '8px 8px', color: 'var(--text-secondary)', maxWidth: '160px', fontSize: '0.75rem', lineHeight: '1.2' }}>
                         {row.comentarios}
                       </td>
 
                       {/* OBSERVACIONES */}
-                      <td style={{ padding: '12px 14px', color: '#cbd5e1', fontWeight: row.observaciones ? 600 : 400, minWidth: '220px' }}>
+                      <td style={{ padding: '8px 8px', color: '#cbd5e1', fontWeight: row.observaciones ? 600 : 400, maxWidth: '180px', fontSize: '0.75rem', lineHeight: '1.2' }}>
                         {row.observaciones || '-'}
                       </td>
 
                       {/* NIVEL CRITICIDAD */}
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 4px', textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-block',
-                          width: '26px',
-                          height: '26px',
-                          lineHeight: '26px',
+                          width: '22px',
+                          height: '22px',
+                          lineHeight: '22px',
                           borderRadius: '50%',
                           backgroundColor: critBg,
                           color: critColor,
                           fontWeight: 800,
-                          fontSize: '0.85rem',
+                          fontSize: '0.78rem',
                           boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
                         }}>
                           {crit}
@@ -474,15 +495,15 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                       </td>
 
                       {/* PROXIMA INSPECCION */}
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 8px', textAlign: 'center' }}>
                         <span style={{
-                          padding: '4px 10px',
-                          borderRadius: '8px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
                           backgroundColor: proxBg,
                           color: proxColor,
                           fontWeight: 800,
-                          fontSize: '0.8rem',
-                          letterSpacing: '0.02em',
+                          fontSize: '0.75rem',
+                          letterSpacing: '0.01em',
                           whiteSpace: 'nowrap',
                           boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                         }}>
@@ -491,7 +512,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                       </td>
 
                       {/* ACCIONES DE INTERACCIÓN DIRECTA */}
-                      <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '8px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <button
                           onClick={() => {
                             if (onSelectEquipoAndTab) {

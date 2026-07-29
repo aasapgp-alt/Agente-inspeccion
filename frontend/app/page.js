@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import InspectionPanel from '../components/InspectionPanel';
 import ManualPanel from '../components/ManualPanel';
@@ -22,13 +22,37 @@ export default function Home() {
 }
 
 function DashboardContent() {
-  const { user, loading, logout } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const [equipoSeleccionado, setEquipoSeleccionado] = useState(null);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState(null);
+  const [empresas, setEmpresas] = useState([]);
   const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState('');
   const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL, FACTORY, HISTORY, REPORTS, SETTINGS, MINUTA
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  // Cargar lista de empresas para resolver el nombre completo
+  useEffect(() => {
+    async function loadEmpresas() {
+      const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
+      if (!activeToken) return;
+      try {
+        const res = await fetch('http://localhost:8000/api/empresas', {
+          headers: { 'Authorization': `Bearer ${activeToken}` }
+        });
+        if (res.ok) {
+          const list = await res.json();
+          setEmpresas(list);
+        }
+      } catch (err) {
+        console.error('Error cargando empresas:', err);
+      }
+    }
+    loadEmpresas();
+  }, [token]);
+
+  const empresaActivaObj = empresas.find(e => String(e.id) === String(empresaSeleccionada));
+  const nombreEmpresaActiva = empresaActivaObj ? empresaActivaObj.nombre : null;
 
   // Inicialización diferida: la fecha puede diferir entre servidor y cliente,
   // por eso se marca con suppressHydrationWarning en el render.
@@ -78,7 +102,7 @@ function DashboardContent() {
 
       <div className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
 
-        {/* Cabecera global: campaña, pestañas y perfil */}
+        {/* Cabecera global: campaña, pestañas, empresa seleccionada y perfil */}
         <header className="app-header">
           <div>
             <div className="eyebrow">Campaña PGP 2026 · En curso</div>
@@ -93,6 +117,29 @@ function DashboardContent() {
                 </button>
               ))}
             </nav>
+          </div>
+
+          {/* Badge central destacado de la Empresa Seleccionada */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            backgroundColor: nombreEmpresaActiva ? 'rgba(56, 189, 248, 0.14)' : 'rgba(255, 255, 255, 0.04)',
+            border: nombreEmpresaActiva ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '7px 18px',
+            borderRadius: '24px',
+            boxShadow: nombreEmpresaActiva ? '0 0 15px rgba(56, 189, 248, 0.25)' : 'none',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+          }}>
+            <span style={{ fontSize: '1.1rem' }}>🏢</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-tertiary)', fontWeight: 700, letterSpacing: '0.5px' }}>
+                Empresa Activa
+              </span>
+              <span style={{ fontSize: '0.92rem', fontWeight: 800, color: nombreEmpresaActiva ? '#38bdf8' : 'var(--text-secondary)' }}>
+                {nombreEmpresaActiva || 'Todas las Empresas'}
+              </span>
+            </div>
           </div>
 
           <div className="header-right" style={{ display: 'flex', alignItems: 'center' }}>

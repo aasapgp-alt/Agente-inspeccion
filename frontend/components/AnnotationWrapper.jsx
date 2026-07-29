@@ -13,6 +13,7 @@ export default function AnnotationWrapper(props) {
     onSubmit,
     renderHighlight,
     renderEditor,
+    zoom = 1,
     style
   } = props;
 
@@ -32,8 +33,9 @@ export default function AnnotationWrapper(props) {
   const typeRef = useRef(type);
   const colorRef = useRef(value?.geometry?.color || '#ef4444');
   const lineWidthRef = useRef(value?.geometry?.lineWidth || 2);
+  const zoomRef = useRef(zoom);
 
-  // Sync refs to avoid re-binding events on value/type changes
+  // Sync refs to avoid re-binding events on value/type/zoom changes
   useEffect(() => {
     typeRef.current = type;
   }, [type]);
@@ -42,6 +44,50 @@ export default function AnnotationWrapper(props) {
     colorRef.current = value?.geometry?.color || '#ef4444';
     lineWidthRef.current = value?.geometry?.lineWidth || 2;
   }, [value]);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    if (canvas) {
+      canvas.calcOffset();
+    }
+  }, [zoom, canvas]);
+
+  // Helper to compute exact pointer coordinates relative to canvas internal space
+  const getPointer = (o) => {
+    if (!canvas) return { x: 0, y: 0 };
+    canvas.calcOffset();
+    const e = o.e || o;
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+    if (clientX === undefined) {
+      if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+      } else if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      }
+    }
+
+    const currentZoom = zoomRef.current || 1;
+    const w = canvas.getWidth();
+    const h = canvas.getHeight();
+
+    const targetEl = imageRef.current || canvasRef.current;
+    if (targetEl && clientX !== undefined && clientY !== undefined) {
+      const rect = targetEl.getBoundingClientRect();
+      const x = Math.max(0, Math.min(w, (clientX - rect.left) / currentZoom));
+      const y = Math.max(0, Math.min(h, (clientY - rect.top) / currentZoom));
+      return { x, y };
+    }
+
+    const p = canvas.getPointer(e);
+    if (p && !isNaN(p.x) && !isNaN(p.y)) {
+      return { x: Math.max(0, Math.min(w, p.x)), y: Math.max(0, Math.min(h, p.y)) };
+    }
+
+    return { x: 0, y: 0 };
+  };
 
   const createArrow = (x1, y1, x2, y2, color, width) => {
     const dx = x2 - x1;
@@ -95,8 +141,11 @@ export default function AnnotationWrapper(props) {
     if (!imageRef.current || !canvas) return;
     const width = imageRef.current.offsetWidth || imageRef.current.clientWidth || imageRef.current.getBoundingClientRect().width;
     const height = imageRef.current.offsetHeight || imageRef.current.clientHeight || imageRef.current.getBoundingClientRect().height;
-    canvas.setDimensions({ width, height });
-    canvas.renderAll();
+    if (width > 0 && height > 0) {
+      canvas.setDimensions({ width, height });
+      canvas.calcOffset();
+      canvas.renderAll();
+    }
     // Store natural dimensions as coordinate reference
     naturalSizeRef.current = {
       width: imageRef.current.naturalWidth || width,
@@ -153,6 +202,143 @@ export default function AnnotationWrapper(props) {
     };
   }, []);
 
+  // Sync annotations array onto Fabric canvas as native Fabric objects
+  useEffect(() => {
+    if (!canvas) return;
+
+    canvas.clear();
+    canvas.backgroundColor = 'transparent';
+
+    const w = canvas.getWidth();
+    const h = canvas.getHeight();
+    if (!w || !h) return;
+
+    (annotations || []).forEach((ann) => {
+      const { geometry, data } = ann;
+      if (!geometry) return;
+
+      const color = geometry.color || '#ef4444';
+      const width = geometry.lineWidth || 2;
+
+      let obj = null;
+
+      if (geometry.type === 'RECTANGLE') {
+        obj = new fabric.Rect({
+          left: (geometry.x / 100) * w,
+          top: (geometry.y / 100) * h,
+          width: (geometry.width / 100) * w,
+          height: (geometry.height / 100) * h,
+          stroke: color,
+          strokeWidth: width,
+          fill: 'transparent',
+          selectable: false,
+          evented: false
+        });
+      } else if (geometry.type === 'CIRCLE') {
+        obj = new fabric.Ellipse({
+          left: (geometry.x / 100) * w,
+          top: (geometry.y / 100) * h,
+          rx: ((geometry.width / 2) / 100) * w,
+          ry: ((geometry.height / 2) / 100) * h,
+          stroke: color,
+          strokeWidth: width,
+          fill: 'transparent',
+          selectable: false,
+          evented: false
+        });
+      } else if (geometry.type === 'LINE') {
+        const x1 = geometry.x1 !== undefined ? geometry.x1 : (geometry.x || 0);
+        const y1 = geometry.y1 !== undefined ? geometry.y1 : (geometry.y || 0);
+        const x2 = geometry.x2 !== undefined ? geometry.x2 : x1;
+        const y2 = geometry.y2 !== undefined ? geometry.y2 : y1;
+        obj = new fabric.Line([
+          (x1 / 100) * w,
+          (y1 / 100) * h,
+          (x2 / 100) * w,
+          (y2 / 100) * h
+        ], {
+          stroke: color,
+          strokeWidth: width,
+          selectable: false,
+          evented: false
+        });
+      } else if (geometry.type === 'ARROW') {
+        const x1 = geometry.x1 !== undefined ? geometry.x1 : (geometry.x || 0);
+        const y1 = geometry.y1 !== undefined ? geometry.y1 : (geometry.y || 0);
+        const x2 = geometry.x2 !== undefined ? geometry.x2 : x1;
+        const y2 = geometry.y2 !== undefined ? geometry.y2 : y1;
+        obj = createArrow(
+          (x1 / 100) * w,
+          (y1 / 100) * h,
+          (x2 / 100) * w,
+          (y2 / 100) * h,
+          color,
+          width
+        );
+      } else if (geometry.type === 'TEXT') {
+        const textStr = data?.text || 'Texto';
+        const boxLeft = (geometry.x / 100) * w;
+        const boxTop = (geometry.y / 100) * h;
+        const boxW = Math.max(40, ((geometry.width || 15) / 100) * w);
+        const boxH = Math.max(20, ((geometry.height || 8) / 100) * h);
+
+        const rect = new fabric.Rect({
+          left: boxLeft,
+          top: boxTop,
+          width: boxW,
+          height: boxH,
+          stroke: color,
+          strokeWidth: 1,
+          strokeDashArray: [3, 3],
+          fill: 'rgba(0, 0, 0, 0.6)',
+          rx: 4,
+          ry: 4,
+          selectable: false,
+          evented: false
+        });
+
+        const txt = new fabric.Text(textStr, {
+          left: boxLeft + boxW / 2,
+          top: boxTop + boxH / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: color,
+          fontSize: 12,
+          fontWeight: 'bold',
+          selectable: false,
+          evented: false
+        });
+
+        obj = new fabric.Group([rect, txt], {
+          selectable: false,
+          evented: false
+        });
+      } else if (geometry.type === 'FREEHAND') {
+        const pts = (geometry.points || []).map(([px, py]) => ({
+          x: (px / 100) * w,
+          y: (py / 100) * h
+        }));
+        if (pts.length > 0) {
+          obj = new fabric.Polyline(pts, {
+            stroke: color,
+            strokeWidth: width,
+            fill: 'transparent',
+            selectable: false,
+            evented: false,
+            strokeLineCap: 'round',
+            strokeLineJoin: 'round'
+          });
+        }
+      }
+
+      if (obj) {
+        canvas.add(obj);
+      }
+    });
+
+    canvas.renderAll();
+  }, [annotations, canvas]);
+
   // Set up Drawing event listeners
   useEffect(() => {
     if (!canvas) return;
@@ -160,7 +346,7 @@ export default function AnnotationWrapper(props) {
     const handleMouseDown = (o) => {
       if (showEditor) return;
 
-      const pointer = canvas.getScenePoint(o.e);
+      const pointer = getPointer(o.e);
       isDrawingRef.current = true;
 
       const currentTool = typeRef.current;
@@ -258,7 +444,7 @@ export default function AnnotationWrapper(props) {
     const handleMouseMove = (o) => {
       if (!isDrawingRef.current || !activeObjRef.current) return;
 
-      const pointer = canvas.getScenePoint(o.e);
+      const pointer = getPointer(o.e);
       const start = startPointRef.current;
       const currentTool = typeRef.current;
 
@@ -329,7 +515,7 @@ export default function AnnotationWrapper(props) {
       if (!isDrawingRef.current) return;
       isDrawingRef.current = false;
 
-      const pointer = canvas.getScenePoint(o.e);
+      const pointer = getPointer(o.e);
       const currentTool = typeRef.current;
 
       // Check if the drawing size is significant (ignores accidental clicks)
@@ -557,14 +743,7 @@ export default function AnnotationWrapper(props) {
           <canvas ref={canvasRef} />
         </div>
 
-        {/* SVG Highlight Overlays */}
-        {annotations && annotations.map((ann, index) => {
-          return renderHighlight({
-            key: ann.data?.id || index,
-            annotation: ann,
-            active: false
-          });
-        })}
+
       </div>
 
       {/* Note Editor Overlay — rendered via Portal so position:fixed escapes transform:scale() */}
