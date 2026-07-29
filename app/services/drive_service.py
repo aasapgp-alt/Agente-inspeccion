@@ -345,15 +345,22 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
             clean_words_norm = [clean_word(w) for w in clean_words]
             sugeridas_raw = []
 
+            # Si se especificó una carpeta de área padre (carpeta_id), filtrar candidatos ÚNICAMENTE a hijos de esa área
+            candidate_rows = cache_rows
+            if carpeta_id and carpeta_id != "root":
+                direct_children = [r for r in cache_rows if r.get("parent_id") == carpeta_id]
+                if direct_children:
+                    candidate_rows = direct_children
+
             if clean_words_norm:
-                for r in cache_rows:
+                for r in candidate_rows:
                     title_without_prefix = remover_prefijo_secuencia(r["title"])
                     title_norm = clean_word(title_without_prefix)
                     if any(w in title_norm for w in clean_words_norm):
                         sugeridas_raw.append(r)
 
-            if not sugeridas_raw:
-                # Fallback: listar hijos directos en caché
+            if not sugeridas_raw and carpeta_id:
+                # Fallback: listar hijos directos en caché de esa área
                 sugeridas_raw = [r for r in cache_rows if r["parent_id"] == carpeta_id]
         else:
             # No hay cache: intentar con la API de Drive en tiempo real (solo si está disponible)
@@ -385,7 +392,6 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
                 overlap_score = len(overlap) / len(folder_words.union(eq_words))
 
             # Bonus fuerte si la carpeta contiene un tag numérico específico del equipo
-            # (ej: "431-032" en el título) → máxima prioridad
             tag_bonus = 0.0
             for tag in numeric_tags:
                 tag_norm = clean_word(tag)
@@ -456,17 +462,38 @@ def obtener_siguiente_secuencia(parent_id: str) -> int:
 
 def buscar_carpeta_area_por_nombre(ubicacion_nombre: str) -> Optional[str]:
     try:
+        busqueda_norm = _normalizar_texto(ubicacion_nombre)
+        palabras_busqueda = [w for w in re.split(r'\W+', busqueda_norm) if len(w) >= 3]
+        if not palabras_busqueda:
+            palabras_busqueda = [busqueda_norm]
+            
+        # 1. Intentar consultar en el caché local primero para hallar la carpeta de Área
+        try:
+            from app.services.db_service import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT drive_id, nombre FROM drive_folders_cache")
+                cache_folders = cursor.fetchall()
+                mejor_match = None
+                mejor_score = 0
+                for fid, fname in cache_folders:
+                    fname_norm = _normalizar_texto(fname)
+                    score = sum(1 for p in palabras_busqueda if p in fname_norm)
+                    if score > mejor_score:
+                        mejor_score = score
+                        mejor_match = fid
+                if mejor_match and mejor_score >= 1:
+                    return mejor_match
+        except Exception as cache_err:
+            logger.warning(f"Error buscando área en cache: {cache_err}")
+
+        # Fallback a raíz de Drive
         from app.services.db_service import get_config_value_db
         root_folder_id = get_config_value_db("drive_folder_id") or "root"
         
         folders = listar_carpetas(root_folder_id)
         if not folders:
             return None
-            
-        busqueda_norm = _normalizar_texto(ubicacion_nombre)
-        palabras_busqueda = [w for w in re.split(r'\W+', busqueda_norm) if len(w) >= 3]
-        if not palabras_busqueda:
-            palabras_busqueda = [busqueda_norm]
             
         mejor_match = None
         mejor_score = 0
@@ -486,6 +513,32 @@ def buscar_carpeta_area_por_nombre(ubicacion_nombre: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error buscando carpeta de área para {ubicacion_nombre}: {e}")
         return None
+
+def obtener_ruta_breadcrumb(folder_id: str) -> str:
+    if not folder_id or folder_id in ("root", "local"):
+        return "Almacenamiento Local"
+    try:
+        from app.services.db_service import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            path_parts = []
+            curr = folder_id
+            visited = set()
+            while curr and curr not in visited and len(path_parts) < 6:
+                visited.add(curr)
+                cursor.execute("SELECT drive_id, nombre, parent_id FROM drive_folders_cache WHERE drive_id = ?", (curr,))
+                row = cursor.fetchone()
+                if not row:
+                    break
+                name = row[1] if row[1] else "Carpeta"
+                if name not in ("INSP PGP INFORMES Y MINUTA", "root"):
+                    path_parts.append(name)
+                curr = row[2]
+            if path_parts:
+                return " ➔ ".join(reversed(path_parts))
+    except Exception as e:
+        logger.warning(f"Error generando breadcrumb para {folder_id}: {e}")
+    return "Google Drive"
 
 def crear_estructura_equipo(parent_id: str, nombre_equipo: str, campanias: List[str], subcarpetas: List[str]) -> dict:
     drive = get_drive_instance()

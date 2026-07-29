@@ -36,7 +36,11 @@ async def send_message(token: str, chat_id: int, text: str, reply_markup: dict =
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    await send_telegram_request(token, "sendMessage", payload)
+    res = await send_telegram_request(token, "sendMessage", payload)
+    if not res or not res.get("ok"):
+        # Fallback sin parse_mode por si falla debido a sintaxis Markdown desequilibrada (ej: _ o *)
+        payload.pop("parse_mode", None)
+        await send_telegram_request(token, "sendMessage", payload)
 
 async def download_telegram_file(token: str, file_id: str) -> Optional[bytes]:
     # 1. Obtener file_path
@@ -176,7 +180,7 @@ async def handle_update(token: str, update: dict):
 
         # Flujo de estados del bot
         if session["state"] == "CHAT_GEMINI":
-            if text.lower() in ("/salir", "salir", "/stop"):
+            if text.lower() in ("/salir", "salir", "/stop", "salir del chat"):
                 session["state"] = "IDLE"
                 session["chat_history"] = []
                 eq_id = session.get("equipo_id")
@@ -185,7 +189,7 @@ async def handle_update(token: str, update: dict):
                     if equipo:
                         await mostrar_detalle_equipo(token, chat_id, equipo, session)
                         return
-                await send_message(token, chat_id, "👋 Saliste del chat técnico.", menu_principal_keyboard())
+                await send_message(token, chat_id, "👋 Saliste del chat técnico.", menu_principal_reply_keyboard())
             else:
                 await procesar_chat_gemini(token, chat_id, text, session)
             return
@@ -194,7 +198,7 @@ async def handle_update(token: str, update: dict):
             if "photo" in message:
                 photo_file_id = message["photo"][-1]["file_id"] # Usar la resolución más alta
                 await procesar_subida_foto(token, chat_id, photo_file_id, session)
-            elif text.lower() in ("/salir", "finalizar", "terminar", "/stop"):
+            elif text.lower() in ("/salir", "salir", "finalizar", "finalizar carga", "terminar", "/stop"):
                 session["state"] = "IDLE"
                 # Si venía de un itinerario, marcar como completado
                 if session.get("itinerary") and session["itinerary_idx"] >= 0:
@@ -215,27 +219,40 @@ async def handle_update(token: str, update: dict):
                 await send_message(token, chat_id, "📸 Por favor, envía una o más fotos para el equipo seleccionado.\nCuando termines, escribe `/salir` o presiona el botón para finalizar.", keyboard_finalizar_inspeccion())
             return
 
+        if session["state"] == "SEARCH_WAITING":
+            if text.lower() in ("/salir", "salir", "/stop", "cancelar"):
+                session["state"] = "IDLE"
+                await send_message(token, chat_id, "🔍 Búsqueda cancelada.", menu_principal_reply_keyboard())
+            else:
+                session["state"] = "IDLE"
+                await buscar_equipos(token, chat_id, text)
+            return
+
         # Comandos generales y Reply Keyboard
         text_lower = text.lower()
-        if text.startswith("/itinerario") or text_lower == "itinerario" or "itinerario de hoy" in text_lower:
+        if text.startswith("/itinerario") or text_lower in ("itinerario", "📅 mi itinerario de hoy", "itinerario de hoy", "mi itinerario de hoy"):
             await mostrar_itinerario(token, chat_id, session)
-        elif text.startswith("/buscar") or text_lower.startswith("buscar ") or "buscar equipo" in text_lower:
+        elif text == "🔍 Buscar Equipo" or text_lower in ("buscar equipo", "🔍 buscar equipo") or text == "/buscar":
+            session["state"] = "SEARCH_WAITING"
+            await send_message(token, chat_id, "🔍 *Búsqueda de Equipos:*\n\nPor favor, escribe el **código** (ej: `621-502`) o **nombre** del equipo que deseas consultar:")
+        elif text.startswith("/buscar ") or text_lower.startswith("buscar "):
             parts = text.split(maxsplit=1)
             query = parts[1].strip() if len(parts) > 1 else ""
             await buscar_equipos(token, chat_id, query)
-        elif text.startswith("/ayuda") or "ayuda" in text_lower or text.startswith("/help"):
+        elif text.startswith("/ayuda") or text_lower in ("ayuda", "❓ ayuda / comandos", "ayuda / comandos") or text.startswith("/help"):
             await mostrar_ayuda(token, chat_id)
-        elif text.startswith("/cuenta") or "mi cuenta" in text_lower or "vincular" in text_lower:
+        elif text.startswith("/cuenta") or text_lower in ("mi cuenta", "🔑 mi cuenta / vincular", "mi cuenta / vincular") or text == "/vincular":
             await mostrar_info_cuenta(token, chat_id, session)
         elif text.startswith("/salir"):
-            await send_message(token, chat_id, "Ya estás en el menú principal.", menu_principal_reply_keyboard())
+            session["state"] = "IDLE"
+            await send_message(token, chat_id, "Estás en el menú principal.", menu_principal_reply_keyboard())
         else:
             # Si el texto coincide con un código de equipo exacto
             equipo = obtener_equipo_por_codigo(text)
             if equipo:
                 await mostrar_detalle_equipo(token, chat_id, equipo, session)
             else:
-                await send_message(token, chat_id, "Comando no reconocido. ¿Qué deseas hacer?", menu_principal_reply_keyboard())
+                await send_message(token, chat_id, "Comando o código no reconocido. ¿Qué deseas hacer?", menu_principal_reply_keyboard())
 
     elif callback_query:
         chat_id = callback_query["message"]["chat"]["id"]
@@ -271,11 +288,13 @@ async def handle_update(token: str, update: dict):
             eq_id = int(data.split("_")[1])
             await mostrar_historial_equipo(token, chat_id, eq_id)
         elif data == "menu_principal":
-            await send_message(token, chat_id, "Menú Principal", menu_principal_keyboard())
+            session["state"] = "IDLE"
+            await send_message(token, chat_id, "🏠 *Menú Principal*", menu_principal_reply_keyboard())
         elif data == "ver_itinerario":
             await mostrar_itinerario(token, chat_id, session)
         elif data == "buscar_equipo":
-            await send_message(token, chat_id, "🔍 Escribe `/buscar <término>` o directamente el código del equipo para consultar su información.")
+            session["state"] = "SEARCH_WAITING"
+            await send_message(token, chat_id, "🔍 *Búsqueda de Equipos:*\n\nPor favor, escribe el **código** (ej: `621-502`) o **nombre** del equipo que deseas consultar:")
         elif data == "siguiente_itinerario":
             # Avanzar en el itinerario
             session["itinerary_idx"] += 1
@@ -283,7 +302,7 @@ async def handle_update(token: str, update: dict):
                 next_eq = session["itinerary"][session["itinerary_idx"]]
                 await iniciar_inspeccion_equipo(token, chat_id, next_eq["equipo_id"], session)
             else:
-                await send_message(token, chat_id, "🎉 ¡Has completado todos los equipos de tu itinerario de hoy!", menu_principal_keyboard())
+                await send_message(token, chat_id, "🎉 ¡Has completado todos los equipos de tu itinerario de hoy!", menu_principal_reply_keyboard())
 
 # Lógica del flujo
 async def transcribir_nota_de_voz(token: str, file_id: str) -> Optional[str]:
@@ -511,17 +530,40 @@ async def iniciar_inspeccion_equipo(token: str, chat_id: int, eq_id: int, sessio
                 session["itinerary_idx"] = i
                 break
                 
-    # Preguntar por subcarpeta
-    mensaje = f"📸 *Subir fotos para {equipo['codigo']}:*\nSelecciona en qué subcarpeta deseas cargar las imágenes:"
-    botones = [
-        [
-            {"text": "📥 Succión", "callback_data": f"select_subfolder_{eq_id}_Succion"},
-            {"text": "📤 Impulsión", "callback_data": f"select_subfolder_{eq_id}_Impulsion"}
-        ],
-        [
-            {"text": "📂 Carpeta General (Raíz)", "callback_data": f"select_subfolder_{eq_id}_General"}
+    # Intentar obtener subcarpetas reales del equipo en Drive
+    campania = db_service.get_config_value_db("reporte_campania", "PGP 2026")
+    area_folder_id = drive_service.buscar_carpeta_area_por_nombre(equipo.get("area", ""))
+    sugeridas = drive_service.sugerir_carpetas(equipo["codigo"], equipo["nombre"], area_folder_id) if area_folder_id else []
+    eq_folder_id = sugeridas[0]["id"] if (sugeridas and sugeridas[0].get("match_score", 0) > 1.5) else None
+    
+    subcarpetas_existentes = []
+    if eq_folder_id:
+        camp_folder_id = drive_service.buscar_carpeta(campania, eq_folder_id)
+        if camp_folder_id:
+            subcarpetas_existentes = drive_service.listar_carpetas(camp_folder_id)
+            
+    mensaje = f"📸 *Subir fotos para {equipo['codigo']} ({campania}):*\nSelecciona en qué subcarpeta deseas cargar las imágenes:"
+    
+    botones = []
+    if subcarpetas_existentes:
+        row = []
+        for sf in subcarpetas_existentes[:4]:
+            t = sf["title"]
+            icono = "📥" if "succ" in drive_service._normalizar_texto(t) else ("📤" if "imp" in drive_service._normalizar_texto(t) else "📂")
+            row.append({"text": f"{icono} {t[:22]}", "callback_data": f"select_subfolder_{eq_id}_{t}"})
+            if len(row) == 2:
+                botones.append(row)
+                row = []
+        if row:
+            botones.append(row)
+    else:
+        botones = [
+            [
+                {"text": "📥 Succión", "callback_data": f"select_subfolder_{eq_id}_Succión"},
+                {"text": "📤 Impulsión", "callback_data": f"select_subfolder_{eq_id}_Impulsión"}
+            ]
         ]
-    ]
+    botones.append([{"text": "📂 Carpeta Raíz de Campaña", "callback_data": f"select_subfolder_{eq_id}_General"}])
     await send_message(token, chat_id, mensaje, {"inline_keyboard": botones})
 
 async def confirmar_subcarpeta_inspeccion(token: str, chat_id: int, eq_id: int, sub: str, session: dict):
@@ -552,7 +594,7 @@ async def procesar_subida_foto(token: str, chat_id: int, file_id: str, session: 
     campania = db_service.get_config_value_db("reporte_campania", "PGP 2026")
     
     # Lógica de resolución de carpeta destino en Drive
-    folder_id = await resolver_o_crear_carpeta_destino_drive(
+    folder_id, path_breadcrumb = await resolver_o_crear_carpeta_destino_drive(
         equipo_id=session["equipo_id"],
         codigo=session["equipo_codigo"],
         nombre=session["equipo_nombre"],
@@ -562,8 +604,8 @@ async def procesar_subida_foto(token: str, chat_id: int, file_id: str, session: 
     
     if not folder_id:
         await send_message(token, chat_id, "❌ No se pudo resolver la carpeta de Google Drive. Se guardará localmente.")
-        # Usamos carpeta temporal local si falla Drive
         folder_id = "local"
+        path_breadcrumb = "Almacenamiento Local"
         
     # 3. Subir foto
     filename = f"telegram_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
@@ -578,14 +620,18 @@ async def procesar_subida_foto(token: str, chat_id: int, file_id: str, session: 
         else:
             drive_file_id = "local_mock_id"
             
-        # 4. Guardar en memoria de imágenes de la inspección (Campaña 2026)
+        # 4. Guardar en memoria de imágenes de la inspección
         from app.services.memory_service import obtener_memoria_imagenes, guardar_memoria_imagenes
         lista_imagenes = obtener_memoria_imagenes(session["equipo_id"])
         if drive_file_id not in lista_imagenes:
             lista_imagenes.append(drive_file_id)
             guardar_memoria_imagenes(session["equipo_id"], lista_imagenes)
             
-        await send_message(token, chat_id, f"✅ *Foto subida con éxito:*\n`{filename}`\nCarpeta: {session['subfolder']}")
+        mensaje_exito = (
+            f"✅ *Foto subida con éxito:*\n`{filename}`\n\n"
+            f"📍 *Ubicación en Google Drive:*\n`{path_breadcrumb}`"
+        )
+        await send_message(token, chat_id, mensaje_exito)
     except Exception as e:
         logger.error(f"Error subiendo foto a Drive: {e}")
         await send_message(token, chat_id, "❌ Error al subir la foto a Google Drive.")
@@ -593,17 +639,17 @@ async def procesar_subida_foto(token: str, chat_id: int, file_id: str, session: 
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-async def resolver_o_crear_carpeta_destino_drive(equipo_id: int, codigo: str, nombre: str, campania: str, subcarpeta: str) -> Optional[str]:
+async def resolver_o_crear_carpeta_destino_drive(equipo_id: int, codigo: str, nombre: str, campania: str, subcarpeta: str) -> tuple[Optional[str], str]:
     # 1. Obtener la carpeta raíz del PGP
     root_folder_id = db_service.get_config_value_db("drive_folder_id") or "root"
     
     # 2. Obtener el área del equipo
     equipo = db_service.obtener_equipo_db(equipo_id)
     if not equipo:
-        return None
+        return None, "Equipo no encontrado"
     area_nombre = equipo.get("area")
     if not area_nombre:
-        return root_folder_id
+        return root_folder_id, drive_service.obtener_ruta_breadcrumb(root_folder_id)
         
     # 3. Buscar la carpeta del Área
     area_folder_id = drive_service.buscar_carpeta_area_por_nombre(area_nombre)
@@ -612,10 +658,8 @@ async def resolver_o_crear_carpeta_destino_drive(equipo_id: int, codigo: str, no
         area_folder_id = drive_service.obtener_o_crear_carpeta_drive(area_nombre, root_folder_id)
         
     # 4. Buscar la carpeta del Equipo bajo el área
-    # Usar sugerir_carpetas o buscar en caché local
     eq_folder_id = None
     sugeridas = drive_service.sugerir_carpetas(codigo, nombre, area_folder_id)
-    # Si tenemos un match alto (score > 1.5 por coincidencia de tag o código), lo tomamos
     for s in sugeridas:
         if s.get("match_score", 0) > 1.5:
             eq_folder_id = s["id"]
@@ -627,20 +671,31 @@ async def resolver_o_crear_carpeta_destino_drive(equipo_id: int, codigo: str, no
             parent_id=area_folder_id,
             nombre_equipo=f"{codigo} {nombre}",
             campanias=[campania],
-            subcarpetas=["Succion", "Impulsión"]
+            subcarpetas=["Succión", "Impulsión"]
         )
         eq_folder_id = res_drive.get("id")
         
     # 5. Resolver carpeta de campaña (ej: PGP 2026) bajo el equipo
     camp_folder_id = drive_service.obtener_o_crear_carpeta_drive(campania, eq_folder_id)
     
-    # 6. Resolver subcarpeta si aplica
+    # 6. Resolver subcarpeta buscando coincidencias flexibles en carpetas existentes
+    final_folder_id = camp_folder_id
     if subcarpeta and subcarpeta != "General":
-        final_folder_id = drive_service.obtener_o_crear_carpeta_drive(subcarpeta, camp_folder_id)
-    else:
-        final_folder_id = camp_folder_id
-        
-    return final_folder_id
+        sub_existentes = drive_service.listar_carpetas(camp_folder_id)
+        sub_target_norm = drive_service._normalizar_texto(subcarpeta)
+        match_sub_id = None
+        for sf in sub_existentes:
+            sf_norm = drive_service._normalizar_texto(sf['title'])
+            if sub_target_norm in sf_norm or sf_norm in sub_target_norm:
+                match_sub_id = sf['id']
+                break
+        if match_sub_id:
+            final_folder_id = match_sub_id
+        else:
+            final_folder_id = drive_service.obtener_o_crear_carpeta_drive(subcarpeta, camp_folder_id)
+            
+    path_breadcrumb = drive_service.obtener_ruta_breadcrumb(final_folder_id)
+    return final_folder_id, path_breadcrumb
 
 # Chat con Gemini
 async def iniciar_chat_gemini(token: str, chat_id: int, eq_id: int, session: dict):
