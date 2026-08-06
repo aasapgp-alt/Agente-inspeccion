@@ -1,0 +1,22 @@
+{
+  "name": "Agente Inspector PGP",
+  "short_name": "Inspector PGP",
+  "description": "Plataforma de inspección técnica industrial con IA y soporte offline para planta",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/sulvy_logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/sulvy_logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

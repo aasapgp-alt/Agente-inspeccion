@@ -10,38 +10,58 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('auth_token');
-    if (storedToken) {
-      setToken(storedToken);
-      // Validar token con el backend
-      fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${storedToken}`
+    let isMounted = true;
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
+    if (!storedToken) {
+      setLoading(false);
+      return;
+    }
+
+    setToken(storedToken);
+
+    // AbortController para timeout máximo de 3 segundos al validar token
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      if (isMounted) setLoading(false);
+    }, 3000);
+
+    fetch(`${API_BASE_URL}/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${storedToken}`
+      },
+      signal: controller.signal
+    })
+      .then(res => {
+        if (res.ok) return res.json();
+        localStorage.removeItem('auth_token');
+        if (isMounted) {
+          setToken(null);
+          setUser(null);
+        }
+        return null;
+      })
+      .then(data => {
+        if (data && isMounted) setUser(data);
+      })
+      .catch(err => {
+        console.warn("Advertencia validando sesión:", err.message);
+        localStorage.removeItem('auth_token');
+        if (isMounted) {
+          setToken(null);
+          setUser(null);
         }
       })
-        .then(res => {
-          if (res.ok) return res.json();
-          // Si no es ok (ej. 401), limpiamos sesión sin lanzar error a la consola
-          localStorage.removeItem('auth_token');
-          setToken(null);
-          setUser(null);
-          return null;
-        })
-        .then(data => {
-          if (data) setUser(data);
-        })
-        .catch(err => {
-          console.warn("Advertencia validando sesión:", err.message);
-          localStorage.removeItem('auth_token');
-          setToken(null);
-          setUser(null);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
-      setLoading(false);
-    }
+      .finally(() => {
+        clearTimeout(timeoutId);
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const login = async (username, password) => {

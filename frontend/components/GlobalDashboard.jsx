@@ -426,7 +426,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
       <h1 style={{ fontSize: '1.8rem', fontWeight: 700 }}>Panel de Control Global</h1>
 
       {/* Metrics Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.2rem' }}>
+      <div className="dashboard-metrics-grid">
         {topMetrics.map((metric, i) => (
           <div 
             key={i} 
@@ -450,7 +450,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
       <h2 style={{ fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginTop: '1rem' }}>Vista por Área / Planta</h2>
 
       {/* Factories Grid Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', paddingBottom: '2rem' }}>
+      <div className="dashboard-factories-grid">
         {factories.map((factory, i) => (
           <div key={i} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>{factory.name}</h3>

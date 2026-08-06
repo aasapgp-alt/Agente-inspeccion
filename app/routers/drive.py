@@ -36,19 +36,75 @@ def list_carpetas(parent_id: str, current_user: dict = Depends(get_current_user)
         raise HTTPException(status_code=500, detail=str(e))
 
 import urllib.parse
+import os
+import ipaddress
+from urllib.parse import urlparse
+from app.core.dependencies import get_user_from_token
+
+ALLOWED_THUMBNAIL_DOMAINS = {
+    "lh3.googleusercontent.com", 
+    "lh4.googleusercontent.com", 
+    "lh5.googleusercontent.com", 
+    "lh6.googleusercontent.com", 
+    "drive.google.com"
+}
+
+def _es_url_thumbnail_segura(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        # Rechazar localhost e IPs privadas/loopback/link-local
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                return False
+        except ValueError:
+            pass  # Es un hostname de dominio
+
+        if hostname in ("localhost", "127.0.0.1", "169.254.169.254"):
+            return False
+
+        # Validar si el hostname termina en alguno de los dominios permitidos de Google
+        if any(hostname == domain or hostname.endswith("." + domain) for domain in ALLOWED_THUMBNAIL_DOMAINS) or hostname.endswith(".googleusercontent.com"):
+            return True
+
+        return False
+    except Exception:
+        return False
 
 @router.get("/proxy_thumbnail")
 def proxy_thumbnail(url: str, token: Optional[str] = Query(None), db: sqlite3.Connection = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=401, detail="Token no provisto")
+    
+    # Validar autenticación y sesión activa en BD
+    try:
+        user_info = get_user_from_token(token)
+        cursor = db.cursor()
+        cursor.execute("SELECT 1 FROM sesiones_activas WHERE token = ? AND user_id = ?", (token, user_info["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=401, detail="Sesión no válida")
+    except Exception:
+        raise HTTPException(status_code=401, detail="No autorizado o token expirado")
+
+    # Validar SSRF
+    if not _es_url_thumbnail_segura(url):
+        raise HTTPException(status_code=400, detail="URL no permitida por políticas de seguridad")
+
     try:
         import requests
-        res = requests.get(url, verify=False, timeout=10)
+        verify_ssl = not (os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("1", "true", "yes"))
+        res = requests.get(url, verify=verify_ssl, timeout=10, allow_redirects=False)
         if res.status_code == 200:
             return Response(content=res.content, media_type="image/jpeg")
         return Response(status_code=res.status_code)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Error al consultar imagen remota")
 
 @router.get("/imagenes", response_model=Dict[str, Any])
 def list_imagenes(folder_id: str, current_user: dict = Depends(get_current_user)):

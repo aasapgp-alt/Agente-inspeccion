@@ -39,18 +39,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configurar CORS
-origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-]
-
 from app.core.auth_middleware import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 
+# Configurar CORS para permitir localhost y cualquier IP de red local (ej. celulares 192.168.x.x)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

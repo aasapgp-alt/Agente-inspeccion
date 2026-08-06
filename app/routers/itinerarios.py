@@ -38,6 +38,45 @@ def get_itinerarios(fecha: Optional[str] = None, user_id: Optional[int] = None, 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/progreso")
+def get_progreso_itinerario(fecha: Optional[str] = None, user_id: Optional[int] = None, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Obtiene el porcentaje y conteo de avance en vivo de las inspecciones programadas."""
+    try:
+        target_date = fecha or date.today().isoformat()
+        
+        # Si el usuario es inspector y no especificó user_id, forzar su propio id
+        target_user_id = user_id
+        if current_user.get("rol") == "inspector" or not target_user_id:
+            if current_user.get("rol") == "inspector":
+                target_user_id = current_user.get("id")
+
+        query = "SELECT estado FROM plan_inspeccion_diaria WHERE fecha = ?"
+        params = [target_date]
+        if target_user_id:
+            query += " AND usuario_id = ?"
+            params.append(target_user_id)
+
+        cursor = db.execute(query, params)
+        rows = cursor.fetchall()
+        
+        total = len(rows)
+        completados = sum(1 for r in rows if (r["estado"] or "").upper() in ("COMPLETADO", "FINALIZADO", "OK"))
+        pendientes = total - completados
+        porcentaje = round((completados / total * 100), 1) if total > 0 else 0.0
+
+        return {
+            "fecha": target_date,
+            "total": total,
+            "completados": completados,
+            "pendientes": pendientes,
+            "porcentaje": porcentaje,
+            "usuario_id": target_user_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/")
 def create_itinerario(data: ItinerarioCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_any_role(["supervisor", "admin"]))):
     try:

@@ -6,13 +6,14 @@ import certifi
 import unicodedata
 from typing import List, Dict, Optional, Any
 
-# Monkeypatch httplib2 to bypass SSL certificate verification issues
 import httplib2
-orig_init = httplib2.Http.__init__
-def new_init(self, *args, **kwargs):
-    kwargs['disable_ssl_certificate_validation'] = True
-    orig_init(self, *args, **kwargs)
-httplib2.Http.__init__ = new_init
+# Solo aplicar deshabilitación de SSL si se especifica explícitamente la variable de entorno
+if os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("1", "true", "yes"):
+    orig_init = httplib2.Http.__init__
+    def new_init(self, *args, **kwargs):
+        kwargs['disable_ssl_certificate_validation'] = True
+        orig_init(self, *args, **kwargs)
+    httplib2.Http.__init__ = new_init
 
 os.environ["HTTPLIB2_CA_CERTS"] = certifi.where()
 

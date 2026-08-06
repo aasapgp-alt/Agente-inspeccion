@@ -69,8 +69,19 @@ def obtener_equipo_db(equipo_id: int) -> dict:
         logger.error(f"Error al obtener equipo {equipo_id}: {e}")
         return None
 
+ALLOWED_EQUIPO_COLUMNS = {
+    "ubicacion_id", "codigo", "nombre", "tag", "material", "criticidad",
+    "fluido", "presion_diseno", "temperatura_diseno", "estado_actual",
+    "activo", "fecha_instalacion", "fabricante", "modelo"
+}
+
 def actualizar_equipo_db(equipo_id: int, datos: dict) -> bool:
     try:
+        invalid_keys = set(datos.keys()) - ALLOWED_EQUIPO_COLUMNS
+        if invalid_keys:
+            logger.error(f"Intento de actualizar columnas no permitidas: {invalid_keys}")
+            return False
+            
         with get_db_connection() as conn:
             set_clause = ", ".join([f"{k} = ?" for k in datos.keys()])
             params = list(datos.values()) + [equipo_id]

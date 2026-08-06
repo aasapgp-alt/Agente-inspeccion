@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { apiService } from '../services/api';
 import VersionHistoryModal from './VersionHistoryModal';
 import AnnotationModal from './AnnotationModal';
+import VoiceDictationButton from './VoiceDictationButton';
+import { guardarInspeccionOffline } from '../utils/offlineStore';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 const DRIVE_FALLBACK_FOLDER_ID = '19OdKrn1SLDLSuMj8e73q-8tovcw-CJA_';
@@ -63,6 +65,27 @@ export default function InspectionPanel({ equipoId }) {
   const [annotatingImage, setAnnotatingImage] = useState(null);
   const [annotationsRefreshKey, setAnnotationsRefreshKey] = useState(0);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // 'drive', 'ia', or null
+
+  const cameraInputRef = useRef(null);
+
+  const handleCameraCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const base64Data = evt.target.result;
+      // Generar ID único temporal para la foto capturada con cámara
+      const tempId = `cam_${Date.now()}`;
+      setItems(prev => ({
+        ...prev,
+        images: [{ id: tempId, name: `Cam_${new Date().toLocaleTimeString()}.jpg`, size: file.size, data: base64Data }, ...prev.images]
+      }));
+      setSelectedImages(prev => [...prev, tempId]);
+      alert('📸 Foto tomada con cámara y añadida a la selección.');
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (analisis) {
@@ -361,6 +384,30 @@ export default function InspectionPanel({ equipoId }) {
       leccionAprendida = `Equipo ${equipo?.nombre || 'equipo'}: ` + changes.join(', ');
     }
 
+    const payload = {
+      equipo_id: equipoId,
+      session_id: sessionId,
+      estado: editedEstado,
+      acciones: editedAcciones,
+      diagnostico: editedDiagnostico,
+      recomendaciones: editedRecomendaciones,
+      leccion_aprendida: leccionAprendida || null,
+      image_drive_ids: selectedImages,
+      generar_pdf: generarPdf,
+      anotaciones: annotationsMap
+    };
+
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      try {
+        await guardarInspeccionOffline({ equipoId, payload });
+        alert('⚡ Modo Offline: Inspección guardada localmente en tu teléfono. Se sincronizará automáticamente cuando recuperes la conexión.');
+      } catch (err) {
+        alert('Error guardando inspección offline: ' + err.message);
+      }
+      setIsSaving(false);
+      return;
+    }
+
     try {
       const res = await authFetch(`${API_BASE_URL}/ia/guardar`, {
         method: 'POST',
@@ -368,18 +415,7 @@ export default function InspectionPanel({ equipoId }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          equipo_id: equipoId,
-          session_id: sessionId,
-          estado: editedEstado,
-          acciones: editedAcciones,
-          diagnostico: editedDiagnostico,
-          recomendaciones: editedRecomendaciones,
-          leccion_aprendida: leccionAprendida || null,
-          image_drive_ids: selectedImages,
-          generar_pdf: generarPdf,
-          anotaciones: annotationsMap
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) {
@@ -409,7 +445,13 @@ export default function InspectionPanel({ equipoId }) {
       }
     } catch (e) {
       console.error(e);
-      alert("Error al guardar");
+      // Fallback offline si falla la conexión de red
+      try {
+        await guardarInspeccionOffline({ equipoId, payload });
+        alert('⚡ Red inestable: La inspección se ha guardado localmente en tu celular. Podrás sincronizarla cuando vuelva la señal.');
+      } catch (offlineErr) {
+        alert("Error de red y no se pudo guardar localmente");
+      }
     }
     setIsSaving(false);
   };
@@ -483,6 +525,16 @@ export default function InspectionPanel({ equipoId }) {
               })()}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleCameraCapture} />
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  title="Tomar foto con la cámara del celular"
+                >
+                  📷 Cámara
+                </button>
                 {folderHistory.length > 1 && <button onClick={goBack} className="btn" style={{ padding: '0.2rem 0.5rem' }}>⬅ Atrás</button>}
                 <button
                   type="button"
@@ -873,9 +925,16 @@ export default function InspectionPanel({ equipoId }) {
               </p>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', textAlign: 'left' }}>
-                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                  Indicaciones previas para la IA (Opcional):
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    Indicaciones previas para la IA (Opcional):
+                  </label>
+                  <VoiceDictationButton
+                    onTranscript={(txt) => setIndicacionesPrevias(txt)}
+                    initialValue={indicacionesPrevias}
+                    placeholder="Dictar voz"
+                  />
+                </div>
                 <textarea
                   value={indicacionesPrevias}
                   onChange={(e) => setIndicacionesPrevias(e.target.value)}
@@ -966,7 +1025,14 @@ export default function InspectionPanel({ equipoId }) {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Diagnóstico:</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Diagnóstico:</label>
+                    <VoiceDictationButton
+                      onTranscript={(txt) => setEditedDiagnostico(txt)}
+                      initialValue={editedDiagnostico}
+                      placeholder="Dictar"
+                    />
+                  </div>
                   <textarea
                     value={editedDiagnostico}
                     onChange={(e) => setEditedDiagnostico(e.target.value)}
@@ -988,7 +1054,14 @@ export default function InspectionPanel({ equipoId }) {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Acciones:</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Acciones:</label>
+                    <VoiceDictationButton
+                      onTranscript={(txt) => setEditedAcciones(txt)}
+                      initialValue={editedAcciones}
+                      placeholder="Dictar"
+                    />
+                  </div>
                   <textarea
                     value={editedAcciones}
                     onChange={(e) => setEditedAcciones(e.target.value)}
@@ -1010,7 +1083,14 @@ export default function InspectionPanel({ equipoId }) {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Recomendaciones (2027):</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Recomendaciones (2027):</label>
+                    <VoiceDictationButton
+                      onTranscript={(txt) => setEditedRecomendaciones(txt)}
+                      initialValue={editedRecomendaciones}
+                      placeholder="Dictar"
+                    />
+                  </div>
                   <textarea
                     value={editedRecomendaciones}
                     onChange={(e) => setEditedRecomendaciones(e.target.value)}

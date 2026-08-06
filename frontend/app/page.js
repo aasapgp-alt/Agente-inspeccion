@@ -12,6 +12,9 @@ import AuditPanel from '../components/AuditPanel';
 import HelpModal from '../components/HelpModal';
 import GlobalDashboard from '../components/GlobalDashboard';
 import MinutaResumenPanel from '../components/MinutaResumenPanel';
+import OfflineBanner from '../components/OfflineBanner';
+import ItineraryProgressBar from '../components/ItineraryProgressBar';
+import MobileNav from '../components/MobileNav';
 
 export default function Home() {
   return (
@@ -51,6 +54,24 @@ function DashboardContent() {
     loadEmpresas();
   }, [token]);
 
+  // Registro de Service Worker para PWA (Desactivado en DEV para no interferir con Turbopack HMR)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      if (process.env.NODE_ENV === 'production') {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.warn('Registro de Service Worker omitido:', err);
+        });
+      } else {
+        // En modo desarrollo (npm run dev), desregistrar Service Worker activo para evitar bucles HMR
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (let registration of registrations) {
+            registration.unregister();
+          }
+        }).catch(() => {});
+      }
+    }
+  }, []);
+
   const empresaActivaObj = empresas.find(e => String(e.id) === String(empresaSeleccionada));
   const nombreEmpresaActiva = empresaActivaObj ? empresaActivaObj.nombre : null;
 
@@ -85,9 +106,9 @@ function DashboardContent() {
     { id: 'MINUTA', label: 'Minuta Resumen PGP' },
   ];
 
-
   return (
-    <main className="container">
+    <main className="container" style={{ position: 'relative' }}>
+      <OfflineBanner />
       <Sidebar
         onSelectEquipo={(id) => {
           setEquipoSeleccionado(id);
@@ -118,6 +139,9 @@ function DashboardContent() {
               ))}
             </nav>
           </div>
+
+          {/* Componente de Avance de Ruta en Vivo */}
+          <ItineraryProgressBar />
 
           {/* Badge central destacado de la Empresa Seleccionada */}
           <div style={{
@@ -267,6 +291,7 @@ function DashboardContent() {
         </div>
       </div>
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      <MobileNav activeTab={activeTab} onChangeTab={setActiveTab} />
     </main>
   );
 }

@@ -7,6 +7,10 @@ from datetime import datetime, timedelta, timezone
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.core.security import create_access_token, verify_password, hash_password
 from app.core.config import settings
+from app.core.rate_limiter import login_rate_limiter
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -44,6 +48,9 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest, request: Request, db: sqlite3.Connection = Depends(get_db)):
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+    login_rate_limiter.check(ip_addr)
+    
     cursor = db.cursor()
     # Accept both username or email for login
     cursor.execute("""

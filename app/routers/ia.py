@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import sqlite3
@@ -10,8 +10,9 @@ import datetime
 import os
 
 from app.core.dependencies import get_db, get_current_user, require_role
+from app.core.rate_limiter import ia_analizar_rate_limiter
 from app.services.drive_service import descargar_imagen
-from app.services.gemini_service import analizar_imagenes, inicializar_gemini, build_annotation_context
+from app.services.gemini_service import analizar_imagenes, inicializar_gemini, build_annotation_context, chat_inspeccion
 from app.services.learning_service import cargar_ejemplos_few_shot, obtener_aprendizaje_texto
 from app.config.prompts import REGLAS_NEGOCIO
 from app.utils.text_utils import es_estado_valido, normalizar_texto
@@ -96,6 +97,8 @@ class ChatRequest(BaseModel):
 
 @router.post("/analizar", response_model=Dict[str, Any])
 def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    user_key = f"user_{current_user.get('id', 'anon')}"
+    ia_analizar_rate_limiter.check(user_key)
     try:
         from app.services.db_service import get_config_value_db
 
@@ -297,13 +300,13 @@ Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetan
         import json
         import re
         res_text = response.text.strip()
-        print(">>> RAW RESP_TEXT:", res_text)
+        logger.debug("RAW RESP_TEXT: %s", res_text)
         match = re.search(r'\{.*\}', res_text, re.DOTALL)
         if match:
             analisis_data = json.loads(match.group(0))
         else:
             analisis_data = json.loads(res_text)
-        print(">>> PARSED ANALISIS_DATA:", analisis_data)
+        logger.debug("PARSED ANALISIS_DATA: %s", analisis_data)
 
         recs = analisis_data.get("recomendaciones", "")
         if isinstance(recs, dict):
@@ -567,3 +570,47 @@ def delete_aprendizaje(id: int, db: sqlite3.Connection = Depends(get_db), curren
         db.rollback()
         logger.error(f"Error al eliminar aprendizaje: {e}")
         raise HTTPException(status_code=500, detail=f"Error al eliminar el aprendizaje: {str(e)}")
+
+
+@router.post("/transcribir-audio", response_model=Dict[str, Any])
+async def transcribir_audio(audio: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Transcribe una nota de voz enviada desde el navegador usando Google Gemini."""
+    try:
+        audio_bytes = await audio.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="El archivo de audio está vacío")
+
+        mime_type = audio.content_type or "audio/webm"
+        # Mapear mime types si vienen genéricos
+        if "webm" in mime_type:
+            mime_type = "audio/webm"
+        elif "ogg" in mime_type:
+            mime_type = "audio/ogg"
+        elif "wav" in mime_type:
+            mime_type = "audio/wav"
+        elif "mp4" in mime_type or "m4a" in mime_type:
+            mime_type = "audio/mp4"
+
+        transcripcion = chat_inspeccion(
+            mensaje="Por favor, transcribir este audio a texto de manera exacta. No agregues saludos, explicaciones ni comentarios. Solo escribe la transcripción exacta.",
+            historial_chat=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {"mime_type": mime_type, "data": audio_bytes},
+                        "Transcribe este audio técnico de inspección."
+                    ]
+                }
+            ]
+        )
+        texto = (transcripcion or "").strip()
+        if "error" in texto.lower() or not texto:
+            raise HTTPException(status_code=500, detail="No se pudo procesar la transcripción del audio")
+
+        return {"transcripcion": texto}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error procesando audio en /transcribir-audio: {e}")
+        raise HTTPException(status_code=500, detail=f"Error transcribiendo audio: {str(e)}")
+

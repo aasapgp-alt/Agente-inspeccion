@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import VoiceDictationButton from './VoiceDictationButton';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -351,9 +352,16 @@ export default function ManualPanel({ equipoId }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              Acciones PGP 2026:
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                Acciones PGP 2026:
+              </label>
+              <VoiceDictationButton
+                onTranscript={(txt) => setAcciones(txt)}
+                initialValue={acciones}
+                placeholder="Dictar voz"
+              />
+            </div>
             <textarea
               value={acciones}
               onChange={e => setAcciones(e.target.value)}
@@ -374,9 +382,16 @@ export default function ManualPanel({ equipoId }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              DIAGNOSTICO 2026:
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                DIAGNOSTICO 2026:
+              </label>
+              <VoiceDictationButton
+                onTranscript={(txt) => setDiagnostico(txt)}
+                initialValue={diagnostico}
+                placeholder="Dictar voz"
+              />
+            </div>
             <textarea
               value={diagnostico}
               onChange={e => setDiagnostico(e.target.value)}
@@ -397,9 +412,16 @@ export default function ManualPanel({ equipoId }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              RECOMENDACIONES PGP 2027:
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                RECOMENDACIONES PGP 2027:
+              </label>
+              <VoiceDictationButton
+                onTranscript={(txt) => setRecomendaciones(txt)}
+                initialValue={recomendaciones}
+                placeholder="Dictar voz"
+              />
+            </div>
             <textarea
               value={recomendaciones}
               onChange={e => setRecomendaciones(e.target.value)}
