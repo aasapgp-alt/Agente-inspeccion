@@ -107,6 +107,34 @@ export default function InspectionPanel({ equipoId }) {
   const [indicacionesPrevias, setIndicacionesPrevias] = useState("");
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
+  const indicacionesRef = useRef(null);
+  const diagnosticoRef = useRef(null);
+  const accionesRef = useRef(null);
+  const recomendacionesRef = useRef(null);
+
+  const adjustTextarea = (el, minH = 70) => {
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.max(el.scrollHeight + 6, minH)}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustTextarea(indicacionesRef.current, 80);
+  }, [indicacionesPrevias]);
+
+  useEffect(() => {
+    adjustTextarea(diagnosticoRef.current, 90);
+  }, [editedDiagnostico]);
+
+  useEffect(() => {
+    adjustTextarea(accionesRef.current, 80);
+  }, [editedAcciones]);
+
+  useEffect(() => {
+    adjustTextarea(recomendacionesRef.current, 100);
+  }, [editedRecomendaciones]);
+
   // Polling for report generation status
   useEffect(() => {
     let interval;
@@ -936,21 +964,26 @@ export default function InspectionPanel({ equipoId }) {
                   />
                 </div>
                 <textarea
+                  ref={indicacionesRef}
                   value={indicacionesPrevias}
-                  onChange={(e) => setIndicacionesPrevias(e.target.value)}
+                  onChange={(e) => {
+                    setIndicacionesPrevias(e.target.value);
+                    adjustTextarea(indicacionesRef.current, 80);
+                  }}
                   placeholder="Ej: Prestar atención a fisuras en el soporte o desgaste en pernos..."
                   style={{
                     width: '100%',
-                    height: '80px',
                     padding: '0.6rem',
                     borderRadius: '6px',
                     border: '1px solid rgba(255,255,255,0.15)',
                     backgroundColor: 'rgba(0,0,0,0.2)',
                     color: 'white',
                     fontSize: '0.85rem',
-                    resize: 'none',
                     outline: 'none',
-                    transition: 'border-color 0.2s'
+                    transition: 'border-color 0.2s',
+                    overflowY: 'hidden',
+                    resize: 'none',
+                    minHeight: '80px'
                   }}
                   onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
                   onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.15)'}
@@ -1034,8 +1067,12 @@ export default function InspectionPanel({ equipoId }) {
                     />
                   </div>
                   <textarea
+                    ref={diagnosticoRef}
                     value={editedDiagnostico}
-                    onChange={(e) => setEditedDiagnostico(e.target.value)}
+                    onChange={(e) => {
+                      setEditedDiagnostico(e.target.value);
+                      adjustTextarea(diagnosticoRef.current, 90);
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.5rem',
@@ -1047,8 +1084,9 @@ export default function InspectionPanel({ equipoId }) {
                       outline: 'none',
                       marginTop: '0.2rem',
                       fontFamily: 'inherit',
-                      minHeight: '80px',
-                      resize: 'vertical'
+                      overflowY: 'hidden',
+                      resize: 'none',
+                      minHeight: '90px'
                     }}
                   />
                 </div>
@@ -1063,8 +1101,12 @@ export default function InspectionPanel({ equipoId }) {
                     />
                   </div>
                   <textarea
+                    ref={accionesRef}
                     value={editedAcciones}
-                    onChange={(e) => setEditedAcciones(e.target.value)}
+                    onChange={(e) => {
+                      setEditedAcciones(e.target.value);
+                      adjustTextarea(accionesRef.current, 80);
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.5rem',
@@ -1076,8 +1118,9 @@ export default function InspectionPanel({ equipoId }) {
                       outline: 'none',
                       marginTop: '0.2rem',
                       fontFamily: 'inherit',
-                      minHeight: '60px',
-                      resize: 'vertical'
+                      overflowY: 'hidden',
+                      resize: 'none',
+                      minHeight: '80px'
                     }}
                   />
                 </div>
@@ -1092,8 +1135,12 @@ export default function InspectionPanel({ equipoId }) {
                     />
                   </div>
                   <textarea
+                    ref={recomendacionesRef}
                     value={editedRecomendaciones}
-                    onChange={(e) => setEditedRecomendaciones(e.target.value)}
+                    onChange={(e) => {
+                      setEditedRecomendaciones(e.target.value);
+                      adjustTextarea(recomendacionesRef.current, 100);
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.5rem',
@@ -1105,8 +1152,9 @@ export default function InspectionPanel({ equipoId }) {
                       outline: 'none',
                       marginTop: '0.2rem',
                       fontFamily: 'inherit',
-                      minHeight: '60px',
-                      resize: 'vertical'
+                      overflowY: 'hidden',
+                      resize: 'none',
+                      minHeight: '100px'
                     }}
                   />
                 </div>
