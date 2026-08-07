@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+
+/* Reset y aislamiento para Modo Campo */
+.campo-wrapper,
+.campo-wrapper * {
+  box-sizing: border-box;
+}
+
+.campo-wrapper {
+  background-color: #090d16 !important;
+  color: #f8fafc !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Forzar colores claros en títulos y textos */
+.campo-wrapper h1,
+.campo-wrapper h2,
+.campo-wrapper h3,
+.campo-wrapper h4,
+.campo-wrapper h5,
+.campo-wrapper h6 {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+.campo-wrapper p,
+.campo-wrapper span,
+.campo-wrapper label,
+.campo-wrapper div {
+  color: #f1f5f9;
+}
+
+/* Enlaces sin subrayado feo */
+.campo-wrapper a {
+  text-decoration: none !important;
+  color: inherit !important;
+}
+
+/* Estilos de Botones de Salud de Alto Contraste */
+.btn-salud-bueno {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  border: 3px solid #34d399 !important;
+}
+
+.btn-salud-regular {
+  background-color: #d97706 !important;
+  color: #000000 !important;
+  border: 3px solid #fbbf24 !important;
+}
+
+.btn-salud-critico {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  border: 3px solid #f87171 !important;
+}
+
+.btn-salud-fuera {
+  background-color: #334155 !important;
+  color: #ffffff !important;
+  border: 3px solid #94a3b8 !important;
+}
+
+/* Inputs de Texto de Campo */
+.input-campo {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  border: 3px solid #0284c7 !important;
+  border-radius: 16px !important;
+  padding: 14px 18px !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  width: 100% !important;
+}
+
+.input-campo::placeholder {
+  color: #64748b !important;
+}
+
+.input-campo:focus {
+  outline: none !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.3) !important;
+}
+
+/* Tarjetas y Paneles de Campo */
+.card-campo {
+  background-color: #111827 !important;
+  border: 2px solid #1e293b !important;
+  border-radius: 20px !important;
+  padding: 18px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Badge Inspector User Chip */
+.user-chip-campo {
+  background-color: #0f172a !important;
+  border: 2px solid #0284c7 !important;
+  border-radius: 14px !important;
+  padding: 6px 12px !important;
+}
+
+/* Animaciones */
+@keyframes pulseFast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-fast {
+  animation: pulseFast 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

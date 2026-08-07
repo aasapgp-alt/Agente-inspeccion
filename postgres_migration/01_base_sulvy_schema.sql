@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS inspecciones (
     equipo_id UUID NOT NULL,
     fecha_inspeccion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     inspector VARCHAR(255),
-    origen VARCHAR(100), -- Ej: 'Telegram', 'Web App'
+    origen VARCHAR(100), -- Ej: 'App Móvil', 'Web App'
     transcripcion_audio TEXT,
     url_foto_drive TEXT,
     diagnostico_ia TEXT,

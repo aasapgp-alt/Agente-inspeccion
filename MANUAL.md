@@ -1,6 +1,6 @@
 # 📖 Manual de Uso - Agente Inspector PGP
 
-Este manual proporciona una guía detallada para operar la plataforma **Agente Inspector PGP**, cubriendo tanto la interfaz web (paneles de control, auditoría, reportes y configuración) como el bot interactivo de **Telegram** para campo.
+Este manual proporciona una guía detallada para operar la plataforma **Agente Inspector PGP**, cubriendo tanto la consola web (paneles de control, auditoría, reportes y configuración) como la **Aplicación Móvil PWA (Modo Campo)**.
 
 ---
 
@@ -8,11 +8,11 @@ Este manual proporciona una guía detallada para operar la plataforma **Agente I
 
 El sistema cuenta con un control de accesos estricto basado en roles (RBAC):
 
-| Rol | Permisos Web | Permisos Telegram |
-|---|---|---|
-| **Administrador (`admin`)** | Acceso total, visualización de auditoría global, gestión y creación de usuarios, asignación/eliminación de itinerarios diarios, configuraciones generales. | Búsqueda de equipos, chat con Gemini, subida de fotos a Drive, consulta de historial y rutas. |
-| **Supervisor (`supervisor`)** | Modificación de diagnósticos, edición en caliente de variables técnicas, visualización de auditoría, planificación de itinerarios diarios. | Búsqueda de equipos, chat con Gemini, subida de fotos a Drive, consulta de historial y rutas. |
-| **Inspector (`inspector`)** | Carga manual, carga asistida por IA, consulta de su historial de rutas asignadas, visualización de reportes PDF. | Búsqueda de equipos, chat con Gemini, subida de fotos a Drive, consulta de historial y de su itinerario asignado. |
+| Rol | Permisos Web & PWA Campo |
+|---|---|
+| **Administrador (`admin`)** | Acceso total, visualización de auditoría global, gestión y creación de usuarios, asignación/eliminación de itinerarios diarios, configuraciones generales. |
+| **Supervisor (`supervisor`)** | Modificación de diagnósticos, edición en caliente de variables técnicas, visualización de auditoría, planificación de itinerarios diarios. |
+| **Inspector (`inspector`)** | Carga manual web, carga en App de Campo PWA (offline/online), consulta de itinerario asignado, visualización de reportes PDF. |
 
 ---
 
@@ -39,66 +39,37 @@ Para establecer qué equipos inspeccionará cada operador hoy:
 
 ---
 
-## 📱 3. Vinculación con el Bot de Telegram (`@Jarbbis_bot`)
+## 📱 3. Aplicación Móvil PWA ("Modo Campo")
 
-Para que el bot sepa qué inspector está realizando las cargas en planta, la cuenta de Telegram debe estar vinculada al perfil del sistema:
+La aplicación de campo está diseñada específicamente para inspectores que operan en planta industrial bajo luz solar intensa o nocturna, utilizando guantes anticorte y con o sin cobertura de red.
 
-### Opción A: Vinculación Rápida Directa (Desde Telegram)
-1. Busque al bot en Telegram como `@Jarbbis_bot` e ingrese al chat.
-2. Escriba su nombre de usuario (ej: `mpaltrinieri`) o su correo electrónico registrado (ej: `marco@empresa.com`).
-3. El bot validará los datos en la base de datos y vinculará su cuenta al instante enviando un mensaje de bienvenida.
+### 3.1 Acceso e Instalación PWA
+1. **Acceso Web Móvil**: Abra el navegador de su celular (Chrome, Safari o Edge) e ingrese a:
+   `http://<IP_SERVIDOR>:3000/campo`
+2. **Instalación como App Nativa**: En la parte superior de la pantalla aparecerá un banner. Pulse el botón **📲 INSTALAR APP DE CAMPO** para agregar el ícono a la pantalla de inicio y operar en modo pantalla completa.
 
-### Opción B: Vinculación por Código OTP (Desde la Web)
-1. En la barra lateral de la interfaz web, localice la sección **Vinculación de Telegram 📱**.
-2. Haga clic en **🔑 Vincular Bot**. Se generará un código único de 6 dígitos.
-3. Presione el botón **Abrir en Telegram**; se abrirá la aplicación móvil o de escritorio apuntando al bot con el comando `/start <código>` pre-completado de manera automática.
-
----
-
-## 🛠️ 4. Manual de Campo - Bot de Telegram
-
-El bot está diseñado para operarse con una sola mano en planta, utilizando un teclado fijo persistente en la parte inferior de la pantalla:
-
-```
-+-----------------------------------+
-|  📅 Mi Itinerario de Hoy           |
-+-----------------+-----------------+
-|  🔍 Buscar      |  🔑 Mi Cuenta   |
-+-----------------+-----------------+
-|  ❓ Ayuda       |  /salir         |
-+-----------------+-----------------+
-```
-
-### 4.1 Visualización y Progreso del Itinerario
-1. Pulse **`📅 Mi Itinerario de Hoy`**. El bot mostrará la lista ordenada de equipos pendientes para hoy.
-2. Cada equipo tiene un botón interactivo: `▶️ Detalle/Inspeccionar <CÓDIGO>`.
-3. Al presionarlo se despliega la **Ficha Técnica** de la máquina.
-
-### 4.2 Proceso de Carga de Fotos
-1. Desde la ficha de cualquier equipo, presione **`📸 Subir Fotos`**.
-2. Seleccione la subcarpeta correspondiente: **`Succión`**, **`Impulsión`** o **`General`**.
-3. Envíe las fotos del equipo. Puede enviar múltiples imágenes a la vez.
-4. El bot descargará las fotos y las subirá automáticamente a Google Drive en la carpeta específica de la máquina y la campaña activa.
-5. Al finalizar, escriba **`/salir`** o presione **`Finalizar Carga`**. El bot actualizará el estado de la ruta a `🟢 Completado` y te devolverá a la ficha del equipo.
-
-### 4.3 Consultar el Historial de Campañas
-1. Desde la ficha del equipo, pulse **`📜 Historial Completo`**.
-2. El bot recuperará todos los diagnósticos y recomendaciones preventivas de campañas previas (2023, 2024...) para que conozca el comportamiento anterior del activo en planta.
-
-### 4.4 Chat de Asistencia Técnica con Gemini (IA)
-1. Si tiene dudas sobre patologías o qué zonas del activo fotografiar: presione **`💬 Consultar IA (Gemini)`**.
-2. El chat se configurará automáticamente con todo el historial del equipo.
-3. Pregunte sus dudas (ej: *"¿Qué patologías tiene el material FRP de este mixer?"*). Gemini responderá de forma técnica y concisa.
-4. Para cerrar el chat técnico, escriba **`/salir`**. Volverá de inmediato a la Ficha Técnica del equipo.
-
-### 4.5 Transcripción de Mensajes de Voz (Audio a Texto)
-Para no escribir mientras camina por la planta:
-1. Mantenga presionado el micrófono de Telegram y grabe un mensaje de voz indicando su duda o consulta.
-2. El bot transcribirá el audio a texto automáticamente usando Gemini y procesará la respuesta sin necesidad de teclado físico.
+### 3.2 Operación y Flujo de Trabajo en Planta
+1. **Chip de Usuario**: En la esquina superior derecha se muestra el nombre del inspector autenticado (`usuario_inspector`).
+2. **Mi Itinerario de Hoy**: Presenta la lista ordenada (#1, #2, #3...) de equipos asignados al inspector para la jornada actual.
+3. **Buscador de Activos**: Si requiere inspeccionar un equipo fuera de ruta, escriba el código, tag o nombre en la barra de búsqueda para obtener sugerencias instantáneas desde la caché IndexedDB.
+4. **Ficha Compacta**: Al seleccionar un equipo, visualizará:
+   - Estado de salud oficial registrado (`🔴 CRÍTICO`, `⚠️ REGULAR`, `✅ BUENO`).
+   - **Diagnóstico Reciente (Gemini)**: Reporte completo generado por IA en campañas anteriores.
+   - **Recomendaciones Preventivas**: Medidas sugeridas por el sistema.
+5. **Consulta de Historial Anterior (`📜 HISTORIAL`)**:
+   - Presione el botón **`📜 HISTORIAL`** en la ficha o durante la captura para revisar la historia del activo.
+   - Al cerrar el modal flotante, **regresará a su borrador en curso sin perder fotos, audios ni textos redactados**.
+6. **Registro e Inspección**:
+   - **Botones de Estado (Glove Friendly)**: Seleccione el estado de salud en botones de 68px de alto diseñados para uso con guantes.
+   - **Fotografías**: Presione **Tomar / Subir Foto** (categorizadas en `General`, `Placa`, `Interior`, `Fuga/Corrosión`). Se comprimirán automáticamente en el teléfono (JPEG <=1024px). Límite: 5 fotos offline / 20 online.
+   - **Notas de Voz**: Presione **Grabar Nota de Voz** para dictar observaciones mediante el micrófono del celular. Límite: 1 audio offline / 5 online.
+7. **Guardado y Sincronización**:
+   - Al presionar **💾 GUARDAR Y SIGUIENTE**, la inspección se marca como pendiente y pasa automáticamente al siguiente equipo del itinerario.
+   - Si la red vuelve, la PWA sincronizará los datos en lote (`POST /api/inspecciones/batch`) usando UUIDs únicos para garantizar la idempotencia sin duplicar información.
 
 ---
 
-## 📈 5. Análisis Técnico Asistido por IA (Consola Web)
+## 📈 4. Análisis Técnico Asistido por IA (Consola Web)
 
 Cuando opera desde la aplicación web:
 1. Ingrese a **Inspección con IA**.
@@ -112,9 +83,8 @@ Cuando opera desde la aplicación web:
 
 ---
 
-## 📄 6. Reportes PDF y Control de Versiones
+## 📄 5. Reportes PDF y Control de Versiones
 
 1. Una vez guardado el diagnóstico de un equipo, presione **Generar Reporte**.
 2. La plataforma construirá un acta PDF formal con carátula, datos de diseño del activo, fotografías adjuntas y recomendaciones categorizadas.
 3. Si un diagnóstico es modificado o corregido en el panel de **Carga Manual** o **Historial de Activos**, el botón pasará a indicar **Regenerar Reporte**.
-4. El sistema guardará la nueva versión (ej: `ACTA-PGP2026-61_v2.pdf`) manteniendo a salvo el historial de reportes pasados.

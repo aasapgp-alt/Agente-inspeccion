@@ -200,69 +200,6 @@ def get_config_value_db(clave: str, default: Any = None) -> Any:
         logger.error(f"Error al obtener configuracion '{clave}' de la base de datos: {e}")
         return default
 
-def obtener_usuario_telegram(telegram_id: int) -> dict:
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.execute("""
-                SELECT ut.*, u.username, u.nombre_completo, u.rol, u.empresa
-                FROM usuarios_telegram ut
-                JOIN usuarios u ON ut.usuario_id = u.id
-                WHERE ut.telegram_id = ?
-            """, (telegram_id,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
-    except Exception as e:
-        logger.error(f"Error al obtener usuario de telegram {telegram_id}: {e}")
-        return None
-
-def vincular_usuario_telegram(telegram_id: int, chat_id: int, usuario_id: int) -> bool:
-    try:
-        with get_db_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO usuarios_telegram (telegram_id, chat_id, usuario_id)
-                VALUES (?, ?, ?)
-            """, (telegram_id, chat_id, usuario_id))
-            conn.execute("DELETE FROM telegram_otp WHERE usuario_id = ?", (usuario_id,))
-            conn.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error al vincular usuario de telegram {telegram_id}: {e}")
-        return False
-
-def generar_otp_telegram(usuario_id: int) -> str:
-    import random
-    from datetime import datetime, timedelta, timezone
-    otp = f"{random.randint(100000, 999999)}"
-    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
-    try:
-        with get_db_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO telegram_otp (usuario_id, otp, expires_at)
-                VALUES (?, ?, ?)
-            """, (usuario_id, otp, expires_at))
-            conn.commit()
-            return otp
-    except Exception as e:
-        logger.error(f"Error al generar OTP de telegram para usuario {usuario_id}: {e}")
-        return ""
-
-def validar_otp_telegram(otp: str) -> Optional[int]:
-    from datetime import datetime, timezone
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.execute("SELECT usuario_id, expires_at FROM telegram_otp WHERE otp = ?", (otp,))
-            row = cursor.fetchone()
-            if row:
-                expires_at = datetime.fromisoformat(row["expires_at"])
-                if expires_at > datetime.now(timezone.utc):
-                    return row["usuario_id"]
-                else:
-                    conn.execute("DELETE FROM telegram_otp WHERE otp = ?", (otp,))
-                    conn.commit()
-    except Exception as e:
-        logger.error(f"Error al validar OTP de telegram: {e}")
-    return None
-
 def obtener_itinerario_diario(usuario_id: int, fecha: str) -> list:
     try:
         with get_db_connection() as conn:

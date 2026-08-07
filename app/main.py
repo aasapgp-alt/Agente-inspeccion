@@ -74,15 +74,7 @@ async def startup_event():
         except Exception as mig_err:
             logger.error(f"Error al correr la migración de auditoría: {mig_err}")
             
-        # Inicializar bot de Telegram en segundo plano
-        try:
-            from app.services.telegram_service import start_telegram_bot
-            import asyncio
-            asyncio.create_task(start_telegram_bot())
-            logger.info("Bot de Telegram iniciado en segundo plano (Long Polling).")
-        except Exception as tg_err:
-            logger.error(f"Error al iniciar el bot de Telegram en startup: {tg_err}")
-            
+
     except Exception as e:
         logger.error(f"Error al inicializar la base de datos: {e}")
 
