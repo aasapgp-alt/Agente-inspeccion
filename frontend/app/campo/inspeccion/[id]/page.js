@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { FolderOpen, AlertTriangle } from 'lucide-react';
+import { FolderOpen, AlertTriangle, Folder, Edit3 } from 'lucide-react';
 import { db } from '../../../../utils/db';
 import { apiService } from '../../../../services/api';
 import { useOnlineStatus } from '../../../../hooks/useOnlineStatus';
 import { vibrar, vibrarExito, vibrarError } from '../../../../utils/haptics';
+import { autoVincularCarpetaDrive } from '../../../../utils/driveAutoSelect';
+import { DriveMobile } from '../../../../components/campo/drive/DriveMobile';
 
 import { CampoShell } from '../../../../components/campo/layout/CampoShell';
 import { CampoStatusBar } from '../../../../components/campo/layout/CampoStatusBar';
@@ -36,6 +38,10 @@ function ModoCapturaInspeccionContent() {
   const [nombreActivo, setNombreActivo] = useState('Cargando...');
   const [usuarioActual, setUsuarioActual] = useState(null);
 
+  const [driveFolder, setDriveFolder] = useState({ id: '', title: '' });
+  const [isAutoMatchingDrive, setIsAutoMatchingDrive] = useState(false);
+  const [showDriveDrawer, setShowDriveDrawer] = useState(false);
+
   const [activeTab, setActiveTab] = useState('INSPECCION'); // INSPECCION | HISTORIAL | ARCHIVOS
   const [estadoSalud, setEstadoSalud] = useState('BUENO');
   const [categoriaFoto, setCategoriaFoto] = useState('General');
@@ -59,13 +65,34 @@ function ModoCapturaInspeccionContent() {
         if (user && active) setUsuarioActual(user);
 
         const eqData = await db.equipos_cache.get(idActivo);
+        let currentCodigo = `EQ-${idActivo}`;
+        let currentNombre = 'Equipo Industrial';
+
         if (eqData && active) {
-          setCodigoActivo(eqData.codigo || `EQ-${idActivo}`);
-          setNombreActivo(eqData.nombre || 'Equipo Industrial');
+          currentCodigo = eqData.codigo || `EQ-${idActivo}`;
+          currentNombre = eqData.nombre || 'Equipo Industrial';
+          setCodigoActivo(currentCodigo);
+          setNombreActivo(currentNombre);
         } else if (active && idActivo === 107) {
-          setCodigoActivo('107');
-          setNombreActivo('VENTILADOR 431-506');
+          currentCodigo = '107';
+          currentNombre = 'VENTILADOR 431-506';
+          setCodigoActivo(currentCodigo);
+          setNombreActivo(currentNombre);
         }
+
+        // Auto-vincular carpeta de Drive para el equipo seleccionado
+        setIsAutoMatchingDrive(true);
+        const equipoObj = eqData || { id: idActivo, codigo: currentCodigo, nombre: currentNombre };
+        const matchedFolder = await autoVincularCarpetaDrive(equipoObj, apiService.getToken());
+
+        if (matchedFolder && active) {
+          setDriveFolder({ id: matchedFolder.id, title: matchedFolder.title });
+        } else if (active) {
+          const fId = localStorage.getItem('campo_drive_folder_id') || '';
+          const fTitle = localStorage.getItem('campo_drive_folder_title') || 'Raíz de Drive';
+          setDriveFolder({ id: fId, title: fTitle });
+        }
+        if (active) setIsAutoMatchingDrive(false);
 
         let borrador = await db.inspecciones_pendientes
           .where({ id_activo: idActivo, estado_sync: 'borrador' })
@@ -76,7 +103,7 @@ function ModoCapturaInspeccionContent() {
           const newId = await db.inspecciones_pendientes.add({
             client_uuid: uuid,
             id_activo: idActivo,
-            codigo_activo: eqData?.codigo || (idActivo === 107 ? '107' : `EQ-${idActivo}`),
+            codigo_activo: currentCodigo,
             usuario_inspector: user?.username || user?.nombre_completo || 'Diego A Cristaldo',
             estado: 'BUENO',
             categoria_foto: 'General',
@@ -301,6 +328,38 @@ function ModoCapturaInspeccionContent() {
             onOpenOptions={() => setShowHistorialModal(true)}
           />
 
+          {/* Indicador de Carpeta Drive Vinculada con Botón Cambiar */}
+          <div className="bg-[#131c2e] border border-slate-800/80 p-2.5 px-3 rounded-xl flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Carpeta Drive:</span>
+                  {isAutoMatchingDrive ? (
+                    <span className="text-[10px] font-bold text-sky-400 animate-pulse">Buscando...</span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60">Auto-ajustada</span>
+                  )}
+                </div>
+                <span className="text-xs font-bold text-slate-100 truncate block">
+                  {driveFolder.title || 'Raíz de Drive'}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                vibrar(20);
+                setShowDriveDrawer(true);
+              }}
+              className="px-2.5 py-1.5 bg-sky-950/80 hover:bg-sky-900 border border-sky-700/60 text-sky-300 hover:text-white text-xs font-bold rounded-lg transition-all active:scale-95 shrink-0 flex items-center gap-1 ml-2"
+              title="Seleccionar carpeta manualmente"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Cambiar</span>
+            </button>
+          </div>
+
           {/* Control Segmentado de Pestañas: INSPECCIÓN | HISTORIAL | ARCHIVOS */}
           <div className="bg-[#131c2e] p-1 rounded-xl border border-slate-800 flex items-center justify-between text-xs font-black shadow-inner">
             <button
@@ -428,6 +487,26 @@ function ModoCapturaInspeccionContent() {
         isOpen={showHistorialModal}
         onClose={() => setShowHistorialModal(false)}
       />
+
+      {/* Drawer / Modal de Drive para Selección Manual */}
+      {showDriveDrawer && (
+        <div className="fixed inset-0 z-50 bg-[#090d16] md:bg-black/85 md:backdrop-blur-sm md:p-4 flex items-center justify-center">
+          <div className="bg-[#090d16] border-0 md:border md:border-slate-800 w-full h-[100dvh] md:h-auto md:max-w-lg md:max-h-[90vh] md:rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <DriveMobile
+              token={apiService.getToken()}
+              onSelectFolder={(id, title) => {
+                setDriveFolder({ id, title });
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('campo_drive_folder_id', id);
+                  localStorage.setItem('campo_drive_folder_title', title);
+                }
+              }}
+              initialFolderId={driveFolder?.id || ''}
+              onClose={() => setShowDriveDrawer(false)}
+            />
+          </div>
+        </div>
+      )}
     </CampoShell>
   );
 }

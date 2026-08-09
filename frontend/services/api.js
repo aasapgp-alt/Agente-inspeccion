@@ -363,6 +363,19 @@ export const apiService = {
     return await response.json();
   },
 
+  sugerirCarpetas: async (equipoId, token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/drive/sugerir_carpetas?equipo_id=${encodeURIComponent(equipoId)}`, {
+        headers: getAuthHeaders(token)
+      });
+      if (!response.ok) return { sugerencias: [] };
+      return await response.json();
+    } catch (error) {
+      console.warn('[apiService.sugerirCarpetas] Error:', error.message);
+      return { sugerencias: [] };
+    }
+  },
+
   subirInspeccionesBatch: async (lote, token) => {
     try {
       const response = await fetch(`${API_BASE_URL}/inspecciones/batch`, {

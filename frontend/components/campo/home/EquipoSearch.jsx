@@ -7,6 +7,9 @@ import { vibrar } from '../../../utils/haptics';
 import { CampoInput } from '../shared/CampoInput';
 import { CampoCard } from '../shared/CampoCard';
 
+import { autoVincularCarpetaDrive } from '../../../utils/driveAutoSelect';
+import { apiService } from '../../../services/api';
+
 export function EquipoSearch({
   searchTerm,
   onSearchChange,
@@ -53,7 +56,10 @@ export function EquipoSearch({
             <Link
               key={eq.id}
               href={`/campo/inspeccion/${eq.id}?fuente=busqueda`}
-              onClick={() => vibrar(20)}
+              onClick={() => {
+                vibrar(20);
+                autoVincularCarpetaDrive(eq, apiService.getToken());
+              }}
               className="p-3.5 flex items-center justify-between hover:bg-slate-800/80 active:bg-slate-800 transition-colors block"
               style={{ textDecoration: 'none' }}
             >
