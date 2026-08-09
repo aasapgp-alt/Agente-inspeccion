@@ -29,7 +29,7 @@ if os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("1", "true", "yes"):
     except ImportError:
         pass
 
-from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router, campanias, audit, itinerarios
+from app.routers import auth, equipos, drive, ia, reports, dashboard_pg, libro_completo, jerarquia, libro, libros, anotaciones, settings as settings_router, campanias, audit, itinerarios, inspecciones
 from app.services.db_service import get_db_connection
 from app.core.security import hash_password, verify_access_token
 
@@ -94,6 +94,7 @@ app.include_router(settings_router.router)
 app.include_router(campanias.router)
 app.include_router(audit.router)
 app.include_router(itinerarios.router)
+app.include_router(inspecciones.router)
 
 # Endpoint Health
 @app.get("/api/health", tags=["health"])

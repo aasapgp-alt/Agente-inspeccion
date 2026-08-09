@@ -2,16 +2,22 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, CheckCircle2, ArrowRight, Search, FileText, AlertTriangle, User, History } from 'lucide-react';
+import { FolderOpen, AlertTriangle } from 'lucide-react';
 import { db } from '../../../../utils/db';
 import { apiService } from '../../../../services/api';
 import { useOnlineStatus } from '../../../../hooks/useOnlineStatus';
-import { SelectorEstadoHealth } from '../../../../components/campo/BotonEstado';
-import { CapturaFoto } from '../../../../components/campo/CapturaFoto';
-import { GrabadoraAudio } from '../../../../components/campo/GrabadoraAudio';
-import { BadgeEstadoSync } from '../../../../components/campo/BadgeEstadoSync';
-import { HistorialActivoModal } from '../../../../components/campo/HistorialActivoModal';
 import { vibrar, vibrarExito, vibrarError } from '../../../../utils/haptics';
+
+import { CampoShell } from '../../../../components/campo/layout/CampoShell';
+import { CampoStatusBar } from '../../../../components/campo/layout/CampoStatusBar';
+import { EquipoHeader } from '../../../../components/campo/inspeccion/EquipoHeader';
+import { EstadoEquipo } from '../../../../components/campo/inspeccion/EstadoEquipo';
+import { EvidenciaFotos } from '../../../../components/campo/inspeccion/EvidenciaFotos';
+import { EvidenciaAudio } from '../../../../components/campo/inspeccion/EvidenciaAudio';
+import { Observaciones } from '../../../../components/campo/inspeccion/Observaciones';
+import { GuardarSiguiente } from '../../../../components/campo/inspeccion/GuardarSiguiente';
+import { CampoBottomNav } from '../../../../components/campo/navegacion/CampoBottomNav';
+import { HistorialActivoModal } from '../../../../components/campo/shared/HistorialActivoModal';
 
 function ModoCapturaInspeccionContent() {
   const params = useParams();
@@ -30,6 +36,7 @@ function ModoCapturaInspeccionContent() {
   const [nombreActivo, setNombreActivo] = useState('Cargando...');
   const [usuarioActual, setUsuarioActual] = useState(null);
 
+  const [activeTab, setActiveTab] = useState('INSPECCION'); // INSPECCION | HISTORIAL | ARCHIVOS
   const [estadoSalud, setEstadoSalud] = useState('BUENO');
   const [categoriaFoto, setCategoriaFoto] = useState('General');
   const [notasTexto, setNotasTexto] = useState('');
@@ -41,6 +48,7 @@ function ModoCapturaInspeccionContent() {
   const [showHistorialModal, setShowHistorialModal] = useState(false);
   const [siguienteEquipoId, setSiguienteEquipoId] = useState(null);
   const [errorValidacion, setErrorValidacion] = useState('');
+  const [isEscuchandoDictado, setIsEscuchandoDictado] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -54,6 +62,9 @@ function ModoCapturaInspeccionContent() {
         if (eqData && active) {
           setCodigoActivo(eqData.codigo || `EQ-${idActivo}`);
           setNombreActivo(eqData.nombre || 'Equipo Industrial');
+        } else if (active && idActivo === 107) {
+          setCodigoActivo('107');
+          setNombreActivo('VENTILADOR 431-506');
         }
 
         let borrador = await db.inspecciones_pendientes
@@ -65,8 +76,8 @@ function ModoCapturaInspeccionContent() {
           const newId = await db.inspecciones_pendientes.add({
             client_uuid: uuid,
             id_activo: idActivo,
-            codigo_activo: eqData?.codigo || `EQ-${idActivo}`,
-            usuario_inspector: user?.username || user?.nombre_completo || 'Inspector',
+            codigo_activo: eqData?.codigo || (idActivo === 107 ? '107' : `EQ-${idActivo}`),
+            usuario_inspector: user?.username || user?.nombre_completo || 'Diego A Cristaldo',
             estado: 'BUENO',
             categoria_foto: 'General',
             notas: '',
@@ -137,6 +148,48 @@ function ModoCapturaInspeccionContent() {
     }
   };
 
+  const handleToggleDictadoVoz = () => {
+    vibrar(25);
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Dictado por voz no soportado en este navegador.');
+      return;
+    }
+
+    if (isEscuchandoDictado) {
+      setIsEscuchandoDictado(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'es-ES';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => setIsEscuchandoDictado(true);
+      recognition.onend = () => setIsEscuchandoDictado(false);
+      recognition.onerror = () => setIsEscuchandoDictado(false);
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          const nuevoTexto = notasTexto ? `${notasTexto} ${transcript}` : transcript;
+          setNotasTexto(nuevoTexto);
+          if (inspeccionId) {
+            db.inspecciones_pendientes.update(inspeccionId, { notas: nuevoTexto });
+          }
+        }
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.error('Error starting dictation:', err);
+      setIsEscuchandoDictado(false);
+    }
+  };
+
   const handleAddFoto = async (blob, categoria) => {
     if (!inspeccionId) return;
     const archId = await db.archivos_pendientes.add({
@@ -189,12 +242,15 @@ function ModoCapturaInspeccionContent() {
     setIsGuardando(true);
 
     try {
+      const activeDriveFolderId = typeof window !== 'undefined' ? localStorage.getItem('campo_drive_folder_id') : null;
+
       if (inspeccionId) {
         await db.inspecciones_pendientes.update(inspeccionId, {
           estado: estadoSalud,
           categoria_foto: categoriaFoto,
           notas: notasTexto,
-          usuario_inspector: usuarioActual?.username || usuarioActual?.nombre_completo || 'Inspector',
+          drive_folder_id: activeDriveFolderId,
+          usuario_inspector: usuarioActual?.username || usuarioActual?.nombre_completo || 'Diego A Cristaldo',
           timestamp: Date.now(),
           estado_sync: 'pendiente'
         });
@@ -225,9 +281,9 @@ function ModoCapturaInspeccionContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 flex flex-col justify-between">
+    <CampoShell className="justify-between">
       <div>
-        <BadgeEstadoSync
+        <CampoStatusBar
           isOnline={isOnline}
           pendingCount={pendingCount}
           errorCount={errorCount}
@@ -236,161 +292,133 @@ function ModoCapturaInspeccionContent() {
           retryErrors={retryErrors}
         />
 
-        <main className="max-w-md w-full mx-auto p-4 space-y-5">
-          {/* Header con Botón de Historial Anterior */}
-          <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3">
+        <main className="max-w-md w-full mx-auto px-3.5 py-2.5 space-y-3 pb-24">
+          {/* Header de Inspección */}
+          <EquipoHeader
+            codigoActivo={codigoActivo}
+            nombreActivo={nombreActivo}
+            onVolver={() => router.push('/campo')}
+            onOpenOptions={() => setShowHistorialModal(true)}
+          />
+
+          {/* Control Segmentado de Pestañas: INSPECCIÓN | HISTORIAL | ARCHIVOS */}
+          <div className="bg-[#131c2e] p-1 rounded-xl border border-slate-800 flex items-center justify-between text-xs font-black shadow-inner">
+            <button
+              type="button"
+              onClick={() => setActiveTab('INSPECCION')}
+              className={`flex-1 py-2 px-2 text-center rounded-lg transition-all tracking-wider uppercase ${
+                activeTab === 'INSPECCION'
+                  ? 'bg-[#0284c7] text-white shadow-md shadow-sky-950/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              INSPECCIÓN
+            </button>
             <button
               type="button"
               onClick={() => {
-                vibrar(20);
-                router.push('/campo');
+                setActiveTab('HISTORIAL');
+                setShowHistorialModal(true);
               }}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2.5 rounded-xl border border-slate-700 active:scale-95 flex items-center gap-1.5 font-bold text-xs"
+              className={`flex-1 py-2 px-2 text-center rounded-lg transition-all tracking-wider uppercase ${
+                activeTab === 'HISTORIAL'
+                  ? 'bg-[#0284c7] text-white shadow-md shadow-sky-950/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <ArrowLeft className="w-4 h-4" /> Home
+              HISTORIAL
             </button>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  vibrar(30);
-                  setShowHistorialModal(true);
-                }}
-                className="bg-slate-900 hover:bg-slate-800 text-sky-300 px-3 py-2 rounded-xl border-2 border-sky-500 font-black text-xs flex items-center gap-1.5 active:scale-95 shadow"
-                style={{ backgroundColor: '#0f172a', borderColor: '#0284c7', color: '#38bdf8' }}
-              >
-                <History className="w-4 h-4" />
-                <span>📜 HISTORIAL</span>
-              </button>
-
-              <div className="text-right">
-                <span className="font-mono font-black text-sky-400 text-sm block" style={{ color: '#38bdf8' }}>{codigoActivo}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">{nombreActivo}</span>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ARCHIVOS')}
+              className={`flex-1 py-2 px-2 text-center rounded-lg transition-all tracking-wider uppercase ${
+                activeTab === 'ARCHIVOS'
+                  ? 'bg-[#0284c7] text-white shadow-md shadow-sky-950/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              ARCHIVOS ({fotos.length + audios.length})
+            </button>
           </div>
 
           {errorValidacion && (
-            <div className="bg-red-950 border-2 border-red-500 text-red-200 text-sm font-bold p-3 rounded-xl flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            <div className="bg-red-950/80 border border-red-500 text-red-200 text-xs font-bold p-3 rounded-xl flex items-center gap-2 animate-in fade-in duration-200">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
               <span>{errorValidacion}</span>
             </div>
           )}
 
-          <SelectorEstadoHealth
-            estadoSeleccionado={estadoSalud}
-            onSelectEstado={handleSelectEstado}
-          />
+          {activeTab === 'INSPECCION' && (
+            <div className="space-y-3 pt-0.5">
+              {/* Opciones de Estado */}
+              <EstadoEquipo
+                estadoSeleccionado={estadoSalud}
+                onSelectEstado={handleSelectEstado}
+              />
 
-          <CapturaFoto
-            fotos={fotos}
-            onAddFoto={handleAddFoto}
-            onDeleteFoto={handleDeleteFoto}
-            isOnline={isOnline}
-            categoriaSeleccionada={categoriaFoto}
-            onSelectCategoria={(cat) => {
-              setCategoriaFoto(cat);
-              if (inspeccionId) {
-                db.inspecciones_pendientes.update(inspeccionId, { categoria_foto: cat });
-              }
-            }}
-          />
+              {/* Evidencia Fotográfica y Categoría */}
+              <EvidenciaFotos
+                fotos={fotos}
+                onAddFoto={handleAddFoto}
+                onDeleteFoto={handleDeleteFoto}
+                isOnline={isOnline}
+                categoriaSeleccionada={categoriaFoto}
+                onSelectCategoria={(cat) => {
+                  setCategoriaFoto(cat);
+                  if (inspeccionId) {
+                    db.inspecciones_pendientes.update(inspeccionId, { categoria_foto: cat });
+                  }
+                }}
+              />
 
-          <GrabadoraAudio
-            audios={audios}
-            onAddAudio={handleAddAudio}
-            onDeleteAudio={handleDeleteAudio}
-            isOnline={isOnline}
-          />
+              {/* Nota de Voz / Audio */}
+              <EvidenciaAudio
+                audios={audios}
+                onAddAudio={handleAddAudio}
+                onDeleteAudio={handleDeleteAudio}
+                isOnline={isOnline}
+              />
 
-          <div className="space-y-2 bg-slate-900 p-4 rounded-2xl border-2 border-slate-800">
-            <label htmlFor="notas-campo" className="text-xl font-black text-slate-100 uppercase flex items-center gap-2" style={{ color: '#ffffff' }}>
-              <FileText className="w-6 h-6 text-sky-400" style={{ color: '#38bdf8' }} />
-              Observaciones / Notas
-            </label>
-            <textarea
-              id="notas-campo"
-              rows={3}
-              value={notasTexto}
-              onChange={handleNotasChange}
-              placeholder="Escriba o use el dictado de voz del teclado..."
-              className="input-campo text-lg"
-            />
-            {notasTexto && (
-              <button
-                type="button"
-                onClick={() => handleNotasChange({ target: { value: '' } })}
-                className="text-xs text-slate-400 font-bold uppercase underline hover:text-white"
-              >
-                Limpiar notas
-              </button>
-            )}
-          </div>
+              {/* Observaciones / Notas */}
+              <Observaciones
+                notasTexto={notasTexto}
+                onNotasChange={handleNotasChange}
+                isEscuchandoDictado={isEscuchandoDictado}
+                onToggleDictadoVoz={handleToggleDictadoVoz}
+                onClearNotas={() => handleNotasChange({ target: { value: '' } })}
+              />
+
+              {/* Botón Principal Guardar y Siguiente */}
+              <GuardarSiguiente
+                onGuardar={handleGuardarYContinuar}
+                isGuardando={isGuardando}
+                mostrarModalConfirmacion={mostrarModalConfirmacion}
+                isOnline={isOnline}
+                onNavegarSiguiente={handleNavegarSiguiente}
+                onNavegarInicio={() => router.push('/campo')}
+              />
+            </div>
+          )}
+
+          {activeTab === 'ARCHIVOS' && (
+            <div className="space-y-3 pt-2">
+              <div className="bg-[#131c2e] border border-slate-800 p-4 rounded-2xl space-y-2 text-center shadow-md">
+                <FolderOpen className="w-8 h-8 text-sky-400 mx-auto" />
+                <h4 className="font-black text-xs text-white uppercase tracking-wide m-0">Archivos adjuntos ({fotos.length + audios.length})</h4>
+                <p className="text-[11px] text-slate-400 m-0">
+                  {fotos.length} fotos y {audios.length} audios vinculados a esta inspección.
+                </p>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-slate-900/95 border-t-3 border-slate-800 backdrop-blur-md z-40" style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)' }}>
-        <div className="max-w-md mx-auto">
-          <button
-            type="button"
-            onClick={handleGuardarYContinuar}
-            disabled={isGuardando}
-            className={`
-              w-full min-h-[72px] py-4 px-6 rounded-2xl font-black text-2xl uppercase tracking-wider flex items-center justify-center gap-3 transition-all duration-150 active:scale-95 shadow-2xl border-4
-              ${
-                isGuardando
-                  ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-not-allowed'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 active:bg-emerald-700'
-              }
-            `}
-            style={{ backgroundColor: isGuardando ? '#334155' : '#059669', color: '#ffffff' }}
-          >
-            <Save className="w-9 h-9 shrink-0" />
-            <span>{isGuardando ? 'GUARDANDO...' : '💾 GUARDAR Y SIGUIENTE'}</span>
-          </button>
-        </div>
-      </div>
-
-      {mostrarModalConfirmacion && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md p-4 flex items-center justify-center">
-          <div className="bg-slate-900 border-4 border-emerald-500 max-w-sm w-full p-6 rounded-3xl space-y-5 text-center shadow-2xl animate-in fade-in zoom-in duration-200" style={{ backgroundColor: '#0f172a', borderColor: '#10b981' }}>
-            <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto" style={{ color: '#34d399' }} />
-            <div>
-              <h3 className="text-3xl font-black text-white m-0" style={{ color: '#ffffff' }}>✅ ¡Guardado!</h3>
-              <p className="text-sm font-bold mt-1" style={{ color: '#cbd5e1' }}>
-                {isOnline
-                  ? '🔄 Sincronizando con el servidor...'
-                  : '⏳ Guardado localmente en el celular (pendiente de subir).'}
-              </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <button
-                type="button"
-                onClick={handleNavegarSiguiente}
-                className="w-full min-h-[60px] bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl py-3 px-4 rounded-2xl border-2 border-emerald-400 flex items-center justify-center gap-2 shadow-lg active:scale-95"
-                style={{ backgroundColor: '#059669', color: '#ffffff' }}
-              >
-                <span>➡️ SIGUIENTE EQUIPO</span>
-                <ArrowRight className="w-6 h-6" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  vibrar(20);
-                  router.push('/campo');
-                }}
-                className="w-full min-h-[56px] bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-lg py-3 px-4 rounded-2xl border-2 border-slate-600 flex items-center justify-center gap-2 active:scale-95"
-              >
-                <Search className="w-5 h-5" />
-                <span>🔍 BUSCAR OTRO</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Floating Bottom Navigation */}
+      <CampoBottomNav
+        onOpenMenu={() => router.push('/campo')}
+        onOpenNuevo={() => router.push('/campo/buscar')}
+      />
 
       {/* Modal Desplegable de Historial */}
       <HistorialActivoModal
@@ -400,7 +428,7 @@ function ModoCapturaInspeccionContent() {
         isOpen={showHistorialModal}
         onClose={() => setShowHistorialModal(false)}
       />
-    </div>
+    </CampoShell>
   );
 }
 

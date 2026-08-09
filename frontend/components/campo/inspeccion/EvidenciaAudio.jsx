@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Trash2, Play, Pause, AlertCircle, Volume2 } from 'lucide-react';
-import { vibrar, vibrarError } from '../../utils/haptics';
+import { Mic, Square, Trash2, Play, Pause, AlertCircle } from 'lucide-react';
+import { vibrar, vibrarError } from '../../../utils/haptics';
 
-export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) {
+export function EvidenciaAudio({ audios = [], onAddAudio, onDeleteAudio, isOnline }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
@@ -15,7 +15,7 @@ export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) 
   const timerRef = useRef(null);
   const currentAudioRef = useRef(null);
 
-  const maxAudios = isOnline ? 5 : 1;
+  const maxAudios = 5;
   const audiosAlcanzados = audios.length >= maxAudios;
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) 
 
     if (audiosAlcanzados) {
       vibrarError();
-      setErrorMessage(`Límite alcanzado (${maxAudios} audio ${isOnline ? 'online' : 'offline'}).`);
+      setErrorMessage(`Límite de ${maxAudios} audios alcanzado.`);
       return;
     }
 
@@ -65,9 +65,9 @@ export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) 
         setRecordingTime((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      console.error('[GrabadoraAudio] Error al acceder al micrófono:', err);
+      console.error('[EvidenciaAudio] Error al acceder al micrófono:', err);
       vibrarError();
-      setErrorMessage('No se pudo acceder al micrófono. Verifique los permisos.');
+      setErrorMessage('No se pudo acceder al micrófono.');
     }
   };
 
@@ -107,77 +107,86 @@ export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) 
   };
 
   return (
-    <div className="w-full space-y-3 my-4 bg-slate-800/80 p-4 rounded-2xl border-2 border-slate-700">
-      <div className="flex items-center justify-between">
-        <label className="text-xl font-black text-slate-100 uppercase flex items-center gap-2">
-          <Mic className="w-6 h-6 text-amber-400" />
+    <div className="w-full space-y-2.5 my-2">
+      {/* Encabezado Nota de Voz / Audio y Contador 0/5 */}
+      <div className="flex items-center justify-between px-0.5">
+        <label className="text-xs font-bold text-slate-300">
           Nota de Voz / Audio
         </label>
-        <span className={`text-sm font-bold px-3 py-1 rounded-full ${audiosAlcanzados ? 'bg-red-500/20 text-red-400 border border-red-500' : 'bg-slate-700 text-slate-300'}`}>
-          {audios.length} / {maxAudios} {isOnline ? '(Online)' : '(Offline)'}
+        <span className="text-[11px] font-black text-sky-400 bg-sky-950/60 border border-sky-800/80 px-2 py-0.5 rounded-md font-mono">
+          {audios.length}/{maxAudios}
         </span>
       </div>
 
-      {/* Botón Gigante de Grabación */}
+      {/* Tarjeta Botón Principal: GRABAR AUDIO */}
       {!isRecording ? (
         <button
           type="button"
           onClick={startRecording}
           disabled={audiosAlcanzados}
           className={`
-            w-full min-h-[64px] py-4 px-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-3 transition-all duration-150 active:scale-95 shadow-xl border-4
+            w-full py-3.5 px-4 rounded-xl border flex items-center justify-between transition-all duration-150 active:scale-[0.98] shadow-md
             ${
               audiosAlcanzados
-                ? 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'
-                : 'bg-amber-600 hover:bg-amber-500 text-slate-950 border-amber-400 active:bg-amber-700'
+                ? 'bg-[#131c2e]/40 border-slate-800 text-slate-600 cursor-not-allowed'
+                : 'bg-[#131c2e] border-slate-800 hover:bg-[#1a263d] hover:border-slate-700 text-slate-200'
             }
           `}
         >
-          <Mic className="w-9 h-9 shrink-0" />
-          <span>🎤 GRABAR AUDIO</span>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+              <Mic className="w-5 h-5" />
+            </div>
+            <span className="font-black text-sm text-white tracking-wider uppercase">GRABAR AUDIO</span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Micrófono Web</span>
         </button>
       ) : (
         <button
           type="button"
           onClick={stopRecording}
-          className="w-full min-h-[64px] py-4 px-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-3 bg-red-600 hover:bg-red-500 text-white border-4 border-red-400 shadow-2xl animate-pulse"
+          className="w-full py-3.5 px-4 bg-[#2b1014] border border-red-500/80 rounded-xl flex items-center justify-between shadow-lg shadow-red-950/40 animate-pulse active:scale-[0.98]"
         >
-          <Square className="w-9 h-9 fill-current shrink-0" />
-          <span>DETENER ({formatTime(recordingTime)})</span>
+          <div className="flex items-center gap-3 text-red-400">
+            <div className="w-9 h-9 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+              <Square className="w-4 h-4 fill-current" />
+            </div>
+            <span className="font-black text-sm text-red-200 uppercase tracking-wider">
+              DETENER ({formatTime(recordingTime)})
+            </span>
+          </div>
+          <span className="text-xs text-red-400 font-black animate-ping">● GRABANDO</span>
         </button>
       )}
 
       {errorMessage && (
-        <div className="bg-red-900/40 border-2 border-red-500 text-red-200 text-sm font-bold p-3 rounded-xl flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+        <div className="bg-red-950/80 border border-red-500 text-red-200 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
 
-      {/* Lista de Audios Grabados */}
+      {/* Lista Compacta de Audios Grabados */}
       {audios.length > 0 && (
-        <div className="space-y-2 pt-2">
+        <div className="space-y-1.5 pt-1">
           {audios.map((item, index) => (
             <div
               key={index}
-              className="flex items-center justify-between bg-slate-900 border-2 border-slate-700 p-3 rounded-xl"
+              className="flex items-center justify-between bg-[#131c2e] border border-slate-800 p-2.5 rounded-xl text-xs shadow-sm hover:border-slate-700"
             >
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => togglePlayAudio(index, item.blob)}
-                  className="bg-amber-500 hover:bg-amber-400 text-black p-2 rounded-lg font-bold"
+                  className="bg-[#0284c7] hover:bg-[#0369a1] text-white p-2 rounded-lg font-bold transition-all active:scale-95 shadow"
                   aria-label="Reproducir audio"
                 >
-                  {playingIndex === index ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+                  {playingIndex === index ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
                 </button>
-                <div className="flex flex-col">
-                  <span className="text-slate-200 font-bold text-base flex items-center gap-1">
-                    <Volume2 className="w-4 h-4 text-amber-400" />
-                    Audio #{index + 1}
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    {new Date(item.timestamp).toLocaleTimeString()}
+                <div className="flex flex-col leading-tight">
+                  <span className="text-white font-bold text-xs">Nota de Voz #{index + 1}</span>
+                  <span className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {playingIndex === index ? 'Reproduciendo...' : 'Audio guardado'}
                   </span>
                 </div>
               </div>
@@ -192,10 +201,10 @@ export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) 
                   }
                   onDeleteAudio(index);
                 }}
-                className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg border border-red-400 active:scale-90"
+                className="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-950/40 active:scale-95 transition-all"
                 aria-label="Eliminar audio"
               >
-                <Trash2 className="w-5 h-5" />
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
           ))}
@@ -204,3 +213,4 @@ export function GrabadoraAudio({ audios, onAddAudio, onDeleteAudio, isOnline }) 
     </div>
   );
 }
+

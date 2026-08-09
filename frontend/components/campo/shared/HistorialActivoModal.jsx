@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { History, X, CheckCircle2, AlertTriangle, AlertCircle, Slash, Calendar, User, FileText, ArrowLeft, RefreshCw } from 'lucide-react';
-import { db } from '../../utils/db';
-import { apiService } from '../../services/api';
-import { vibrar } from '../../utils/haptics';
+import { db } from '../../../utils/db';
+import { apiService } from '../../../services/api';
+import { vibrar } from '../../../utils/haptics';
 
 export function HistorialActivoModal({ equipoId, codigoActivo, nombreActivo, isOpen, onClose }) {
   const [historial, setHistorial] = useState([]);

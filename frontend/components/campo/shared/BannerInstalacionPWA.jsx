@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Download, Smartphone } from 'lucide-react';
-import { vibrar } from '../../utils/haptics';
+import { vibrar } from '../../../utils/haptics';
 
 export function BannerInstalacionPWA() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);

@@ -9,6 +9,13 @@ const getAuthHeaders = (tokenOverride) => {
   return headers;
 };
 
+const checkAuthStatus = (response) => {
+  if (response.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_info');
+  }
+};
+
 export const apiService = {
   login: async (username, password) => {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -43,10 +50,16 @@ export const apiService = {
     }
   },
 
+  getToken: () => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('auth_token') || '';
+  },
+
   getEquipos: async (q = '') => {
     try {
-      const url = q ? `${API_BASE_URL}/equipos?q=${encodeURIComponent(q)}` : `${API_BASE_URL}/equipos`;
+      const url = q ? `${API_BASE_URL}/equipos/?q=${encodeURIComponent(q)}` : `${API_BASE_URL}/equipos/`;
       const response = await fetch(url, { headers: getAuthHeaders() });
+      checkAuthStatus(response);
       if (!response.ok) {
         console.warn(`[apiService.getEquipos] HTTP ${response.status}: fallback a caché local.`);
         return [];
@@ -72,9 +85,11 @@ export const apiService = {
 
   getItinerarioHoy: async () => {
     try {
-      let response = await fetch(`${API_BASE_URL}/itinerario/hoy`, { headers: getAuthHeaders() });
+      let response = await fetch(`${API_BASE_URL}/itinerarios/`, { headers: getAuthHeaders() });
+      checkAuthStatus(response);
       if (!response.ok) {
-        response = await fetch(`${API_BASE_URL}/itinerarios`, { headers: getAuthHeaders() });
+        response = await fetch(`${API_BASE_URL}/itinerario/hoy/`, { headers: getAuthHeaders() });
+        checkAuthStatus(response);
       }
 
       if (!response.ok) {
@@ -307,6 +322,62 @@ export const apiService = {
     } catch (error) {
       console.error('[getMinutaResumen] Error:', error);
       return [];
+    }
+  },
+
+  getDriveRoot: async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/drive/root`, {
+        headers: getAuthHeaders(token)
+      });
+      if (!response.ok) return { root_id: 'root' };
+      return await response.json();
+    } catch (error) {
+      console.warn('[apiService.getDriveRoot] Error:', error.message);
+      return { root_id: 'root' };
+    }
+  },
+
+  getDriveCarpetas: async (parentId, token) => {
+    try {
+      const url = parentId ? `${API_BASE_URL}/drive/carpetas?parent_id=${encodeURIComponent(parentId)}` : `${API_BASE_URL}/drive/carpetas`;
+      const response = await fetch(url, { headers: getAuthHeaders(token) });
+      if (!response.ok) return { carpetas: {} };
+      return await response.json();
+    } catch (error) {
+      console.warn('[apiService.getDriveCarpetas] Error:', error.message);
+      return { carpetas: {} };
+    }
+  },
+
+  crearDriveCarpeta: async (nombre, parentId, token) => {
+    const response = await fetch(`${API_BASE_URL}/drive/crear_carpeta`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ nombre, parent_id: parentId })
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Error al crear carpeta en Drive');
+    }
+    return await response.json();
+  },
+
+  subirInspeccionesBatch: async (lote, token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/inspecciones/batch`, {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({ inspecciones: lote })
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Error al subir batch de inspecciones');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('[subirInspeccionesBatch] Error:', error);
+      throw error;
     }
   }
 };

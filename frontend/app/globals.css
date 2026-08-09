@@ -1,6 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@config "../tailwind.config.js";
+@source "../components";
 
 :root {
+
   /* Default: Sulvy Light/Corporate Theme */
   --bg-color: #f4f6f9;        
   --bg-card: #ffffff;         
@@ -134,19 +138,27 @@ body {
   background: var(--bg-color);
 }
 
-/* Typography */
-h1, h2, h3, h4, h5, h6 {
+/* Typography (Scoped to Desktop App) */
+body:not(:has(.campo-wrapper)) h1,
+body:not(:has(.campo-wrapper)) h2,
+body:not(:has(.campo-wrapper)) h3,
+body:not(:has(.campo-wrapper)) h4,
+body:not(:has(.campo-wrapper)) h5,
+body:not(:has(.campo-wrapper)) h6 {
   color: var(--text-primary);
   font-weight: 600;
 }
 
-p {
+body:not(:has(.campo-wrapper)) p {
   color: var(--text-secondary);
   line-height: 1.6;
 }
 
-/* Inputs & Buttons */
-select, input, textarea {
+
+/* Inputs & Buttons (Scoped to Desktop App) */
+body:not(:has(.campo-wrapper)) select,
+body:not(:has(.campo-wrapper)) input,
+body:not(:has(.campo-wrapper)) textarea {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -159,21 +171,23 @@ select, input, textarea {
   outline: none;
 }
 
-select {
+body:not(:has(.campo-wrapper)) select {
   color-scheme: light dark;
 }
 
-select option {
+body:not(:has(.campo-wrapper)) select option {
   background-color: var(--bg-card);
   color: var(--text-primary);
 }
 
-select:focus, input:focus, textarea:focus {
+body:not(:has(.campo-wrapper)) select:focus,
+body:not(:has(.campo-wrapper)) input:focus,
+body:not(:has(.campo-wrapper)) textarea:focus {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 2px rgba(0, 92, 167, 0.2);
 }
 
-button {
+body:not(:has(.campo-wrapper)) button {
   background: var(--accent-primary);
   color: white;
   border: none;
@@ -185,13 +199,14 @@ button {
   font-family: var(--font-sans);
 }
 
-button:hover {
+body:not(:has(.campo-wrapper)) button:hover {
   background: var(--accent-primary-hover);
 }
 
-button:active {
+body:not(:has(.campo-wrapper)) button:active {
   transform: scale(0.98);
 }
+
 
 /* Dashboard Glow Cards */
 .glow-card {
@@ -937,7 +952,10 @@ button:active {
     font-size: 1.35rem;
   }
 
-  button, input, select, textarea {
+  body:not(:has(.campo-wrapper)) button,
+  body:not(:has(.campo-wrapper)) input,
+  body:not(:has(.campo-wrapper)) select,
+  body:not(:has(.campo-wrapper)) textarea {
     min-height: 40px;
   }
 }

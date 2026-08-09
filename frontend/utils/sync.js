@@ -69,6 +69,7 @@ export async function sincronizarColaPendientes() {
           estado: insp.estado,
           categoria_foto: insp.categoria_foto || 'General',
           notas: insp.notas || '',
+          drive_folder_id: insp.drive_folder_id || null,
           timestamp: insp.timestamp,
           fotos,
           audios

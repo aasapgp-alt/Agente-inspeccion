@@ -61,6 +61,31 @@ def chat_inspeccion(mensaje: str, historial_chat: list) -> str:
         return "Lo siento, ocurrió un error procesando su solicitud."
 
 
+def transcribir_audio_bytes(audio_bytes: bytes, mime_type: str = "audio/wav") -> str:
+    """
+    Transcribe bytes de audio (WAV, WebM, OGG) a texto en español utilizando Gemini API.
+    """
+    if not audio_bytes:
+        return ""
+    try:
+        model = inicializar_gemini()
+        prompt = (
+            "Transcribe este audio de inspección técnica industrial a texto en español. "
+            "Devuelve únicamente la transcripción exacta sin saludos, etiquetas ni comentarios adicionales."
+        )
+        response = model.generate_content(
+            [
+                {"mime_type": mime_type, "data": audio_bytes},
+                prompt,
+            ],
+            request_options={"timeout": 30},
+        )
+        return response.text.strip() if response and response.text else ""
+    except Exception as e:
+        logger.error(f"Error transcribiendo audio con Gemini: {e}")
+        return ""
+
+
 def extraer_diagnostico(respuesta_json: str) -> dict:
     # Gemini suele envolver el JSON en vallas Markdown (```json ... ```); se eliminan
     # antes de parsear, tanto la variante con etiqueta de lenguaje como la genérica.

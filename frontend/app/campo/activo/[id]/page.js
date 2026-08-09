@@ -6,7 +6,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Play, Building2, MapPin, CheckCircle2, AlertTriangle, AlertCircle, Slash, History, Cpu, Lightbulb } from 'lucide-react';
 import { db } from '../../../../utils/db';
 import { apiService } from '../../../../services/api';
-import { HistorialActivoModal } from '../../../../components/campo/HistorialActivoModal';
+import { HistorialActivoModal } from '../../../../components/campo/shared/HistorialActivoModal';
 import { vibrar } from '../../../../utils/haptics';
 
 function FichaActivoContent() {
