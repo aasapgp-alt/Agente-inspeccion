@@ -22,18 +22,28 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
     const initDrive = async () => {
       setLoading(true);
       try {
-        let rootId = initialFolderId;
-        if (!rootId) {
-          const rootData = await apiService.getDriveRoot(token);
-          rootId = rootData?.root_id || 'root';
+        const rootData = await apiService.getDriveRoot(token);
+        const rootId = rootData?.root_id || 'root';
+
+        let targetId = initialFolderId || rootId;
+        let initialStack = [];
+
+        if (initialFolderId && initialFolderId !== 'root' && initialFolderId !== rootId) {
+          initialStack = [
+            { id: rootId, title: 'Raíz de Drive' },
+            { id: initialFolderId, title: 'Carpeta seleccionada' }
+          ];
+        } else {
+          initialStack = [{ id: rootId, title: 'Raíz de Drive' }];
+          targetId = rootId;
         }
 
-        setCurrentFolderId(rootId);
-        setNavStack([{ id: rootId, title: 'Raíz de Drive' }]);
-        setSelectedFolder({ id: rootId, title: 'Raíz de Drive' });
-        if (onSelectFolder) onSelectFolder(rootId, 'Raíz de Drive');
+        setCurrentFolderId(targetId);
+        setNavStack(initialStack);
+        setSelectedFolder({ id: targetId, title: initialStack[initialStack.length - 1].title });
+        if (onSelectFolder) onSelectFolder(targetId, initialStack[initialStack.length - 1].title);
 
-        await fetchSubfolders(rootId);
+        await fetchSubfolders(targetId);
       } catch (err) {
         console.error('Error initializing Drive selector:', err);
       } finally {
@@ -85,10 +95,26 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
     await fetchSubfolders(targetFolder.id);
   };
 
-  const handleGoUpOneLevel = () => {
+  const handleGoUpOneLevel = async () => {
     vibrar(20);
-    if (navStack.length <= 1) return;
-    handleNavigateUp(navStack.length - 2);
+    if (navStack.length > 1) {
+      const updatedStack = navStack.slice(0, navStack.length - 1);
+      const parentFolder = updatedStack[updatedStack.length - 1];
+      setNavStack(updatedStack);
+      setCurrentFolderId(parentFolder.id);
+      setSelectedFolder({ id: parentFolder.id, title: parentFolder.title });
+      if (onSelectFolder) onSelectFolder(parentFolder.id, parentFolder.title);
+      setShowCreateForm(false);
+      await fetchSubfolders(parentFolder.id);
+    } else if (currentFolderId && currentFolderId !== 'root') {
+      const rootStack = [{ id: 'root', title: 'Raíz de Drive' }];
+      setNavStack(rootStack);
+      setCurrentFolderId('root');
+      setSelectedFolder({ id: 'root', title: 'Raíz de Drive' });
+      if (onSelectFolder) onSelectFolder('root', 'Raíz de Drive');
+      setShowCreateForm(false);
+      await fetchSubfolders('root');
+    }
   };
 
   const handleCreateFolder = async (e) => {
@@ -113,6 +139,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
   };
 
   const currentFolderTitle = navStack.length > 0 ? navStack[navStack.length - 1].title : 'Raíz de Drive';
+  const canGoUp = navStack.length > 1 || (Boolean(currentFolderId) && currentFolderId !== 'root');
 
   return (
     <div className="w-full h-full flex flex-col justify-between text-slate-100 font-sans overflow-hidden p-4 md:p-0">
@@ -121,7 +148,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={navStack.length > 1 ? handleGoUpOneLevel : onClose}
+            onClick={canGoUp ? handleGoUpOneLevel : onClose}
             className="p-1.5 text-slate-300 hover:text-white rounded-lg active:bg-slate-800"
             aria-label="Volver"
           >
@@ -181,7 +208,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
 
         {/* Acciones */}
         <DriveFolderActions
-          canGoUp={navStack.length > 1}
+          canGoUp={canGoUp}
           onGoUp={handleGoUpOneLevel}
           currentFolderTitle={currentFolderTitle}
           currentFolderId={currentFolderId}
