@@ -85,9 +85,61 @@ def listar_carpetas(carpeta_id: str) -> list:
         return []
         
     try:
-        query = f"'{carpeta_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        file_list = drive.ListFile({'q': query}).GetList()
-        return [{"id": file['id'], "title": file['title']} for file in file_list]
+        seen_ids = set()
+        result = []
+
+        # 1. Direct children (folders and shortcuts)
+        query = f"'{carpeta_id}' in parents and (mimeType='application/vnd.google-apps.folder' or mimeType='application/vnd.google-apps.shortcut') and trashed=false"
+        file_list = drive.ListFile({
+            'q': query,
+            'supportsAllDrives': True,
+            'includeItemsFromAllDrives': True
+        }).GetList()
+
+        for f in file_list:
+            mime = f.get('mimeType')
+            f_id = f['id']
+            f_title = f['title']
+
+            if mime == 'application/vnd.google-apps.shortcut':
+                details = f.get('shortcutDetails', {})
+                if details.get('targetMimeType') == 'application/vnd.google-apps.folder':
+                    f_id = details.get('targetId', f_id)
+                else:
+                    continue
+
+            if f_id not in seen_ids:
+                seen_ids.add(f_id)
+                result.append({"id": f_id, "title": f_title})
+
+        # 2. Shared with me items (folders and shortcuts)
+        try:
+            query_shared = "sharedWithMe=true and (mimeType='application/vnd.google-apps.folder' or mimeType='application/vnd.google-apps.shortcut') and trashed=false"
+            shared_list = drive.ListFile({
+                'q': query_shared,
+                'supportsAllDrives': True,
+                'includeItemsFromAllDrives': True
+            }).GetList()
+
+            for f in shared_list:
+                mime = f.get('mimeType')
+                f_id = f['id']
+                f_title = f['title']
+
+                if mime == 'application/vnd.google-apps.shortcut':
+                    details = f.get('shortcutDetails', {})
+                    if details.get('targetMimeType') == 'application/vnd.google-apps.folder':
+                        f_id = details.get('targetId', f_id)
+                    else:
+                        continue
+
+                if f_id not in seen_ids and f_id != carpeta_id:
+                    seen_ids.add(f_id)
+                    result.append({"id": f_id, "title": f_title})
+        except Exception as shared_err:
+            logger.warning(f"Error al consultar elementos compartidos en Drive: {shared_err}")
+
+        return result
     except Exception as e:
         logger.error(f"Error listando carpetas en {carpeta_id}: {e}")
         return []
