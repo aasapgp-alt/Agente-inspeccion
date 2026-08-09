@@ -22,7 +22,7 @@ def bg_task_sincronizar_drive(task_id: str):
 @router.get("/root")
 def get_root_folder(current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     from app.services.db_service import get_config_value_db
-    root_id = get_config_value_db("drive_folder_id") or "root"
+    root_id = get_config_value_db("drive_folder_id") or "1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD"
     return {"root_id": root_id}
 
 @router.get("/carpetas", response_model=Dict[str, Any])

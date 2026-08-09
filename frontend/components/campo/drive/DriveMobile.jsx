@@ -23,7 +23,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
       setLoading(true);
       try {
         const rootData = await apiService.getDriveRoot(token);
-        const rootId = rootData?.root_id || 'root';
+        const rootId = rootData?.root_id || '1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD';
 
         let targetId = initialFolderId || rootId;
         let initialStack = [];

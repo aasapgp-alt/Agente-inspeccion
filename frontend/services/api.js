@@ -330,11 +330,11 @@ export const apiService = {
       const response = await fetch(`${API_BASE_URL}/drive/root`, {
         headers: getAuthHeaders(token)
       });
-      if (!response.ok) return { root_id: 'root' };
+      if (!response.ok) return { root_id: '1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD' };
       return await response.json();
     } catch (error) {
       console.warn('[apiService.getDriveRoot] Error:', error.message);
-      return { root_id: 'root' };
+      return { root_id: '1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD' };
     }
   },
 
