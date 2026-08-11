@@ -86,4 +86,5 @@ Thumbs.db
 
 # Credenciales específicas de producción
 service_account.json
+mycreds.txt
 

@@ -35,6 +35,36 @@ def list_carpetas(parent_id: str, current_user: dict = Depends(get_current_user)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/ancestro", response_model=Dict[str, Any])
+def get_folder_ancestro(folder_id: str, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    """
+    Obtiene la cadena jerárquica de carpetas ancestro (desde la ubicación/área técnica hasta la carpeta especificada).
+    Permite acotar y navegar dentro del árbol donde se localiza el equipo.
+    """
+    try:
+        chain = []
+        curr = folder_id
+        visited = set()
+        cursor = db.cursor()
+        
+        while curr and curr not in visited:
+            visited.add(curr)
+            cursor.execute("SELECT drive_id, nombre, parent_id FROM drive_folders_cache WHERE drive_id = ?", (curr,))
+            row = cursor.fetchone()
+            if row:
+                chain.append({"id": row["drive_id"], "title": row["nombre"]})
+                curr = row["parent_id"]
+            else:
+                break
+                
+        chain.reverse()
+        if not chain and folder_id:
+            chain = [{"id": folder_id, "title": "Carpeta seleccionada"}]
+            
+        return {"ancestro": chain}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 import urllib.parse
 import os
 import ipaddress
@@ -173,7 +203,7 @@ def status_sincronizar_drive(task_id: str, current_user: dict = Depends(get_curr
 def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     try:
         cursor = db.cursor()
-        cursor.execute("SELECT codigo, nombre FROM equipos WHERE id = ?", (equipo_id,))
+        cursor.execute("SELECT id, codigo, nombre, drive_folder_id FROM equipos WHERE id = ?", (equipo_id,))
         eq = cursor.fetchone()
         
         if not eq:
@@ -181,7 +211,15 @@ def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_curren
             
         codigo = str(eq['codigo']) if eq['codigo'] else ""
         nombre = str(eq['nombre']) if eq['nombre'] else ""
+        drive_folder_id = eq['drive_folder_id'] if 'drive_folder_id' in eq.keys() else None
         
+        if drive_folder_id:
+            # Obtener nombre de la carpeta desde cache o por defecto nombre equipo
+            cursor.execute("SELECT nombre FROM drive_folders_cache WHERE drive_id = ?", (drive_folder_id,))
+            cache_row = cursor.fetchone()
+            folder_title = cache_row['nombre'] if cache_row else f"{codigo} {nombre}"
+            return {"sugerencias": [{"id": drive_folder_id, "name": folder_title, "score": 100}]}
+
         import re
         tags = re.findall(r'\d{3}-\d{3}', nombre)
         termino = tags[0] if tags else codigo
@@ -199,7 +237,7 @@ def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_curren
         for i, c in enumerate(sugerencias_raw):
             match_score = c.get('match_score', 0)
             # Match is high score (100) if best result is above threshold or contains search term
-            if (i == 0 and match_score >= 0.3) or (termino.lower() in c['title'].lower()):
+            if (i == 0 and match_score >= 0.3) or (c.get('direct_link')) or (termino.lower() in c['title'].lower()):
                 score = 100
             else:
                 score = 50

@@ -2,8 +2,11 @@ import os
 import re
 import json
 import logging
+from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai import GenerativeModel
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,43 @@ def transcribir_audio_bytes(audio_bytes: bytes, mime_type: str = "audio/wav") ->
     except Exception as e:
         logger.error(f"Error transcribiendo audio con Gemini: {e}")
         return ""
+
+
+def interpretar_dictado_inspeccion(texto_dictado: str, equipo_info: str = "") -> dict:
+    """
+    Toma la transcripción bruta de voz de una inspección técnica industrial y
+    usa Gemini IA para extraer e interpretar los campos estructurados:
+    - diagnostico (hallazgos del estado actual del equipo)
+    - acciones (acciones o pruebas realizadas durante la inspección)
+    - recomendaciones (tareas preventivas o correctivas sugeridas/seguimiento)
+    - estado ("BUENO", "REGULAR", "CRITICO", "FUERA DE RUTA", o None si no se menciona)
+    """
+    if not texto_dictado or not texto_dictado.strip():
+        return {}
+    try:
+        model = inicializar_gemini()
+        prompt = (
+            "Eres un asistente experto en ingeniería e inspección de equipos industriales en plantas químicas.\n"
+            f"El inspector ha grabado el siguiente dictado de voz sobre un equipo ({equipo_info}):\n"
+            f"\"\"\"{texto_dictado}\"\"\"\n\n"
+            "Interpreta el dictado y extrae la información organizándola en los campos correspondientes.\n"
+            "Responde ÚNICAMENTE en formato JSON válido con la siguiente estructura:\n"
+            "{\n"
+            '  "diagnostico": "Descripción clara de hallazgos técnicos del estado actual...",\n'
+            '  "acciones": "Acciones o inspecciones realizadas...",\n'
+            '  "recomendaciones": "Recomendaciones, mantenimientos sugeridos o frecuencia de seguimiento...",\n'
+            '  "estado": "BUENO | REGULAR | CRITICO | FUERA DE RUTA" (solo si se menciona o deduce del dictado, o null)\n'
+            "}"
+        )
+        response = model.generate_content([prompt], request_options={"timeout": 30})
+        if response and response.text:
+            parsed = extraer_diagnostico(response.text)
+            if isinstance(parsed, dict):
+                return parsed
+        return {"diagnostico": texto_dictado}
+    except Exception as e:
+        logger.error(f"Error interpretando dictado de voz con Gemini: {e}")
+        return {"diagnostico": texto_dictado}
 
 
 def extraer_diagnostico(respuesta_json: str) -> dict:

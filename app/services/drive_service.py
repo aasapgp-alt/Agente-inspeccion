@@ -24,7 +24,19 @@ logger = logging.getLogger(__name__)
 
 def autenticar_drive() -> GoogleAuth:
     try:
-        # 1. Intentar usar Cuenta de Servicio (Service Account) para producción/cero login
+        # 1. Si existe credencial OAuth de usuario autenticado (mycreds.txt), priorizarla para contar con cuota de usuario
+        if os.path.exists("mycreds.txt"):
+            gauth = GoogleAuth(settings_file="settings.yaml")
+            gauth.LoadCredentialsFile("mycreds.txt")
+            if gauth.access_token_expired:
+                gauth.Refresh()
+            else:
+                gauth.Authorize()
+            gauth.SaveCredentialsFile("mycreds.txt")
+            logger.info("Autenticado exitosamente en Google Drive usando OAuth de usuario (mycreds.txt).")
+            return gauth
+
+        # 2. Si existe Service Account, usarla (ideal para Unidades Compartidas)
         service_json_path = "c:\\Agente-Inspector\\service_account.json"
         if os.path.exists(service_json_path):
             from oauth2client.service_account import ServiceAccountCredentials
@@ -39,7 +51,7 @@ def autenticar_drive() -> GoogleAuth:
             logger.info("Autenticado exitosamente en Google Drive usando Cuenta de Servicio.")
             return gauth
 
-        # 2. Fallback a flujo OAuth normal (requiere login por navegador inicial)
+        # 3. Fallback a flujo OAuth interactivo
         gauth = GoogleAuth(settings_file="settings.yaml")
         gauth.LoadCredentialsFile("mycreds.txt")
         if gauth.credentials is None:
@@ -112,32 +124,36 @@ def listar_carpetas(carpeta_id: str) -> list:
                 seen_ids.add(f_id)
                 result.append({"id": f_id, "title": f_title})
 
-        # 2. Shared with me items (folders and shortcuts)
-        try:
-            query_shared = "sharedWithMe=true and (mimeType='application/vnd.google-apps.folder' or mimeType='application/vnd.google-apps.shortcut') and trashed=false"
-            shared_list = drive.ListFile({
-                'q': query_shared,
-                'supportsAllDrives': True,
-                'includeItemsFromAllDrives': True
-            }).GetList()
+        # 2. Shared with me items (folders and shortcuts) solo si se consulta la raíz
+        from app.services.db_service import get_config_value_db
+        root_configured_id = get_config_value_db("drive_folder_id") or "1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD"
+        
+        if carpeta_id in ("root", root_configured_id):
+            try:
+                query_shared = "sharedWithMe=true and (mimeType='application/vnd.google-apps.folder' or mimeType='application/vnd.google-apps.shortcut') and trashed=false"
+                shared_list = drive.ListFile({
+                    'q': query_shared,
+                    'supportsAllDrives': True,
+                    'includeItemsFromAllDrives': True
+                }).GetList()
 
-            for f in shared_list:
-                mime = f.get('mimeType')
-                f_id = f['id']
-                f_title = f['title']
+                for f in shared_list:
+                    mime = f.get('mimeType')
+                    f_id = f['id']
+                    f_title = f['title']
 
-                if mime == 'application/vnd.google-apps.shortcut':
-                    details = f.get('shortcutDetails', {})
-                    if details.get('targetMimeType') == 'application/vnd.google-apps.folder':
-                        f_id = details.get('targetId', f_id)
-                    else:
-                        continue
+                    if mime == 'application/vnd.google-apps.shortcut':
+                        details = f.get('shortcutDetails', {})
+                        if details.get('targetMimeType') == 'application/vnd.google-apps.folder':
+                            f_id = details.get('targetId', f_id)
+                        else:
+                            continue
 
-                if f_id not in seen_ids and f_id != carpeta_id:
-                    seen_ids.add(f_id)
-                    result.append({"id": f_id, "title": f_title})
-        except Exception as shared_err:
-            logger.warning(f"Error al consultar elementos compartidos en Drive: {shared_err}")
+                    if f_id not in seen_ids and f_id != carpeta_id:
+                        seen_ids.add(f_id)
+                        result.append({"id": f_id, "title": f_title})
+            except Exception as shared_err:
+                logger.warning(f"Error al consultar elementos compartidos en Drive: {shared_err}")
 
         return result
     except Exception as e:
@@ -190,12 +206,22 @@ def descargar_imagen(file_id: str) -> bytes:
 def subir_archivo(ruta_local: str, nombre: str, carpeta_id: str) -> dict:
     try:
         drive = get_drive_instance()
+        if not drive:
+            logger.warning(f"No hay conexión activa a Google Drive para subir {nombre}.")
+            return {}
         file = drive.CreateFile({'title': nombre, 'parents': [{'id': carpeta_id}]})
         file.SetContentFile(ruta_local)
-        file.Upload()
+        file.Upload(param={'supportsAllDrives': True})
+        logger.info(f"Archivo {nombre} subido exitosamente a carpeta Drive {carpeta_id} (ID: {file['id']})")
         return {"id": file['id'], "title": file['title']}
     except Exception as e:
-        logger.error(f"Error subiendo archivo {nombre}: {e}")
+        logger.error(f"Error subiendo archivo {nombre} a carpeta Drive {carpeta_id}: {e}")
+        if "quotaExceeded" in str(e) or "Service Accounts do not have storage quota" in str(e):
+            logger.warning(
+                "ATENCIÓN: La Cuenta de Servicio no posee cuota propia en Drive. "
+                "Para subir a carpetas de usuario común, ejecute 'python scripts/sync_reports_drive_oauth.py' "
+                "para generar las credenciales de usuario 'mycreds.txt'."
+            )
         return {}
 
 def buscar_carpeta(nombre: str, carpeta_id: str) -> str:
@@ -339,7 +365,41 @@ def remover_prefijo_secuencia(titulo: str) -> str:
     # Remover prefijos como '01-', '02- ', '11A- ', '101B- '
     return re.sub(r'^\d{1,3}[a-zA-Z]*-\s*', '', titulo)
 
+def obtener_carpeta_drive_directa_equipo(equipo_id: int = None, codigo: str = None, nombre: str = None) -> Optional[Dict[str, Any]]:
+    """Obtiene el ID directo de carpeta en Drive registrado en la BD para un equipo."""
+    try:
+        from app.services.db_service import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            row = None
+            if equipo_id:
+                cursor.execute("SELECT id, codigo, nombre, drive_folder_id FROM equipos WHERE id = ?", (equipo_id,))
+                row = cursor.fetchone()
+            elif codigo:
+                cursor.execute("SELECT id, codigo, nombre, drive_folder_id FROM equipos WHERE codigo = ?", (codigo,))
+                row = cursor.fetchone()
+            
+            if row and row['drive_folder_id']:
+                df_id = row['drive_folder_id']
+                cursor.execute("SELECT nombre FROM drive_folders_cache WHERE drive_id = ?", (df_id,))
+                cache_row = cursor.fetchone()
+                folder_title = cache_row['nombre'] if cache_row else f"{row['codigo']} {row['nombre']}"
+                return {
+                    "id": df_id,
+                    "title": folder_title,
+                    "match_score": 1.0,
+                    "direct_link": True
+                }
+    except Exception as e:
+        logger.warning(f"Error consultando carpeta directa de equipo en BD: {e}")
+    return None
+
 def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
+    # 0. Intentar vínculo directo registrado en BD para el equipo
+    direct_match = obtener_carpeta_drive_directa_equipo(codigo=codigo, nombre=nombre)
+    if direct_match:
+        return [direct_match]
+
     drive = get_drive_instance()
 
     # If the parent folder is 'root', resolve it to the configured drive_folder_id from DB settings

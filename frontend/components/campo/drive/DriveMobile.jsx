@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { HardDrive, CheckCircle2, X, ArrowLeft } from 'lucide-react';
+import { HardDrive, CheckCircle2, X, ArrowLeft, ChevronRight } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import { vibrar } from '../../../utils/haptics';
 import { DriveFolderList } from './DriveFolderList';
@@ -12,7 +12,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [navStack, setNavStack] = useState([]);
-  const [selectedFolder, setSelectedFolder] = useState({ id: '', title: '' });
+  const [selectedFolder, setSelectedFolder] = useState({ id: '', title: '', path: '' });
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -22,26 +22,31 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
     const initDrive = async () => {
       setLoading(true);
       try {
-        const rootData = await apiService.getDriveRoot(token);
-        const rootId = rootData?.root_id || '1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD';
-
-        let targetId = initialFolderId || rootId;
+        let targetId = initialFolderId || '';
         let initialStack = [];
 
-        if (initialFolderId && initialFolderId !== 'root' && initialFolderId !== rootId) {
-          initialStack = [
-            { id: rootId, title: 'Raíz de Drive' },
-            { id: initialFolderId, title: 'Carpeta seleccionada' }
-          ];
+        if (initialFolderId) {
+          const ancestroData = await apiService.getDriveAncestro(initialFolderId, token);
+          if (ancestroData?.ancestro && ancestroData.ancestro.length > 0) {
+            initialStack = ancestroData.ancestro;
+            targetId = initialStack[initialStack.length - 1].id;
+          } else {
+            initialStack = [{ id: initialFolderId, title: 'Carpeta seleccionada' }];
+            targetId = initialFolderId;
+          }
         } else {
+          const rootData = await apiService.getDriveRoot(token);
+          const rootId = rootData?.root_id || '1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD';
           initialStack = [{ id: rootId, title: 'Raíz de Drive' }];
           targetId = rootId;
         }
 
         setCurrentFolderId(targetId);
         setNavStack(initialStack);
-        setSelectedFolder({ id: targetId, title: initialStack[initialStack.length - 1].title });
-        if (onSelectFolder) onSelectFolder(targetId, initialStack[initialStack.length - 1].title);
+        const currentTitle = initialStack[initialStack.length - 1].title;
+        const fullPath = initialStack.map(item => item.title).join(' / ');
+        setSelectedFolder({ id: targetId, title: currentTitle, path: fullPath });
+        if (onSelectFolder) onSelectFolder(targetId, currentTitle, fullPath);
 
         await fetchSubfolders(targetId);
       } catch (err) {
@@ -75,8 +80,9 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
     const updatedStack = [...navStack, { id: folder.id, title: folder.title }];
     setNavStack(updatedStack);
     setCurrentFolderId(folder.id);
-    setSelectedFolder({ id: folder.id, title: folder.title });
-    if (onSelectFolder) onSelectFolder(folder.id, folder.title);
+    const fullPath = updatedStack.map(item => item.title).join(' / ');
+    setSelectedFolder({ id: folder.id, title: folder.title, path: fullPath });
+    if (onSelectFolder) onSelectFolder(folder.id, folder.title, fullPath);
     setShowCreateForm(false);
     await fetchSubfolders(folder.id);
   };
@@ -89,8 +95,9 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
 
     setNavStack(updatedStack);
     setCurrentFolderId(targetFolder.id);
-    setSelectedFolder({ id: targetFolder.id, title: targetFolder.title });
-    if (onSelectFolder) onSelectFolder(targetFolder.id, targetFolder.title);
+    const fullPath = updatedStack.map(item => item.title).join(' / ');
+    setSelectedFolder({ id: targetFolder.id, title: targetFolder.title, path: fullPath });
+    if (onSelectFolder) onSelectFolder(targetFolder.id, targetFolder.title, fullPath);
     setShowCreateForm(false);
     await fetchSubfolders(targetFolder.id);
   };
@@ -102,18 +109,11 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
       const parentFolder = updatedStack[updatedStack.length - 1];
       setNavStack(updatedStack);
       setCurrentFolderId(parentFolder.id);
-      setSelectedFolder({ id: parentFolder.id, title: parentFolder.title });
-      if (onSelectFolder) onSelectFolder(parentFolder.id, parentFolder.title);
+      const fullPath = updatedStack.map(item => item.title).join(' / ');
+      setSelectedFolder({ id: parentFolder.id, title: parentFolder.title, path: fullPath });
+      if (onSelectFolder) onSelectFolder(parentFolder.id, parentFolder.title, fullPath);
       setShowCreateForm(false);
       await fetchSubfolders(parentFolder.id);
-    } else if (currentFolderId && currentFolderId !== 'root') {
-      const rootStack = [{ id: 'root', title: 'Raíz de Drive' }];
-      setNavStack(rootStack);
-      setCurrentFolderId('root');
-      setSelectedFolder({ id: 'root', title: 'Raíz de Drive' });
-      if (onSelectFolder) onSelectFolder('root', 'Raíz de Drive');
-      setShowCreateForm(false);
-      await fetchSubfolders('root');
     }
   };
 
@@ -127,8 +127,9 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
       setNewFolderName('');
       setShowCreateForm(false);
       await fetchSubfolders(currentFolderId);
-      setSelectedFolder({ id: data.id, title: data.title });
-      if (onSelectFolder) onSelectFolder(data.id, data.title);
+      const fullPath = [...navStack, { id: data.id, title: data.title }].map(i => i.title).join(' / ');
+      setSelectedFolder({ id: data.id, title: data.title, path: fullPath });
+      if (onSelectFolder) onSelectFolder(data.id, data.title, fullPath);
       vibrar(30);
     } catch (err) {
       console.error('Error creating folder:', err);
@@ -139,7 +140,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
   };
 
   const currentFolderTitle = navStack.length > 0 ? navStack[navStack.length - 1].title : 'Raíz de Drive';
-  const canGoUp = navStack.length > 1 || (Boolean(currentFolderId) && currentFolderId !== 'root');
+  const canGoUp = navStack.length > 1;
 
   return (
     <div className="w-full h-full flex flex-col justify-between text-slate-100 font-sans overflow-hidden p-4 md:p-0">
@@ -155,7 +156,7 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h3 className="font-extrabold text-base text-white m-0 leading-tight">
-            Drive / Planta
+            Drive / Ubicación Técnica
           </h3>
         </div>
         {onClose && (
@@ -172,6 +173,34 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
 
       {/* Área Principal Scrolleable */}
       <div className="flex-1 overflow-y-auto space-y-4 py-3 min-h-0 pr-0.5 custom-scrollbar">
+        {/* Ruta de Referencia (Breadcrumb Miga de Pan) */}
+        {navStack.length > 0 && (
+          <div className="bg-[#0f172a] border border-slate-800/90 p-2.5 px-3 rounded-2xl overflow-x-auto whitespace-nowrap custom-scrollbar shadow-inner">
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 shrink-0 mr-1 flex items-center gap-1">
+                📍 Ruta:
+              </span>
+              {navStack.map((item, idx) => (
+                <React.Fragment key={item.id || idx}>
+                  {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateUp(idx)}
+                    className={`truncate max-w-[140px] text-[11px] transition-all rounded px-1.5 py-0.5 font-bold ${
+                      idx === navStack.length - 1
+                        ? 'text-sky-300 bg-sky-950/80 border border-sky-700/60 shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                    }`}
+                    title={item.title}
+                  >
+                    {item.title}
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Carpeta Seleccionada */}
         <div className="space-y-1.5">
           <span className="text-xs font-bold text-slate-300 block">
@@ -200,8 +229,9 @@ export function DriveMobile({ token, onSelectFolder, initialFolderId = '', onClo
           selectedFolderId={selectedFolder.id}
           loading={loading}
           onSelectFolder={(id, title) => {
-            setSelectedFolder({ id, title });
-            if (onSelectFolder) onSelectFolder(id, title);
+            const currentPath = navStack.map(i => i.title).join(' / ');
+            setSelectedFolder({ id, title, path: currentPath });
+            if (onSelectFolder) onSelectFolder(id, title, currentPath);
           }}
           onNavigateDown={handleNavigateDown}
         />

@@ -11,11 +11,16 @@ export function GuardarSiguiente({
   mostrarModalConfirmacion = false,
   isOnline = true,
   onNavegarSiguiente,
-  onNavegarInicio
+  onNavegarInicio,
+  onNavegarBuscar,
+  fuente = 'busqueda',
+  hasSiguiente = false
 }) {
+  const esItinerario = fuente === 'itinerario' && hasSiguiente;
+
   return (
     <>
-      <div className="mt-3">
+      <div className="mt-3 space-y-2">
         <CampoButton
           variant="success"
           size="medium"
@@ -24,8 +29,27 @@ export function GuardarSiguiente({
           fullWidth
           icon={ArrowRight}
         >
-          {isGuardando ? 'GUARDANDO...' : 'GUARDAR Y SIGUIENTE'}
+          {isGuardando
+            ? 'GUARDANDO...'
+            : esItinerario
+            ? 'GUARDAR Y SIGUIENTE'
+            : 'GUARDAR Y VOLVER AL INICIO'}
         </CampoButton>
+
+        {!esItinerario && (
+          <CampoButton
+            variant="secondary"
+            size="medium"
+            onClick={() => {
+              vibrar(20);
+              if (onNavegarInicio) onNavegarInicio();
+            }}
+            disabled={isGuardando}
+            fullWidth
+          >
+            VOLVER AL INICIO SIN GUARDAR
+          </CampoButton>
+        )}
       </div>
 
       {/* Modal Confirmación Guardado */}
@@ -43,27 +67,60 @@ export function GuardarSiguiente({
             </div>
 
             <div className="space-y-2 pt-1">
-              <CampoButton
-                variant="success"
-                size="medium"
-                onClick={onNavegarSiguiente}
-                fullWidth
-                icon={ArrowRight}
-              >
-                SIGUIENTE EQUIPO
-              </CampoButton>
+              {esItinerario ? (
+                <>
+                  <CampoButton
+                    variant="success"
+                    size="medium"
+                    onClick={onNavegarSiguiente}
+                    fullWidth
+                    icon={ArrowRight}
+                  >
+                    SIGUIENTE EQUIPO
+                  </CampoButton>
 
-              <CampoButton
-                variant="secondary"
-                size="medium"
-                onClick={() => {
-                  vibrar(20);
-                  if (onNavegarInicio) onNavegarInicio();
-                }}
-                fullWidth
-              >
-                Ir al Inicio
-              </CampoButton>
+                  <CampoButton
+                    variant="secondary"
+                    size="medium"
+                    onClick={() => {
+                      vibrar(20);
+                      if (onNavegarInicio) onNavegarInicio();
+                    }}
+                    fullWidth
+                  >
+                    Ir al Inicio
+                  </CampoButton>
+                </>
+              ) : (
+                <>
+                  <CampoButton
+                    variant="success"
+                    size="medium"
+                    onClick={() => {
+                      vibrar(20);
+                      if (onNavegarInicio) onNavegarInicio();
+                    }}
+                    fullWidth
+                    icon={CheckCircle2}
+                  >
+                    VOLVER AL INICIO
+                  </CampoButton>
+
+                  {onNavegarBuscar && (
+                    <CampoButton
+                      variant="secondary"
+                      size="medium"
+                      onClick={() => {
+                        vibrar(20);
+                        if (onNavegarBuscar) onNavegarBuscar();
+                      }}
+                      fullWidth
+                    >
+                      NUEVA BÚSQUEDA
+                    </CampoButton>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

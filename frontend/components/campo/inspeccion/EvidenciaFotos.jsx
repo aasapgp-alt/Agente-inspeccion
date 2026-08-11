@@ -4,7 +4,6 @@ import React, { useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import { Camera, Trash2, AlertCircle } from 'lucide-react';
 import { vibrar, vibrarError } from '../../../utils/haptics';
-import { CategoriaEquipo } from './CategoriaEquipo';
 
 export function EvidenciaFotos({
   fotos = [],
@@ -113,12 +112,6 @@ export function EvidenciaFotos({
         </span>
       </button>
 
-      {/* Categorías de Foto: Succión, Impulsión, General */}
-      <CategoriaEquipo
-        categoriaSeleccionada={categoriaSeleccionada}
-        onSelectCategoria={onSelectCategoria}
-      />
-
       {errorMessage && (
         <div className="bg-red-950/80 border border-red-500 text-red-200 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
@@ -134,9 +127,11 @@ export function EvidenciaFotos({
             return (
               <div key={index} className="relative aspect-square rounded-xl overflow-hidden border border-slate-700 bg-slate-950 group shadow">
                 <img src={previewUrl} alt={`Foto ${index + 1}`} className="w-full h-full object-cover" />
-                <span className="absolute top-1 left-1 bg-black/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded border border-slate-700">
-                  {item.categoria || 'General'}
-                </span>
+                {item.categoria && item.categoria !== 'General' && (
+                  <span className="absolute top-1 left-1 bg-black/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded border border-slate-700">
+                    {item.categoria}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => {

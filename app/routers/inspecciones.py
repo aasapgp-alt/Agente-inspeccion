@@ -75,7 +75,7 @@ def get_inspecciones_equipo(
     try:
         cursor = db.cursor()
         cursor.execute("""
-            SELECT id, equipo_id, anio, estado, diagnostico, recomendaciones, created_at, updated_at, reporte_generado
+            SELECT id, equipo_id, anio, estado, acciones, diagnostico, recomendaciones, created_at, updated_at, reporte_generado, numero_acta
             FROM inspecciones
             WHERE equipo_id = ?
             ORDER BY anio DESC, id DESC

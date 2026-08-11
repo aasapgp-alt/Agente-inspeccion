@@ -118,7 +118,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div className="eyebrow" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>VISTA DETALLADA DE PLANTA</div>
             <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginTop: '0.2rem' }}>Planta: {selectedPlant.name}</h1>
@@ -146,7 +146,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
         </div>
 
         {/* Local Plant Metrics Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.2rem' }}>
+        <div className="dashboard-plant-metrics-grid">
           {plantMetrics.map((m, i) => (
             <div key={i} className={`glow-card ${m.colorClass}`}>
               <h3>{m.title}</h3>
@@ -316,7 +316,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <h1 style={{ fontSize: '1.8rem', fontWeight: 700 }}>Equipos en Estado: {conditionTitle}</h1>
           <button 
             onClick={() => setSelectedCondition(null)}

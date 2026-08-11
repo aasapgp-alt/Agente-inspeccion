@@ -57,6 +57,14 @@ export default function SettingsPanel() {
   const [nuevoRol, setNuevoRol] = useState('inspector');
   const [nuevaEmpresa, setNuevaEmpresa] = useState('');
 
+  // Estados para Revertir Inspección (Solo Admin)
+  const [revertEquipos, setRevertEquipos] = useState([]);
+  const [revertEquiposLoading, setRevertEquiposLoading] = useState(false);
+  const [revertSelectedEquipoId, setRevertSelectedEquipoId] = useState('');
+  const [revertMotivo, setRevertMotivo] = useState('');
+  const [reverting, setReverting] = useState(false);
+  const [revertFilterText, setRevertFilterText] = useState('');
+
   const isAdmin = user?.rol === 'admin';
 
   const categories = [
@@ -66,6 +74,7 @@ export default function SettingsPanel() {
     { key: 'aprendizaje_ia', label: '🎓 Aprendizajes IA' },
     { key: 'itinerarios', label: '📅 Itinerarios' },
     ...(user?.rol === 'admin' ? [{ key: 'usuarios', label: '👥 Usuarios' }] : []),
+    ...(user?.rol === 'admin' ? [{ key: 'revertir_inspeccion', label: '🔄 Revertir Inspección' }] : []),
     { key: 'pdf', label: '📄 Rutas y PDF' },
     { key: 'reportes', label: '📊 Reportes' },
     { key: 'notificaciones', label: '🔔 Notificaciones' },
@@ -355,9 +364,75 @@ export default function SettingsPanel() {
     }
   };
 
+  const fetchRevertEquipos = async () => {
+    setRevertEquiposLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/dashboard/history', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const inspeccionados = data.filter(e => e.estado_actual && e.estado_actual.toUpperCase() !== 'PENDIENTE' && e.estado_actual.toUpperCase() !== 'SIN DATOS');
+        setRevertEquipos(inspeccionados);
+      }
+    } catch (err) {
+      console.error("Error al obtener equipos para revertir:", err);
+    } finally {
+      setRevertEquiposLoading(false);
+    }
+  };
+
+  const handleRevertirInspeccion = async (e) => {
+    e.preventDefault();
+    if (!revertSelectedEquipoId) {
+      return alert("Seleccione un equipo de la lista.");
+    }
+    if (!revertMotivo.trim()) {
+      return alert("Debe especificar obligatoriamente un motivo o razón del error.");
+    }
+
+    const eqTarget = revertEquipos.find(item => String(item.id) === String(revertSelectedEquipoId));
+    const eqLabel = eqTarget ? `${eqTarget.tag_codigo} - ${eqTarget.descripcion}` : `ID ${revertSelectedEquipoId}`;
+
+    if (!confirm(`¿Está seguro de que desea cambiar el equipo '${eqLabel}' a NO INSPECCIONADO (PENDIENTE)?\n\nMotivo: ${revertMotivo.trim()}`)) {
+      return;
+    }
+
+    setReverting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/equipos/${revertSelectedEquipoId}/revertir-inspeccion`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          motivo: revertMotivo.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Error al revertir la inspección del equipo");
+      }
+      setSuccess(`¡El equipo '${eqLabel}' se ha cambiado exitosamente a NO INSPECCIONADO!`);
+      setRevertSelectedEquipoId('');
+      setRevertMotivo('');
+      fetchRevertEquipos();
+    } catch (err) {
+      setError(err.message || "Error al procesar la reversión");
+    } finally {
+      setReverting(false);
+    }
+  };
+
   useEffect(() => {
     if (token && activeSubTab === 'usuarios' && user?.rol === 'admin') {
       fetchUsuarios();
+    }
+    if (token && activeSubTab === 'revertir_inspeccion' && user?.rol === 'admin') {
+      fetchRevertEquipos();
     }
   }, [token, activeSubTab]);
 
@@ -1605,6 +1680,129 @@ export default function SettingsPanel() {
                 )}
               </div>
 
+            </div>
+          ) : activeSubTab === 'revertir_inspeccion' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', flex: 1 }}>
+              <div>
+                <h4 style={{ fontSize: '1.2rem', color: 'var(--accent-primary)', margin: '0 0 0.3rem 0', fontWeight: 700 }}>
+                  🔄 Revertir Estado de Inspección
+                </h4>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+                  Permite cambiar un equipo previamente inspeccionado (Bueno, Regular, Crítico, Fuera de Ruta) a estado <strong>No Inspeccionado (PENDIENTE)</strong> en caso de error, equivocación en la asignación o requerimiento administrativo. Registra una traza de auditoría obligatoria.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '2rem', flexWrap: 'wrap', width: '100%' }}>
+                {/* Formulario de Reversión */}
+                <div className="glass-panel" style={{ flex: '1 1 420px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', height: 'fit-content' }}>
+                  <form onSubmit={handleRevertirInspeccion} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        Filtrar / Buscar Equipo Inspeccionado:
+                      </label>
+                      <input
+                        type="text"
+                        value={revertFilterText}
+                        onChange={(e) => setRevertFilterText(e.target.value)}
+                        placeholder="Buscar por tag, nombre o planta..."
+                        style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        Seleccionar Equipo a Pasar a No Inspeccionado *
+                      </label>
+                      {revertEquiposLoading ? (
+                        <div style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cargando equipos...</div>
+                      ) : (
+                        <select
+                          value={revertSelectedEquipoId}
+                          onChange={(e) => setRevertSelectedEquipoId(e.target.value)}
+                          style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%' }}
+                        >
+                          <option value="">-- Seleccionar Equipo ({revertEquipos.length} inspeccionados) --</option>
+                          {revertEquipos
+                            .filter(e => {
+                              if (!revertFilterText.trim()) return true;
+                              const query = revertFilterText.toLowerCase();
+                              return (e.tag_codigo || '').toLowerCase().includes(query) ||
+                                     (e.descripcion || '').toLowerCase().includes(query) ||
+                                     (e.area_nombre || '').toLowerCase().includes(query) ||
+                                     (e.empresa_nombre || '').toLowerCase().includes(query);
+                            })
+                            .map(eq => (
+                              <option key={eq.id} value={eq.id}>
+                                {eq.tag_codigo} - {eq.descripcion} ({eq.area_nombre || 'N/A'}) [Estado: {eq.estado_actual}]
+                              </option>
+                            ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {revertSelectedEquipoId && (() => {
+                      const eqObj = revertEquipos.find(i => String(i.id) === String(revertSelectedEquipoId));
+                      if (!eqObj) return null;
+                      return (
+                        <div style={{ padding: '0.8rem', backgroundColor: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div><strong>Activo:</strong> {eqObj.tag_codigo} - {eqObj.descripcion}</div>
+                          <div><strong>Ubicación:</strong> {eqObj.empresa_nombre || 'N/A'} / {eqObj.area_nombre || 'N/A'}</div>
+                          <div><strong>Estado Actual:</strong> <span style={{ color: '#f59e0b', fontWeight: 700 }}>{eqObj.estado_actual}</span></div>
+                          {eqObj.diagnostico && <div><strong>Diagnóstico:</strong> {eqObj.diagnostico}</div>}
+                        </div>
+                      );
+                    })()}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        Motivo / Razón del Error (Obligatorio para auditoría) *
+                      </label>
+                      <textarea
+                        value={revertMotivo}
+                        onChange={(e) => setRevertMotivo(e.target.value)}
+                        placeholder="Ejemplo: Se cargaron fotos pertenecientes a otra bomba por error. Requiere re-inspección."
+                        rows={3}
+                        style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', width: '100%', resize: 'vertical' }}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={reverting || !revertSelectedEquipoId || !revertMotivo.trim()}
+                      style={{
+                        marginTop: '0.5rem',
+                        backgroundColor: (reverting || !revertSelectedEquipoId || !revertMotivo.trim()) ? 'rgba(239, 68, 68, 0.3)' : '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        cursor: (reverting || !revertSelectedEquipoId || !revertMotivo.trim()) ? 'not-allowed' : 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        width: '100%',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {reverting ? '⏳ Procesando Reversión...' : '↩️ Pasar Equipo a No Inspeccionado'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Resumen e Instrucciones */}
+                <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="glass-panel" style={{ padding: '1.2rem', backgroundColor: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+                    <h5 style={{ fontSize: '0.95rem', color: 'var(--accent-primary)', margin: '0 0 0.5rem 0', fontWeight: 600 }}>ℹ️ ¿Qué ocurre al revertir?</h5>
+                    <ul style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', paddingLeft: '1.2rem', margin: 0, lineHeight: 1.6 }}>
+                      <li>El estado del equipo cambiará inmediatamente a <strong>PENDIENTE</strong> (no inspeccionado).</li>
+                      <li>Se removerá de los reportes y libros como equipo completado.</li>
+                      <li>El historial de auditoría registrará el usuario admin, fecha y la justificación ingresada.</li>
+                      <li>El inspector podrá volver a inspeccionar este activo en la app/PWA.</li>
+                    </ul>
+                  </div>
+                </div>
+
+              </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>

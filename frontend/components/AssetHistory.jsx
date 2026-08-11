@@ -31,6 +31,44 @@ export default function AssetHistory({ empresaId }) {
   const [editTemperatura, setEditTemperatura] = useState(0);
   const [editEstado, setEditEstado] = useState('Bueno');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRevertModal, setShowRevertModal] = useState(false);
+  const [revertReason, setRevertReason] = useState('');
+  const [revertingAsset, setRevertingAsset] = useState(false);
+
+  const handleRevertAsset = async () => {
+    if (!revertReason.trim()) {
+      return alert("Debe ingresar obligatoriamente el motivo del cambio a no inspeccionado.");
+    }
+    setRevertingAsset(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/equipos/${selectedAsset.id}/revertir-inspeccion`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          motivo: revertReason.trim()
+        })
+      });
+      if (res.ok) {
+        alert("El equipo ha sido pasado a NO INSPECCIONADO (PENDIENTE) exitosamente.");
+        const updatedAsset = { ...selectedAsset, estado_actual: 'PENDIENTE' };
+        setSelectedAsset(updatedAsset);
+        setAssets(prev => prev.map(a => a.id === selectedAsset.id ? updatedAsset : a));
+        setShowRevertModal(false);
+        setRevertReason('');
+      } else {
+        const errData = await res.json();
+        alert(`Error al revertir la inspección: ${errData.detail || 'Error en el servidor'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error de conexión al revertir la inspección.");
+    } finally {
+      setRevertingAsset(false);
+    }
+  };
 
   const handleDeleteAsset = async () => {
     try {
@@ -423,6 +461,18 @@ export default function AssetHistory({ empresaId }) {
                     ✏️ Editar Datos Técnicos
                   </button>
                 )}
+                {user?.rol === 'admin' && selectedAsset.estado_actual && selectedAsset.estado_actual.toUpperCase() !== 'PENDIENTE' && (
+                  <button 
+                    onClick={() => {
+                      setRevertReason('');
+                      setShowRevertModal(true);
+                    }} 
+                    className="btn" 
+                    style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', marginTop: '0.5rem', backgroundColor: '#f59e0b', color: 'white' }}
+                  >
+                    ↩️ Pasar a No Inspeccionado
+                  </button>
+                )}
                 {user?.rol === 'admin' && (
                   <button 
                     onClick={() => setShowDeleteModal(true)} 
@@ -615,6 +665,102 @@ export default function AssetHistory({ empresaId }) {
                 onMouseLeave={e => e.target.style.backgroundColor = '#ef4444'}
               >
                 Confirmar Eliminación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Revertir Inspección a No Inspeccionado */}
+      {showRevertModal && selectedAsset && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div className="glass-panel" style={{
+            width: '90%',
+            maxWidth: '500px',
+            padding: '2rem',
+            borderRadius: '12px',
+            border: '1px solid rgba(245, 158, 11, 0.4)',
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.2rem',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <span style={{ fontSize: '1.8rem' }}>🔄</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#f59e0b', fontWeight: 700 }}>
+                  Pasar a No Inspeccionado
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Equipo: {selectedAsset.tag_codigo} - {selectedAsset.descripcion}
+                </span>
+              </div>
+            </div>
+            
+            <div style={{ color: 'var(--text-primary)', fontSize: '0.88rem', lineHeight: '1.5' }}>
+              <p style={{ margin: '0 0 0.8rem 0' }}>
+                Vas a cambiar el estado de este equipo de <strong>{selectedAsset.estado_actual}</strong> a <strong>PENDIENTE (No Inspeccionado)</strong>.
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Motivo o razón del error (Obligatorio) *
+                </label>
+                <textarea
+                  value={revertReason}
+                  onChange={(e) => setRevertReason(e.target.value)}
+                  placeholder="Ej: Se inspeccionó por error / asignación incorrecta de tag / fotos equivocadas"
+                  rows={3}
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    fontSize: '0.88rem',
+                    outline: 'none',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button 
+                onClick={() => setShowRevertModal(false)} 
+                className="btn btn-secondary"
+                disabled={revertingAsset}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.85rem' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleRevertAsset}
+                disabled={revertingAsset || !revertReason.trim()}
+                className="btn"
+                style={{ 
+                  padding: '0.6rem 1.2rem', 
+                  fontSize: '0.85rem', 
+                  backgroundColor: (!revertReason.trim() || revertingAsset) ? 'rgba(245, 158, 11, 0.4)' : '#f59e0b', 
+                  color: 'white',
+                  fontWeight: 700,
+                  cursor: (!revertReason.trim() || revertingAsset) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {revertingAsset ? 'Procesando...' : 'Confirmar Reversión'}
               </button>
             </div>
           </div>

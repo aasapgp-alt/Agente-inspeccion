@@ -98,11 +98,15 @@ export function HistorialActivoModal({ equipoId, codigoActivo, nombreActivo, isO
               remotosFormateados.push({
                 id: item.id || `remote-${idx}`,
                 equipo_id: idNum,
-                fecha: item.fecha || item.created_at || item.timestamp || new Date().toISOString(),
+                fecha: item.created_at || item.fecha || item.timestamp || new Date().toISOString(),
                 estado: item.estado || item.estado_salud || 'BUENO',
-                inspector: item.inspector || item.usuario || item.usuario_inspector || 'Inspector',
-                observaciones: item.observaciones || item.notas || 'Sin notas registradas',
-                hallazgos: item.hallazgos || item.diagnostico_ia || item.resultado_ia || item.diagnostico || ''
+                inspector: item.inspector || item.usuario || item.usuario_inspector || 'Inspector PGP',
+                observaciones: item.observaciones || item.notas || '',
+                hallazgos: item.diagnostico || item.hallazgos || item.diagnostico_ia || '',
+                acciones: item.acciones || '',
+                recomendaciones: item.recomendaciones || '',
+                numero_acta: item.numero_acta || '',
+                anio: item.anio || ''
               });
             });
           }
@@ -167,15 +171,17 @@ export function HistorialActivoModal({ equipoId, codigoActivo, nombreActivo, isO
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md p-3 flex items-center justify-center animate-in fade-in duration-150">
-      <div className="bg-slate-900 border-3 border-sky-500 max-w-md w-full max-h-[90vh] rounded-3xl p-4 flex flex-col justify-between shadow-2xl space-y-3" style={{ backgroundColor: '#0f172a', borderColor: '#0284c7' }}>
+    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-0 md:p-4 flex items-center justify-center animate-in fade-in duration-150">
+      <div className="bg-[#090d16] border-0 md:border-2 md:border-sky-500 w-full h-[100dvh] md:h-auto md:max-w-4xl md:max-h-[92vh] md:rounded-3xl p-4 md:p-6 flex flex-col justify-between shadow-2xl space-y-4">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b-2 border-slate-800 pb-2.5 shrink-0">
-          <div className="flex items-center gap-2">
-            <History className="w-6 h-6 text-sky-400 shrink-0" style={{ color: '#38bdf8' }} />
+        <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-950 border border-sky-700 flex items-center justify-center shrink-0">
+              <History className="w-6 h-6 text-sky-400" />
+            </div>
             <div>
-              <span className="font-mono font-black text-sky-400 text-xs block" style={{ color: '#38bdf8' }}>{codigoActivo}</span>
-              <h3 className="font-black text-lg text-white m-0 leading-tight" style={{ color: '#ffffff' }}>Historial del Activo</h3>
+              <span className="font-mono font-black text-sky-400 text-xs block">{codigoActivo} - {nombreActivo || 'Equipo'}</span>
+              <h3 className="font-black text-lg md:text-xl text-white m-0 leading-tight">Historial Completo del Activo</h3>
             </div>
           </div>
           <button
@@ -184,7 +190,7 @@ export function HistorialActivoModal({ equipoId, codigoActivo, nombreActivo, isO
               vibrar(20);
               onClose();
             }}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl border border-slate-700 active:scale-90"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2.5 rounded-xl border border-slate-700 active:scale-95 transition-all"
             aria-label="Cerrar modal"
           >
             <X className="w-6 h-6" />
@@ -192,55 +198,90 @@ export function HistorialActivoModal({ equipoId, codigoActivo, nombreActivo, isO
         </div>
 
         {/* Modal Content - Lista de Inspecciones Anteriores con Scroll Desplazable */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0 custom-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
           {loading && historial.length === 0 ? (
-            <div className="p-8 text-center space-y-2">
-              <RefreshCw className="w-8 h-8 text-sky-400 mx-auto animate-spin" />
-              <p className="text-sm font-bold text-slate-400 m-0">Cargando historial...</p>
+            <div className="p-12 text-center space-y-3">
+              <RefreshCw className="w-9 h-9 text-sky-400 mx-auto animate-spin" />
+              <p className="text-sm font-bold text-slate-400 m-0">Cargando historial completo del equipo...</p>
             </div>
           ) : historial.length > 0 ? (
             historial.map((item, index) => (
               <div
                 key={item.id || index}
-                className="bg-slate-950 border-2 border-slate-800 p-3.5 rounded-2xl space-y-2"
-                style={{ backgroundColor: '#020617', borderColor: '#1e293b' }}
+                className="bg-slate-950/90 border border-slate-800 p-4 md:p-5 rounded-2xl space-y-3 shadow-md"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-400 flex items-center gap-1" style={{ color: '#94a3b8' }}>
-                    <Calendar className="w-3.5 h-3.5 text-sky-400" style={{ color: '#38bdf8' }} />
-                    {new Date(item.fecha).toLocaleDateString()} {new Date(item.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                {/* Header de Ficha: Fecha, Acta y Badge Estado */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-300">
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      <Calendar className="w-4 h-4 text-sky-400" />
+                      {new Date(item.fecha).toLocaleDateString()} {new Date(item.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {item.numero_acta && (
+                      <span className="bg-slate-800 text-slate-300 font-mono text-[11px] px-2.5 py-0.5 rounded-md border border-slate-700">
+                        Acta: {item.numero_acta}
+                      </span>
+                    )}
+                  </div>
                   {renderBadgeEstado(item.estado)}
                 </div>
 
-                <div className="flex items-center gap-1 text-xs font-semibold text-slate-300" style={{ color: '#cbd5e1' }}>
-                  <User className="w-3.5 h-3.5 text-amber-400" style={{ color: '#fbbf24' }} />
-                  <span>Inspector: {item.inspector || 'Registrado'}</span>
+                {/* Inspector */}
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                  <User className="w-4 h-4 text-amber-400" />
+                  <span>Inspector: {item.inspector || 'Registrado en Planta'}</span>
                 </div>
 
+                {/* Observaciones de campo */}
                 {item.observaciones && (
-                  <p className="text-xs font-semibold text-slate-200 bg-slate-900 p-2 rounded-xl border border-slate-800 m-0" style={{ color: '#e2e8f0', backgroundColor: '#0f172a' }}>
-                    "{item.observaciones}"
-                  </p>
+                  <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Notas de Campo / Observación:</span>
+                    <p className="text-slate-200 font-medium m-0 leading-relaxed">"{item.observaciones}"</p>
+                  </div>
                 )}
 
+                {/* Diagnóstico */}
                 {item.hallazgos && (
-                  <div className="bg-sky-950/70 p-3 rounded-xl border border-sky-700 text-xs font-semibold max-h-52 overflow-y-auto space-y-1" style={{ backgroundColor: '#0c4a6e', borderColor: '#0284c7', color: '#bae6fd', WebkitOverflowScrolling: 'touch' }}>
-                    <span className="font-black text-sky-300 block sticky top-0 bg-sky-950 py-0.5 shadow-sm border-b border-sky-800 mb-1" style={{ color: '#7dd3fc', backgroundColor: '#0c4a6e' }}>
-                      🤖 Diagnóstico Reciente (Gemini):
+                  <div className="bg-sky-950/40 p-3.5 rounded-xl border border-sky-800/70 text-xs space-y-1.5">
+                    <span className="font-extrabold text-sky-300 text-xs uppercase tracking-wide block border-b border-sky-800/60 pb-1 flex items-center gap-1.5">
+                      🩺 Diagnóstico:
                     </span>
-                    <p className="whitespace-pre-line text-sm font-medium leading-relaxed m-0" style={{ color: '#f0f9ff' }}>
+                    <p className="whitespace-pre-line text-xs sm:text-sm font-medium leading-relaxed text-sky-100 m-0">
                       {item.hallazgos}
+                    </p>
+                  </div>
+                )}
+
+                {/* Acciones Realizadas / Sugeridas */}
+                {item.acciones && (
+                  <div className="bg-emerald-950/30 p-3.5 rounded-xl border border-emerald-800/60 text-xs space-y-1">
+                    <span className="font-extrabold text-emerald-400 text-xs uppercase tracking-wide block border-b border-emerald-900/60 pb-1">
+                      🛠️ Acciones Realizadas / Sugeridas:
+                    </span>
+                    <p className="whitespace-pre-line text-xs sm:text-sm font-medium leading-relaxed text-emerald-100 m-0">
+                      {item.acciones}
+                    </p>
+                  </div>
+                )}
+
+                {/* Recomendaciones */}
+                {item.recomendaciones && (
+                  <div className="bg-amber-950/30 p-3.5 rounded-xl border border-amber-800/60 text-xs space-y-1">
+                    <span className="font-extrabold text-amber-400 text-xs uppercase tracking-wide block border-b border-amber-900/60 pb-1">
+                      💡 Recomendaciones:
+                    </span>
+                    <p className="whitespace-pre-line text-xs sm:text-sm font-medium leading-relaxed text-amber-100 m-0">
+                      {item.recomendaciones}
                     </p>
                   </div>
                 )}
               </div>
             ))
           ) : (
-            <div className="bg-slate-950 border-2 border-dashed border-slate-800 p-8 rounded-2xl text-center space-y-2" style={{ backgroundColor: '#020617' }}>
+            <div className="bg-slate-950 border-2 border-dashed border-slate-800 p-8 rounded-2xl text-center space-y-2">
               <FileText className="w-10 h-10 text-slate-600 mx-auto" />
-              <p className="font-bold text-slate-300 m-0" style={{ color: '#cbd5e1' }}>Sin historial previo registrado</p>
-              <p className="text-xs text-slate-400 m-0" style={{ color: '#94a3b8' }}>Las inspecciones que realices en el celular aparecerán aquí inmediatamente.</p>
+              <p className="font-bold text-slate-300 m-0">Sin historial previo registrado</p>
+              <p className="text-xs text-slate-400 m-0">Las inspecciones que realices en la app aparecerán aquí inmediatamente.</p>
             </div>
           )}
         </div>
@@ -253,10 +294,9 @@ export function HistorialActivoModal({ equipoId, codigoActivo, nombreActivo, isO
               vibrar(30);
               onClose();
             }}
-            className="w-full min-h-[56px] bg-sky-600 hover:bg-sky-500 text-white font-black text-lg py-3 px-4 rounded-2xl border-2 border-sky-400 flex items-center justify-center gap-2 shadow-lg active:scale-95"
-            style={{ backgroundColor: '#0284c7', color: '#ffffff' }}
+            className="w-full min-h-[52px] bg-sky-600 hover:bg-sky-500 text-white font-black text-base py-3 px-4 rounded-2xl border-2 border-sky-400 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5" />
             <span>VOLVER A LA INSPECCIÓN</span>
           </button>
         </div>

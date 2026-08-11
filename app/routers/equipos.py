@@ -48,58 +48,88 @@ def list_equipos(
 @router.post("/", response_model=Dict[str, Any])
 def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:
+        # 1. Determinar el código en orden secuencial de la base de datos si no fue especificado o es 'auto'
+        codigo_calculado = equipo.codigo
+        if not codigo_calculado or codigo_calculado.lower() == "auto":
+            cursor_seq = db.execute("""
+                SELECT MAX(CAST(codigo AS INTEGER)) 
+                FROM equipos 
+                WHERE ubicacion_id = ? AND codigo GLOB '[0-9]*'
+            """, (equipo.ubicacion_id,))
+            max_code = cursor_seq.fetchone()[0]
+            codigo_calculado = str((max_code or 0) + 1)
+
+        # 2. Determinar parent_folder_id de la ubicación técnica
+        cursor_loc = db.execute("SELECT nombre, drive_folder_id FROM ubicaciones WHERE id = ?", (equipo.ubicacion_id,))
+        loc_row = cursor_loc.fetchone()
+        parent_id = equipo.parent_folder_id
+        if loc_row and not parent_id:
+            parent_id = loc_row["drive_folder_id"]
+
+        drive_info = None
+        eq_drive_folder_id = None
+
+        # 3. Crear/Vinculación automática de carpeta en Google Drive y Caché Local
+        from app.services.drive_service import obtener_o_crear_carpeta_drive, crear_estructura_equipo
+        folder_title = f"{codigo_calculado}- {equipo.nombre}"
+
+        if parent_id:
+            try:
+                campanias = equipo.campanias_iniciales
+                if not campanias:
+                    from app.services.db_service import get_config_value_db
+                    campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+                    campanias = [campania_activa]
+                
+                res_drive = crear_estructura_equipo(
+                    parent_id=parent_id,
+                    nombre_equipo=folder_title,
+                    campanias=campanias,
+                    subcarpetas=equipo.subcarpetas
+                )
+                eq_drive_folder_id = res_drive.get("id")
+                drive_info = {
+                    "folder_id": eq_drive_folder_id,
+                    "folder_title": res_drive.get("title", folder_title),
+                    "folder_url": res_drive.get("alternateLink")
+                }
+            except Exception as drive_err:
+                import logging
+                logging.getLogger(__name__).error(f"Error vinculando/creando carpeta en Drive: {drive_err}", exc_info=True)
+                # Fallback a creación en caché local
+                eq_drive_folder_id = f"auto_eq_folder_{equipo.ubicacion_id}_{codigo_calculado}"
+
+        # 4. Insertar equipo en la base de datos con su drive_folder_id vinculado
         cursor = db.execute("""
-            INSERT INTO equipos (ubicacion_id, codigo, nombre, tag, material, fluido, presion_diseno, temperatura_diseno, fabricante, modelo) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (equipo.ubicacion_id, equipo.codigo, equipo.nombre, equipo.tag, equipo.material, equipo.fluido, equipo.presion_diseno, equipo.temperatura_diseno, equipo.fabricante, equipo.modelo))
+            INSERT INTO equipos (ubicacion_id, codigo, nombre, tag, material, fluido, presion_diseno, temperatura_diseno, fabricante, modelo, drive_folder_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (equipo.ubicacion_id, codigo_calculado, equipo.nombre, equipo.tag, equipo.material, equipo.fluido, equipo.presion_diseno, equipo.temperatura_diseno, equipo.fabricante, equipo.modelo, eq_drive_folder_id))
         db.commit()
         nuevo_id = cursor.lastrowid
-        
-        drive_info = None
-        if equipo.crear_carpeta_drive:
-            from app.services.drive_service import crear_estructura_equipo, buscar_carpeta_area_por_nombre
-            
-            # Determinar parent folder ID
-            parent_id = equipo.parent_folder_id
-            if not parent_id:
-                cursor_loc = db.execute("SELECT nombre, drive_folder_id FROM ubicaciones WHERE id = ?", (equipo.ubicacion_id,))
-                loc_row = cursor_loc.fetchone()
-                if loc_row:
-                    parent_id = loc_row["drive_folder_id"] or buscar_carpeta_area_por_nombre(loc_row["nombre"])
-            
-            if parent_id:
-                try:
-                    campanias = equipo.campanias_iniciales
-                    if not campanias:
-                        from app.services.db_service import get_config_value_db
-                        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
-                        campanias = [campania_activa]
-                    
-                    res_drive = crear_estructura_equipo(
-                        parent_id=parent_id,
-                        nombre_equipo=f"{equipo.codigo} {equipo.nombre}",
-                        campanias=campanias,
-                        subcarpetas=equipo.subcarpetas
-                    )
-                    drive_info = {
-                        "folder_id": res_drive.get("id"),
-                        "folder_title": res_drive.get("title"),
-                        "folder_url": res_drive.get("alternateLink")
-                    }
-                except Exception as drive_err:
-                    import logging
-                    logging.getLogger(__name__).error(f"Error creando estructura en Google Drive: {drive_err}", exc_info=True)
+
+        # 5. Sincronizar entrada en drive_folders_cache
+        if eq_drive_folder_id:
+            try:
+                db.execute("""
+                    INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """, (eq_drive_folder_id, folder_title, parent_id))
+                db.commit()
+            except Exception as cache_err:
+                pass
         
         registrar_auditoria(
             usuario_id=current_user.get("id"),
             accion="CREAR_EQUIPO",
             tabla="equipos",
             registro_id=nuevo_id,
-            detalles=f"Equipo '{equipo.codigo} - {equipo.nombre}' creado en ubicación {equipo.ubicacion_id}."
+            detalles=f"Equipo '{codigo_calculado} - {equipo.nombre}' creado en ubicación {equipo.ubicacion_id} con Drive Folder ID '{eq_drive_folder_id}'."
         )
         return {
-            "id": nuevo_id, 
-            "message": "Equipo creado exitosamente",
+            "id": nuevo_id,
+            "codigo": codigo_calculado,
+            "drive_folder_id": eq_drive_folder_id,
+            "message": "Equipo creado y vinculado exitosamente",
             "drive": drive_info
         }
     except sqlite3.IntegrityError:
@@ -168,3 +198,52 @@ def get_equipo_inspeccion(id: int, anio: str, db: sqlite3.Connection = Depends(g
     else:
         resp_data['image_drive_ids'] = []
     return resp_data
+
+class RevertirInspeccionPayload(BaseModel):
+    motivo: str
+    anio: Optional[int] = None
+
+@router.post("/{id}/revertir-inspeccion", response_model=Dict[str, Any])
+def revertir_inspeccion_equipo(
+    id: int, 
+    payload: RevertirInspeccionPayload, 
+    db: sqlite3.Connection = Depends(get_db), 
+    current_user: dict = Depends(require_role("admin"))
+):
+    equipo = db_service.obtener_equipo_db(id)
+    if not equipo:
+        raise HTTPException(status_code=404, detail="Equipo no encontrado")
+    
+    motivo_texto = payload.motivo.strip() if payload.motivo and payload.motivo.strip() else ""
+    if not motivo_texto:
+        raise HTTPException(status_code=400, detail="Debe especificar un motivo o razón para revertir la inspección")
+    
+    estado_anterior = equipo.get("estado_actual", "PENDIENTE")
+    
+    # 1. Actualizar estado_actual a 'PENDIENTE'
+    db.execute("UPDATE equipos SET estado_actual = 'PENDIENTE' WHERE id = ?", (id,))
+    
+    # 2. Eliminar o reiniciar registros de inspección asociados
+    if payload.anio:
+        db.execute("DELETE FROM inspecciones WHERE equipo_id = ? AND anio = ?", (id, payload.anio))
+    else:
+        db.execute("DELETE FROM inspecciones WHERE equipo_id = ?", (id,))
+        
+    db.commit()
+    
+    # 3. Registrar auditoría de la acción
+    registrar_auditoria(
+        usuario_id=current_user.get("id"),
+        accion="REVERTIR_INSPECCION",
+        tabla="equipos",
+        registro_id=id,
+        detalles=f"Equipo '{equipo.get('codigo')} - {equipo.get('nombre')}' (ID {id}) revertido a NO INSPECCIONADO (PENDIENTE). Estado previo: '{estado_anterior}'. Motivo/Error: {motivo_texto}"
+    )
+    
+    return {
+        "message": "Equipo pasado a no inspeccionado correctamente",
+        "equipo_id": id,
+        "estado_actual": "PENDIENTE",
+        "motivo": motivo_texto
+    }
+

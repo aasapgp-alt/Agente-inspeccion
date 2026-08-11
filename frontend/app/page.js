@@ -107,7 +107,7 @@ function DashboardContent() {
   ];
 
   return (
-    <main className="container" style={{ position: 'relative' }}>
+    <main className="app-container" style={{ position: 'relative' }}>
       <OfflineBanner />
       <Sidebar
         onSelectEquipo={(id) => {

@@ -86,9 +86,12 @@ body {
 }
 
 /* Layout Utilities */
+.app-container,
 .container {
   display: flex;
   flex: 1;
+  width: 100% !important;
+  max-width: 100% !important;
   height: 100vh;
   overflow: hidden;
 }
@@ -398,7 +401,8 @@ body:not(:has(.campo-wrapper)) button:active {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
   padding-bottom: 1.1rem;
   margin-bottom: 2rem;
   border-bottom: 1px solid var(--border-color);
@@ -582,6 +586,7 @@ body:not(:has(.campo-wrapper)) button:active {
   flex-direction: column;
   min-height: 0;
   padding: 2rem;
+  width: 100%;
 }
 .panel-heading {
   margin-bottom: 0.35rem;
@@ -885,6 +890,7 @@ body:not(:has(.campo-wrapper)) button:active {
 }
 
 @media (max-width: 768px) {
+  .app-container,
   .container {
     flex-direction: column !important;
     padding-bottom: 70px !important;
@@ -960,18 +966,35 @@ body:not(:has(.campo-wrapper)) button:active {
   }
 }
 
-/* Reglas Desktop por Defecto */
+/* Reglas Desktop por Defecto y Pantallas Fluidas */
 .dashboard-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.2rem;
+}
+
+.dashboard-plant-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 1.2rem;
 }
 
 .dashboard-factories-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
   padding-bottom: 2rem;
+}
+
+/* Adaptabilidad para pantallas medianas / laptops (< 1280px) */
+@media (max-width: 1280px) {
+  .sidebar {
+    width: 270px;
+    padding: 18px;
+  }
+  .main-content {
+    padding: 20px;
+  }
 }
 
 /* Reglas Celular y Pantallas Pequeñas (< 768px) */

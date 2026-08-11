@@ -7,7 +7,7 @@ export function CategoriaEquipo({ categoriaSeleccionada, onSelectCategoria, cate
   return (
     <div className="space-y-1 pt-1">
       <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
-        Categoría de evidencia
+        Fotografías a subir
       </span>
       <div className="grid grid-cols-3 gap-2">
         {categorias.map((cat) => {

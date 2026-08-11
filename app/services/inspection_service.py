@@ -166,19 +166,53 @@ def procesar_inspecciones_batch(
                     except Exception as audio_err:
                         logger.error(f"Error procesando audio {a_idx}: {audio_err}")
 
-                # Si hubo transcripciones exitosas, actualizar el diagnóstico del equipo
+                # Si hubo transcripciones exitosas, interpretar con IA de Gemini
                 if transcripciones:
-                    txt_unido = "\n".join(f"[Dictado de Voz]: {t}" for t in transcripciones)
-                    cursor.execute("SELECT diagnostico FROM inspecciones WHERE id = ?", (insp_id,))
-                    row_diag = cursor.fetchone()
-                    diag_actual = (row_diag["diagnostico"] if isinstance(row_diag, (sqlite3.Row, dict)) else row_diag[0]) if row_diag else ""
+                    txt_unido = "\n".join(transcripciones)
+                    cursor.execute("SELECT codigo, nombre FROM equipos WHERE id = ?", (equipo_id,))
+                    row_eq_info = cursor.fetchone()
+                    eq_desc = f"{row_eq_info['codigo']} - {row_eq_info['nombre']}" if row_eq_info else f"Equipo {equipo_id}"
                     
-                    nuevo_diag = f"{diag_actual}\n{txt_unido}".strip() if diag_actual else txt_unido
-                    cursor.execute("""
-                        UPDATE inspecciones 
-                        SET diagnostico = ?, updated_at = CURRENT_TIMESTAMP 
-                        WHERE id = ?
-                    """, (nuevo_diag, insp_id))
+                    try:
+                        from app.services.gemini_service import interpretar_dictado_inspeccion
+                        interpretacion = interpretar_dictado_inspeccion(txt_unido, equipo_info=eq_desc)
+                        
+                        diag_ia = interpretacion.get("diagnostico") or txt_unido
+                        acc_ia = interpretacion.get("acciones") or ""
+                        rec_ia = interpretacion.get("recomendaciones") or ""
+                        est_ia = interpretacion.get("estado")
+                        
+                        cursor.execute("SELECT diagnostico, acciones, recomendaciones, estado FROM inspecciones WHERE id = ?", (insp_id,))
+                        row_curr = cursor.fetchone()
+                        
+                        curr_diag = (row_curr["diagnostico"] if isinstance(row_curr, (sqlite3.Row, dict)) else row_curr[0]) or ""
+                        curr_acc = (row_curr["acciones"] if isinstance(row_curr, (sqlite3.Row, dict)) else row_curr[1]) or ""
+                        curr_rec = (row_curr["recomendaciones"] if isinstance(row_curr, (sqlite3.Row, dict)) else row_curr[2]) or ""
+                        curr_est = (row_curr["estado"] if isinstance(row_curr, (sqlite3.Row, dict)) else row_curr[3]) or "BUENO"
+                        
+                        new_diag = f"{curr_diag}\n{diag_ia}".strip() if curr_diag and diag_ia not in curr_diag else (diag_ia or curr_diag)
+                        new_acc = f"{curr_acc}\n{acc_ia}".strip() if curr_acc and acc_ia not in curr_acc else (acc_ia or curr_acc)
+                        new_rec = f"{curr_rec}\n{rec_ia}".strip() if curr_rec and rec_ia not in curr_rec else (rec_ia or curr_rec)
+                        
+                        # Si Gemini infirió un estado válido (REGULAR, CRITICO, BUENO, FUERA DE RUTA), actualizarlo
+                        new_est = est_ia.upper() if est_ia and str(est_ia).upper() in ["BUENO", "REGULAR", "CRITICO", "FUERA DE RUTA"] else curr_est
+                        
+                        cursor.execute("""
+                            UPDATE inspecciones 
+                            SET diagnostico = ?, acciones = ?, recomendaciones = ?, estado = ?, updated_at = CURRENT_TIMESTAMP 
+                            WHERE id = ?
+                        """, (new_diag, new_acc, new_rec, new_est, insp_id))
+                        
+                        cursor.execute("UPDATE equipos SET estado_actual = ? WHERE id = ?", (new_est, equipo_id))
+                        logger.info(f"Dictado interpretado con éxito por IA para equipo {equipo_id}. Estado: {new_est}")
+                    except Exception as ia_err:
+                        logger.error(f"Error interpretando dictado con IA: {ia_err}")
+                        txt_unido_fallback = "\n".join(f"[Dictado de Voz]: {t}" for t in transcripciones)
+                        cursor.execute("SELECT diagnostico FROM inspecciones WHERE id = ?", (insp_id,))
+                        row_diag = cursor.fetchone()
+                        diag_actual = (row_diag["diagnostico"] if isinstance(row_diag, (sqlite3.Row, dict)) else row_diag[0]) if row_diag else ""
+                        nuevo_diag = f"{diag_actual}\n{txt_unido_fallback}".strip() if diag_actual else txt_unido_fallback
+                        cursor.execute("UPDATE inspecciones SET diagnostico = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (nuevo_diag, insp_id))
 
             # 5. Auditoría
             detalles_audit = f"Sincronización batch desde celular (client_uuid: {client_uuid or 'n/a'}). Fotos: {len(fotos)}, Audios: {len(audios)}"

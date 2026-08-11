@@ -350,6 +350,19 @@ export const apiService = {
     }
   },
 
+  getDriveAncestro: async (folderId, token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/drive/ancestro?folder_id=${encodeURIComponent(folderId)}`, {
+        headers: getAuthHeaders(token)
+      });
+      if (!response.ok) return { ancestro: [] };
+      return await response.json();
+    } catch (error) {
+      console.warn('[apiService.getDriveAncestro] Error:', error.message);
+      return { ancestro: [] };
+    }
+  },
+
   crearDriveCarpeta: async (nombre, parentId, token) => {
     const response = await fetch(`${API_BASE_URL}/drive/crear_carpeta`, {
       method: 'POST',
