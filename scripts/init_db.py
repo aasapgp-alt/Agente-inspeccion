@@ -17,8 +17,37 @@ def init_db():
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
         
+    seed_db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "assets", "seed_inspecciones.db")
+    
+    # Solo restaurar seed DB en producción/desarrollo real (no en tests unitarios aislados)
+    is_testing = bool(os.getenv("PYTEST_CURRENT_TEST"))
+    
+    # Si la BD no existe y tenemos seed_db, copiarla directamente
+    if not is_testing and not os.path.exists(settings.DB_PATH) and os.path.exists(seed_db_path):
+        import shutil
+        print(f"Copiando base de datos inicial desde {seed_db_path} a {settings.DB_PATH}...")
+        shutil.copy2(seed_db_path, settings.DB_PATH)
+        print("¡Base de datos inicial restaurada con éxito!")
+
     conn = sqlite3.connect(settings.DB_PATH)
     cursor = conn.cursor()
+    
+    # Si la BD existe pero equipos está en 0 y tenemos seed_db, restaurar
+    if not is_testing and os.path.exists(seed_db_path):
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='equipos'")
+            if cursor.fetchone():
+                cursor.execute("SELECT count(*) FROM equipos")
+                eq_cnt = cursor.fetchone()[0]
+                if eq_cnt == 0:
+                    import shutil
+                    conn.close()
+                    print(f"La base de datos tiene 0 equipos. Restaurando desde {seed_db_path}...")
+                    shutil.copy2(seed_db_path, settings.DB_PATH)
+                    conn = sqlite3.connect(settings.DB_PATH)
+                    cursor = conn.cursor()
+        except Exception as seed_err:
+            print(f"Error al verificar/restaurar seed: {seed_err}")
     
     try:
         # Habilitar claves foráneas
@@ -332,6 +361,10 @@ def init_db():
             INSERT OR IGNORE INTO usuarios (username, email, password_hash, nombre_completo, rol, activo)
             VALUES (?, ?, ?, ?, ?, ?)
         """, ("admin", "admin@empresa.com", admin_hash, "Administrador del Sistema", "admin", 1))
+        
+        # Si se definió explícitamente ADMIN_INITIAL_PASSWORD, actualizar su hash
+        if not password_generada:
+            cursor.execute("UPDATE usuarios SET password_hash = ? WHERE username = 'admin'", (admin_hash,))
         # Solo se muestra/aplica si el admin se creó ahora (rowcount > 0); no afecta a uno existente.
         if cursor.rowcount > 0 and password_generada:
             print("=" * 60)

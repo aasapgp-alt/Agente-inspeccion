@@ -37,6 +37,7 @@ venv.bak/
 # Databases
 *.sqlite
 *.db
+!app/assets/seed_inspecciones.db
 
 # Environments
 .env
