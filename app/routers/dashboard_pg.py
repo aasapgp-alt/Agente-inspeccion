@@ -40,6 +40,8 @@ def get_dashboard_stats(empresa_id: Optional[int] = None, db: sqlite3.Connection
     critical_alerts = 0
     under_observation = 0
     pending_inspections = 0
+    good_condition = 0
+    inspected_equipos = 0
     total_equipos = len(equipos_insps)
     
     for eq in equipos_insps:
@@ -48,9 +50,17 @@ def get_dashboard_stats(empresa_id: Optional[int] = None, db: sqlite3.Connection
             critical_alerts += 1
         elif 'REGULAR' in est:
             under_observation += 1
+        elif 'BUEN' in est:
+            good_condition += 1
         elif 'PEND' in est or not est:
             pending_inspections += 1
             
+        if eq['has_campaign_inspection'] > 0:
+            inspected_equipos += 1
+            
+    # Avance de campaña en porcentaje
+    campaign_progress_pct = round((inspected_equipos / total_equipos) * 100, 1) if total_equipos > 0 else 0.0
+
     # Plants up to date (ubicaciones de la empresa donde el 100% de equipos activos tiene inspección en la campaña)
     loc_stats = {}
     for eq in equipos_insps:
@@ -66,11 +76,17 @@ def get_dashboard_stats(empresa_id: Optional[int] = None, db: sqlite3.Connection
         if val['total'] > 0 and val['total'] == val['inspected']:
             plants_up_to_date += 1
             
-    # Inspecciones hoy
-    cursor.execute("SELECT COUNT(*) FROM inspecciones WHERE date(created_at) = date('now')")
-    inspections_today = cursor.fetchone()[0]
-    if inspections_today == 0:
-        inspections_today = 8  # Fallback simulado de actividad para la demo
+    # Inspecciones reales de hoy (filtradas por empresa si aplica)
+    if empresa_id:
+        cursor.execute("""
+            SELECT COUNT(*) FROM inspecciones i 
+            JOIN equipos e ON i.equipo_id = e.id 
+            JOIN ubicaciones u ON e.ubicacion_id = u.id 
+            WHERE u.empresa_id = ? AND date(i.created_at) = date('now')
+        """, [empresa_id])
+    else:
+        cursor.execute("SELECT COUNT(*) FROM inspecciones WHERE date(created_at) = date('now')")
+    inspections_today = cursor.fetchone()[0] or 0
         
     # Total de inspecciones general (por empresa si se filtra)
     if empresa_id:
@@ -81,9 +97,12 @@ def get_dashboard_stats(empresa_id: Optional[int] = None, db: sqlite3.Connection
 
     return {
         "total_equipos": total_equipos,
+        "inspected_equipos": inspected_equipos,
+        "campaign_progress_pct": campaign_progress_pct,
         "total_inspecciones": total_inspecciones,
         "critical_alerts": critical_alerts,
         "under_observation": under_observation,
+        "good_condition": good_condition,
         "plants_up_to_date": plants_up_to_date,
         "inspections_today": inspections_today,
         "pending_inspections": pending_inspections

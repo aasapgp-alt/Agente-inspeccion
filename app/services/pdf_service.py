@@ -261,6 +261,7 @@ def margenes_membrete():
 def generar_bloque_firma() -> list:
     """Bloque de firma del equipo técnico para el cierre del informe, mantenido
     junto para que no se parta entre páginas."""
+    from app.services.db_service import get_config_value_db
     styles = getSampleStyleSheet()
     linea_style = ParagraphStyle('FirmaLinea', parent=styles['Normal'], fontName='Helvetica',
                                  fontSize=9, alignment=1, textColor=MEMBRETE['separador'])
@@ -269,10 +270,16 @@ def generar_bloque_firma() -> list:
     empresa_style = ParagraphStyle('FirmaEmpresa', parent=styles['Normal'], fontName='Helvetica-Bold',
                                    fontSize=11, leading=14, alignment=1, textColor=COLORES_SULVY['primario'])
 
-    filas = [[Paragraph("_______________________", linea_style),
-              Paragraph("_______________________", linea_style)]]
-    for izq, der in SULVY_FIRMANTES:
-        filas.append([Paragraph(izq, nombre_style), Paragraph(der, nombre_style)])
+    emp_nombre = get_config_value_db("empresa_inspectora_nombre", "SULVY SRL")
+    f1_nom = get_config_value_db("reporte_firmante_1_nombre", "Marco G. Paltrinieri")
+    f2_nom = get_config_value_db("reporte_firmante_2_nombre", "Ing. Esteban M. Irioni")
+
+    filas = [
+        [Paragraph("_______________________", linea_style),
+         Paragraph("_______________________", linea_style)],
+        [Paragraph(clean_xml_text(f1_nom), nombre_style),
+         Paragraph(clean_xml_text(f2_nom), nombre_style)]
+    ]
 
     firma_tabla = Table(filas, colWidths=[249, 249])
     firma_tabla.setStyle([
@@ -286,7 +293,7 @@ def generar_bloque_firma() -> list:
     return [Spacer(1, 30), KeepTogether([
         firma_tabla,
         Spacer(1, 8),
-        Paragraph("SULVY SRL", empresa_style),
+        Paragraph(clean_xml_text(emp_nombre), empresa_style),
     ])]
 
 
@@ -401,6 +408,7 @@ def make_reporte_canvas_class(doc_title):
     return CustomReporteCanvas
 
 def generar_recuadro_criterios(width: float = 498) -> Table:
+    from app.services.db_service import get_config_value_db
     styles = getSampleStyleSheet()
     
     # Define styles for the box
@@ -430,17 +438,22 @@ def generar_recuadro_criterios(width: float = 498) -> Table:
     left_paragraph = Paragraph("CRITERIOS Y<br/>NORMATIVAS:", left_text_style)
     
     # Content of right column
-    items = [
-        "• ASTM D 2563-94 <i>\"Standard Practice for Classifying Visual Defects in Glass-Reinforced Plastic Laminate Parts\"</i>",
-        "• Manuales específicos <i>Ashland</i> y <i>Reichhold</i>, Lineamientos y criterios específicos.",
-        "• NOGA Guía 055-97 <i>\"Guía recomendada para ensayos no destructivos (NDT) en tanques y sistemas de tuberías PRFV\"</i>, Norwegian Oil & Gas Association.",
-        "• Proyecto MTI 129-99 <i>\"Guía práctica para inspección de campo para equipos y tuberías PRFV\"</i>, John Niesse / Hira Ahluwalia, Materials Technology Institute St. Louis MO, USA.",
+    default_normas = (
+        "• ASTM D 2563-94 <i>\"Standard Practice for Classifying Visual Defects in Glass-Reinforced Plastic Laminate Parts\"</i>\n"
+        "• Manuales específicos <i>Ashland</i> y <i>Reichhold</i>, Lineamientos y criterios específicos.\n"
+        "• NOGA Guía 055-97 <i>\"Guía recomendada para ensayos no destructivos (NDT) en tanques y sistemas de tuberías PRFV\"</i>, Norwegian Oil & Gas Association.\n"
+        "• Proyecto MTI 129-99 <i>\"Guía práctica para inspección de campo para equipos y tuberías PRFV\"</i>, John Niesse / Hira Ahluwalia, Materials Technology Institute St. Louis MO, USA.\n"
         "• ESA/FSA pub. nº 009/98 <i>\"Guía para la utilización segura de elementos de sellado - Juntas y Bridas\"</i>, Parte 1 - Pautas para los operadores / técnicos / ajustadores de mantenimiento. European Sealing Association (ESA) / Fluid Sealing Association (FSA)."
-    ]
+    )
+    raw_normas = get_config_value_db("reporte_criterios_normas", default_normas)
+    items = [line.strip() for line in str(raw_normas).split('\n') if line.strip()]
     
     right_flowables = []
     for item in items:
-        right_flowables.append(Paragraph(item, right_text_style))
+        clean_item = clean_xml_text(item)
+        if not clean_item.startswith(('•', '-', '*')):
+            clean_item = f"• {clean_item}"
+        right_flowables.append(Paragraph(clean_item, right_text_style))
         
     # Scale column widths to fit the total width
     col_left = round(width * 0.22)
@@ -466,7 +479,10 @@ def generar_recuadro_criterios(width: float = 498) -> Table:
 
 def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = None) -> list:
     from app.services.db_service import get_config_value_db
+    import re
     campania = get_config_value_db("reporte_campania", "PGP 2026")
+    digits = re.findall(r'\d+', campania)
+    next_camp = campania.replace(digits[0], str(int(digits[0]) + 1)) if digits else "el próximo período"
     story = []
     styles = getSampleStyleSheet()
     
@@ -652,8 +668,8 @@ def obtener_flujo_equipo(equipo: dict, inspeccion: dict, fotos_locales: list = N
     story.append(PageBreak())
     
     # PAGE 2
-    # 6. RECOMENDACIONES PARA PGP 2027
-    story.append(Paragraph("RECOMENDACIONES PARA PGP 2027", section_title_style))
+    # 6. RECOMENDACIONES
+    story.append(Paragraph(f"RECOMENDACIONES PARA {next_camp.upper()}", section_title_style))
     recom_text = inspeccion.get('recomendaciones', 'Sin recomendaciones registradas.')
     story.append(Paragraph(recom_text.replace('\n', '<br/>'), body_text_style))
     story.append(Spacer(1, 8))
@@ -1070,6 +1086,7 @@ def obtener_flujo_equipo_individual(equipo: dict, inspeccion: dict, fotos_locale
     return story
 
 def generar_bloque_firma_individual() -> list:
+    from app.services.db_service import get_config_value_db
     styles = getSampleStyleSheet()
     linea_style = ParagraphStyle('FirmaLineaIndiv', parent=styles['Normal'], fontName='Helvetica',
                                  fontSize=9, alignment=1, textColor=MEMBRETE['separador'])
@@ -1082,19 +1099,27 @@ def generar_bloque_firma_individual() -> list:
     empresa_style = ParagraphStyle('FirmaEmpresaIndiv', parent=styles['Normal'], fontName='Helvetica-Bold',
                                    fontSize=11, leading=14, alignment=1, textColor=COLORES_SULVY['primario'])
 
+    emp_nombre = get_config_value_db("empresa_inspectora_nombre", "SULVY SRL")
+    f1_nom = get_config_value_db("reporte_firmante_1_nombre", "Marco G. Paltrinieri")
+    f1_car = get_config_value_db("reporte_firmante_1_cargo", "Director Técnico")
+    f1_mat = get_config_value_db("reporte_firmante_1_matricula", "Matrícula COPIME Nº 12345")
+    f2_nom = get_config_value_db("reporte_firmante_2_nombre", "Ing. Esteban M. Irioni")
+    f2_car = get_config_value_db("reporte_firmante_2_cargo", "Inspector Autorizado")
+    f2_mat = get_config_value_db("reporte_firmante_2_matricula", "Matrícula COPIME Nº 67890")
+
     col_izq = [
         Paragraph("_______________________", linea_style),
         Spacer(1, 4),
-        Paragraph("Marco G. Paltrinieri", nombre_style),
-        Paragraph("Director Técnico", cargo_style),
-        Paragraph("Matrícula COPIME Nº 12345", matricula_style)
+        Paragraph(clean_xml_text(f1_nom), nombre_style),
+        Paragraph(clean_xml_text(f1_car), cargo_style),
+        Paragraph(clean_xml_text(f1_mat), matricula_style)
     ]
     col_der = [
         Paragraph("_______________________", linea_style),
         Spacer(1, 4),
-        Paragraph("Ing. Esteban M. Irioni", nombre_style),
-        Paragraph("Inspector Autorizado", cargo_style),
-        Paragraph("Matrícula COPIME Nº 67890", matricula_style)
+        Paragraph(clean_xml_text(f2_nom), nombre_style),
+        Paragraph(clean_xml_text(f2_car), cargo_style),
+        Paragraph(clean_xml_text(f2_mat), matricula_style)
     ]
 
     firma_tabla = Table([[col_izq, col_der]], colWidths=[234, 234])
@@ -1110,7 +1135,7 @@ def generar_bloque_firma_individual() -> list:
         KeepTogether([
             firma_tabla,
             Spacer(1, 4),
-            Paragraph("SULVY SRL", empresa_style)
+            Paragraph(clean_xml_text(emp_nombre), empresa_style)
         ])
     ]
 
@@ -1411,9 +1436,12 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
         styles = getSampleStyleSheet()
         
         # 1. PORTADA
+        empresa_inspectora = get_config_value_db("empresa_inspectora_nombre", "SULVY")
+        empresa_subtitulo = get_config_value_db("empresa_inspectora_subtitulo", "Sistema de Gestión de Calidad y Ambiental Certificado")
+        
         story.append(Spacer(1, 15))
-        story.append(Paragraph("SULVY", ParagraphStyle('CoverSulvyLogo', fontName='Helvetica-Bold', fontSize=32, leading=38, textColor=COLORES_SULVY['primario'], alignment=1, spaceAfter=5)))
-        story.append(Paragraph("Sistema de Gestión de Calidad y Ambiental Certificado", ParagraphStyle('CoverSulvySub', fontName='Helvetica', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1, spaceAfter=20)))
+        story.append(Paragraph(clean_xml_text(empresa_inspectora), ParagraphStyle('CoverSulvyLogo', fontName='Helvetica-Bold', fontSize=32, leading=38, textColor=COLORES_SULVY['primario'], alignment=1, spaceAfter=5)))
+        story.append(Paragraph(clean_xml_text(empresa_subtitulo), ParagraphStyle('CoverSulvySub', fontName='Helvetica', fontSize=10, leading=13, textColor=COLORES_SULVY['secundario'], alignment=1, spaceAfter=20)))
         
         story.append(Paragraph("LIBRO DE INSPECCIONES TÉCNICAS", ParagraphStyle('CoverBookTitle', fontName='Helvetica-Bold', fontSize=22, leading=26, textColor=COLORES_SULVY['primario'], alignment=1, spaceAfter=5)))
         story.append(Paragraph(nombre_ubicacion.upper(), ParagraphStyle('CoverBookSub', fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=COLORES_SULVY['enfasis'], alignment=1, spaceAfter=12)))
@@ -1448,9 +1476,25 @@ def generar_libro_pdf(nombre_ubicacion: str, nombre_empresa: str, equipos: list,
         story.append(Spacer(1, 10))
         
         # Objetivo
+        default_obj_plantilla = (
+            "Consolidar los informes de inspección técnica realizados en la ubicación {ubicacion} "
+            "de la empresa {empresa} durante la campaña {campania}, detallando los hallazgos técnicos, "
+            "el estado de conservación de los activos, y las recomendaciones de mantenimiento propuestas "
+            "para el período {next_camp}."
+        )
+        obj_plantilla = get_config_value_db("libro_objetivo_plantilla", default_obj_plantilla)
+        try:
+            objetivo_text = obj_plantilla.format(
+                ubicacion=nombre_ubicacion,
+                empresa=nombre_empresa,
+                campania=campania,
+                next_camp=next_camp
+            )
+        except Exception:
+            objetivo_text = str(obj_plantilla)
+            
         story.append(Paragraph("<b>Objetivo:</b>", ParagraphStyle('ObjHead', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=COLORES_SULVY['primario'])))
-        objetivo_text = f"Consolidar los informes de inspección técnica realizados en la ubicación {nombre_ubicacion} de la empresa {nombre_empresa} durante la campaña {campania}, detallando los hallazgos técnicos, el estado de conservación de los activos, y las recomendaciones de mantenimiento propuestas para el período {next_camp}."
-        story.append(Paragraph(objetivo_text, ParagraphStyle('ObjVal', fontName='Helvetica', fontSize=9.5, leading=13.5, textColor=COLORES_SULVY['texto'], alignment=4)))
+        story.append(Paragraph(clean_xml_text(objetivo_text), ParagraphStyle('ObjVal', fontName='Helvetica', fontSize=9.5, leading=13.5, textColor=COLORES_SULVY['texto'], alignment=4)))
         story.append(Spacer(1, 8))
         
         # Criterios y Normativas

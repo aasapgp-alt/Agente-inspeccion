@@ -92,9 +92,15 @@ def generar_manual(inspeccion_id: int, user_id: int = 1) -> dict:
                 equipo_id = row["equipo_id"]
                 
                 # Generar el reporte
-                crear_reporte_individual_completo(equipo_id, conn, user_id)
+                res_reporte = crear_reporte_individual_completo(equipo_id, conn, user_id)
                 
-            return {"status": "success", "message": "Reporte generado exitosamente"}
+            return {
+                "status": "success", 
+                "message": "Reporte generado exitosamente",
+                "reporte_id": res_reporte.get("reporte_id"),
+                "ruta": res_reporte.get("ruta"),
+                "drive_link": res_reporte.get("drive_link")
+            }
         return status
     except Exception as e:
         logger.error(f"Error en generación manual para {inspeccion_id}: {e}")
@@ -206,8 +212,13 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
         except:
             pass
             
-    # 5. Guardar en carpeta reportes/individuales/
-    directorio_reportes = get_config_value_db("reportes_dir") or os.path.join("reportes", "individuales")
+    # 5. Guardar en estructura local organizada por Ubicación y Año/Campaña
+    area_nombre = equipo.get('area') or 'General'
+    safe_area = re.sub(r'[^a-zA-Z0-9_\-\s]', '_', area_nombre).strip().replace(' ', '_')
+    safe_camp = re.sub(r'[^a-zA-Z0-9_\-\s]', '_', campania_activa).strip().replace(' ', '_')
+    
+    base_reportes = get_config_value_db("reportes_dir") or settings.REPORTES_DIR or os.path.join("data", "reportes")
+    directorio_reportes = os.path.join(base_reportes, safe_area, safe_camp)
     os.makedirs(directorio_reportes, exist_ok=True)
     
     codigo_eq = equipo.get('codigo', 'N/A')
@@ -217,15 +228,29 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
     with open(ruta_local, "wb") as f:
         f.write(pdf_bytes)
         
-    # 6. Subir a Google Drive
+    # 6. Subir a Google Drive en la carpeta de la Ubicación y Año/Campaña correspondiente
     drive_file_id = ""
     drive_link = ""
     try:
         from app.services.drive_service import obtener_o_crear_carpeta_drive, subir_archivo
-        parent_folder = get_config_value_db("drive_folder_id") or settings.DRIVE_FOLDER_ID or "root"
-        folder_reportes_id = obtener_o_crear_carpeta_drive(f"Reportes Individuales {campania_activa}", parent_folder)
+        parent_root = get_config_value_db("drive_folder_id") or settings.DRIVE_FOLDER_ID or "root"
         
-        res_upload = subir_archivo(ruta_local, nombre_archivo, folder_reportes_id)
+        # Obtener o crear carpeta de la Ubicación
+        ubicacion_folder_id = None
+        ubicacion_id = equipo.get('ubicacion_id')
+        if ubicacion_id:
+            cursor.execute("SELECT drive_folder_id, nombre FROM ubicaciones WHERE id = ?", (ubicacion_id,))
+            u_row = cursor.fetchone()
+            if u_row and u_row['drive_folder_id']:
+                ubicacion_folder_id = u_row['drive_folder_id']
+                
+        if not ubicacion_folder_id:
+            ubicacion_folder_id = obtener_o_crear_carpeta_drive(area_nombre, parent_root)
+            
+        # Dentro de la ubicación, obtener o crear la carpeta de la campaña/año
+        folder_campania_id = obtener_o_crear_carpeta_drive(campania_activa, ubicacion_folder_id)
+        
+        res_upload = subir_archivo(ruta_local, nombre_archivo, folder_campania_id)
         if res_upload and "id" in res_upload:
             drive_file_id = res_upload["id"]
             drive_link = f"https://drive.google.com/file/d/{drive_file_id}/view?usp=drivesdk"

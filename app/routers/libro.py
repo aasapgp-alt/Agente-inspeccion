@@ -240,14 +240,16 @@ def generar_libro(
             omitidos_count=omitidos_count
         )
 
-        # 5. Guardar en carpeta reportes/libros/
+        # 5. Guardar en estructura local organizada por Ubicación y Año/Campaña
         from app.services.db_service import get_config_value_db
-        directorio_libros = get_config_value_db("libros_dir") or os.path.join("reportes", "libros")
+        safe_ubicacion = "".join([c if c.isalnum() or c in (' ', '_', '-') else '' for c in nombre_ubicacion]).strip().replace(' ', '_')
+        safe_camp = "".join([c if c.isalnum() or c in (' ', '_', '-') else '' for c in campania]).strip().replace(' ', '_')
+        
+        base_libros = get_config_value_db("libros_dir") or settings.LIBROS_DIR or os.path.join("data", "libros")
+        directorio_libros = os.path.join(base_libros, safe_ubicacion, safe_camp)
         os.makedirs(directorio_libros, exist_ok=True)
         
-        # Safe filename
-        safe_ubicacion = "".join([c if c.isalnum() or c in (' ', '_', '-') else '' for c in nombre_ubicacion]).strip().replace(' ', '_')
-        nombre_archivo = f"LIBRO-2026-{safe_ubicacion}.pdf"
+        nombre_archivo = f"LIBRO-{anio_campania}-{safe_ubicacion}.pdf"
         ruta_local = os.path.join(directorio_libros, nombre_archivo)
         
         with open(ruta_local, "wb") as f:
@@ -255,16 +257,30 @@ def generar_libro(
             
         tamanio_pdf = os.path.getsize(ruta_local)
 
-        # 6. Subir a Google Drive
+        # 6. Subir a Google Drive en la carpeta de la Ubicación y Año/Campaña correspondiente
         drive_file_id = ""
         drive_link = ""
         try:
             from app.services.drive_service import obtener_o_crear_carpeta_drive, subir_archivo
-            from app.services.db_service import get_config_value_db
-            parent_folder = get_config_value_db("drive_folder_id") or settings.DRIVE_FOLDER_ID or "root"
-            folder_libros_id = obtener_o_crear_carpeta_drive("Libros por Área", parent_folder)
+            parent_root = get_config_value_db("drive_folder_id") or settings.DRIVE_FOLDER_ID or "root"
             
-            res_upload = subir_archivo(ruta_local, nombre_archivo, folder_libros_id)
+            # Obtener o crear carpeta de la Ubicación
+            ubicacion_folder_id = None
+            if ubicacion_id:
+                cursor.execute("SELECT drive_folder_id, nombre FROM ubicaciones WHERE id = ?", (ubicacion_id,))
+            else:
+                cursor.execute("SELECT drive_folder_id, nombre FROM ubicaciones WHERE nombre = ?", (nombre_ubicacion,))
+            u_row = cursor.fetchone()
+            if u_row and u_row['drive_folder_id']:
+                ubicacion_folder_id = u_row['drive_folder_id']
+                
+            if not ubicacion_folder_id:
+                ubicacion_folder_id = obtener_o_crear_carpeta_drive(nombre_ubicacion, parent_root)
+                
+            # Dentro de la ubicación, obtener o crear la carpeta de la campaña/año
+            folder_campania_id = obtener_o_crear_carpeta_drive(campania, ubicacion_folder_id)
+            
+            res_upload = subir_archivo(ruta_local, nombre_archivo, folder_campania_id)
             if res_upload and "id" in res_upload:
                 drive_file_id = res_upload["id"]
                 drive_link = f"https://drive.google.com/file/d/{drive_file_id}/view?usp=drivesdk"

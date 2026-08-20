@@ -46,6 +46,9 @@ function DashboardContent() {
         if (res.ok) {
           const list = await res.json();
           setEmpresas(list);
+          if (Array.isArray(list) && list.length > 0) {
+            setEmpresaSeleccionada(prev => prev || list[0].id);
+          }
         }
       } catch (err) {
         console.error('Error cargando empresas:', err);

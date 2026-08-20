@@ -12,7 +12,13 @@ import os
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.core.rate_limiter import ia_analizar_rate_limiter
 from app.services.drive_service import descargar_imagen
-from app.services.gemini_service import analizar_imagenes, inicializar_gemini, build_annotation_context, chat_inspeccion
+from app.services.gemini_service import (
+    analizar_imagenes,
+    inicializar_gemini,
+    build_annotation_context,
+    chat_inspeccion,
+    consultar_asistente_equipo,
+)
 from app.services.learning_service import cargar_ejemplos_few_shot, obtener_aprendizaje_texto
 from app.config.prompts import REGLAS_NEGOCIO
 from app.utils.text_utils import es_estado_valido, normalizar_texto
@@ -94,6 +100,12 @@ def describir_anotaciones(anotaciones: Optional[Dict[str, List[Dict[str, Any]]]]
 class ChatRequest(BaseModel):
     session_id: str
     mensaje: str
+
+class ChatEquipoRequest(BaseModel):
+    equipo_id: int
+    mensaje: str
+    historial: Optional[List[Dict[str, Any]]] = []
+    modo: Optional[str] = "desktop"  # "desktop" o "mobile"
 
 @router.post("/analizar", response_model=Dict[str, Any])
 def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -380,13 +392,76 @@ Devuelve la respuesta de la inspección consolidada en formato JSON con la misma
         logger.error(f"Error en /chat: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error en la conversación con la IA: {str(e)}")
 
+@router.post("/chat-equipo", response_model=Dict[str, Any])
+def chat_equipo(data: ChatEquipoRequest, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """
+    Copiloto Técnico Contextual para consultas acotadas a un equipo específico.
+    """
+    try:
+        from app.services.db_service import get_config_value_db
+
+        cursor = db.cursor()
+        # 1. Obtener detalles del equipo
+        cursor.execute("SELECT * FROM equipos WHERE id = ?", (data.equipo_id,))
+        eq_row = cursor.fetchone()
+        if not eq_row:
+            raise HTTPException(status_code=404, detail="Equipo no encontrado")
+        equipo = dict(eq_row)
+
+        # 2. Obtener historial PGP 2024
+        cursor.execute(
+            "SELECT estado, diagnostico, acciones, recomendaciones FROM inspecciones WHERE equipo_id = ? AND anio = 2024 LIMIT 1",
+            (data.equipo_id,)
+        )
+        hist_row = cursor.fetchone()
+        historial_2024 = dict(hist_row) if hist_row else {
+            "estado": "Sin datos",
+            "diagnostico": "Sin diagnóstico previo.",
+            "acciones": "Sin acciones registradas.",
+            "recomendaciones": "Sin recomendaciones registradas."
+        }
+
+        # 3. Obtener lecciones aprendidas y reglas de negocio
+        aprendizaje = obtener_aprendizaje_texto()
+        db_reglas = get_config_value_db("reglas_negocio") or REGLAS_NEGOCIO
+
+        # 4. Invocar asistente técnico
+        respuesta = consultar_asistente_equipo(
+            equipo=equipo,
+            historial_2024=historial_2024,
+            mensaje=data.mensaje,
+            historial_chat=data.historial or [],
+            aprendizaje=aprendizaje,
+            reglas_negocio=db_reglas,
+            modo=data.modo or "desktop"
+        )
+
+        return {
+            "equipo_id": data.equipo_id,
+            "equipo_nombre": equipo.get("nombre"),
+            "equipo_codigo": equipo.get("codigo") or equipo.get("numero"),
+            "respuesta": respuesta,
+            "modo": data.modo
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error en /chat-equipo: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error consultando el asistente del equipo: {str(e)}")
+
 @router.post("/guardar", response_model=Dict[str, Any])
 def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         cursor = db.cursor()
         
         # 1. Guardar o actualizar la inspección
-        cursor.execute("SELECT id FROM inspecciones WHERE equipo_id = ? AND anio = 2026", (data.equipo_id,))
+        from app.services.db_service import get_config_value_db
+        import re
+        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+        digits = re.findall(r'\d+', campania_activa)
+        anio_campania = int(digits[0]) if digits else 2026
+
+        cursor.execute("SELECT id FROM inspecciones WHERE equipo_id = ? AND anio = ?", (data.equipo_id, anio_campania))
         row = cursor.fetchone()
         
         if row:
@@ -412,8 +487,8 @@ def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3
         else:
             cursor.execute("""
                 INSERT INTO inspecciones (equipo_id, anio, estado, acciones, diagnostico, recomendaciones, created_at, updated_at, estado_generacion)
-                VALUES (?, 2026, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'pendiente')
-            """, (data.equipo_id, data.estado, data.acciones, data.diagnostico, data.recomendaciones))
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'pendiente')
+            """, (data.equipo_id, anio_campania, data.estado, data.acciones, data.diagnostico, data.recomendaciones))
             inspeccion_id = cursor.lastrowid
             prev = None
             es_modificacion = False

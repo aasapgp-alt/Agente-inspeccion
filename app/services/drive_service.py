@@ -22,55 +22,59 @@ from pydrive2.drive import GoogleDrive
 
 logger = logging.getLogger(__name__)
 
-def autenticar_drive() -> GoogleAuth:
-    try:
-        # 1. Si existe credencial OAuth de usuario autenticado (mycreds.txt), priorizarla para contar con cuota de usuario
-        if os.path.exists("mycreds.txt"):
+_cached_drive = None
+
+def autenticar_drive() -> Optional[GoogleAuth]:
+    # 1. Si existe credencial OAuth de usuario autenticado (mycreds.txt), intentar usarla
+    if os.path.exists("mycreds.txt"):
+        try:
             gauth = GoogleAuth(settings_file="settings.yaml")
             gauth.LoadCredentialsFile("mycreds.txt")
-            if gauth.access_token_expired:
-                gauth.Refresh()
+            if gauth.credentials is not None and not getattr(gauth.credentials, 'invalid', False):
+                if gauth.access_token_expired:
+                    gauth.Refresh()
+                else:
+                    gauth.Authorize()
+                gauth.SaveCredentialsFile("mycreds.txt")
+                logger.info("Autenticado exitosamente en Google Drive usando OAuth de usuario (mycreds.txt).")
+                return gauth
             else:
-                gauth.Authorize()
-            gauth.SaveCredentialsFile("mycreds.txt")
-            logger.info("Autenticado exitosamente en Google Drive usando OAuth de usuario (mycreds.txt).")
-            return gauth
+                logger.warning("mycreds.txt contiene credenciales expiradas/inválidas. Probando Cuenta de Servicio...")
+        except Exception as oauth_err:
+            logger.warning(f"Error con OAuth de usuario ({oauth_err}). Probando Cuenta de Servicio...")
 
-        # 2. Si existe Service Account, usarla (ideal para Unidades Compartidas)
-        service_json_path = "c:\\Agente-Inspector\\service_account.json"
-        if os.path.exists(service_json_path):
-            from oauth2client.service_account import ServiceAccountCredentials
-            scope = ["https://www.googleapis.com/auth/drive"]
-            
-            gauth = GoogleAuth()
-            gauth.auth_method = 'service'
-            gauth.credentials = ServiceAccountCredentials.from_json_keyfile_name(
-                service_json_path, 
-                scope
-            )
-            logger.info("Autenticado exitosamente en Google Drive usando Cuenta de Servicio.")
-            return gauth
+    # 2. Si existe Service Account, usarla
+    service_paths = [
+        "service_account.json",
+        "c:\\Agente-Inspector\\service_account.json",
+        "praxis-effort-464216-u5-b302073b59eb.json",
+        "c:\\Agente-Inspector\\praxis-effort-464216-u5-b302073b59eb.json"
+    ]
+    for sp in service_paths:
+        if os.path.exists(sp):
+            try:
+                from oauth2client.service_account import ServiceAccountCredentials
+                scope = ["https://www.googleapis.com/auth/drive"]
+                gauth = GoogleAuth()
+                gauth.auth_method = 'service'
+                gauth.credentials = ServiceAccountCredentials.from_json_keyfile_name(sp, scope)
+                logger.info(f"Autenticado exitosamente en Google Drive usando Cuenta de Servicio ({sp}).")
+                return gauth
+            except Exception as sa_err:
+                logger.warning(f"Error al autenticar Cuenta de Servicio {sp}: {sa_err}")
 
-        # 3. Fallback a flujo OAuth interactivo
-        gauth = GoogleAuth(settings_file="settings.yaml")
-        gauth.LoadCredentialsFile("mycreds.txt")
-        if gauth.credentials is None:
-            gauth.LocalWebserverAuth()
-        elif gauth.access_token_expired:
-            gauth.Refresh()
-        else:
-            gauth.Authorize()
-        gauth.SaveCredentialsFile("mycreds.txt")
-        return gauth
-    except Exception as e:
-        logger.warning(f"Error autenticando con Google Drive: {e}. Usando modo MOCK.")
-        return None
+    logger.warning("No se pudo autenticar con Google Drive. Usando modo MOCK.")
+    return None
 
 def get_drive_instance():
+    global _cached_drive
+    if _cached_drive is not None:
+        return _cached_drive
     gauth = autenticar_drive()
     if not gauth:
         return None
-    return GoogleDrive(gauth)
+    _cached_drive = GoogleDrive(gauth)
+    return _cached_drive
 
 def listar_carpetas(carpeta_id: str) -> list:
     drive = get_drive_instance()
@@ -177,31 +181,62 @@ def listar_archivos(carpeta_id: str) -> list:
         logger.error(f"Error listando archivos en {carpeta_id}: {e}")
         return []
 
+def generar_imagen_mock(file_id: str = "mock_img") -> bytes:
+    try:
+        from PIL import Image, ImageDraw
+        img = Image.new('RGB', (400, 300), color=(15, 23, 42))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([(10, 10), (390, 290)], outline=(56, 189, 248), width=2)
+        draw.text((30, 40), "IMAGEN DE INSPECCION (DEMO/MOCK)", fill=(255, 255, 255))
+        draw.text((30, 80), f"ID Archivo: {file_id}", fill=(148, 163, 184))
+        draw.text((30, 120), "Estado: Modo Demostración", fill=(56, 189, 248))
+        draw.text((30, 160), "Equipo: T-169 Tubo FRP", fill=(203, 213, 225))
+        draw.text((30, 200), "Campaña PGP 2026", fill=(100, 116, 139))
+        out = io.BytesIO()
+        img.save(out, format="JPEG")
+        return out.getvalue()
+    except Exception:
+        # Minimal 1x1 valid JPEG fallback
+        return b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' \",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9'
+
 def descargar_imagen(file_id: str) -> bytes:
+    if file_id.startswith("mock_"):
+        return generar_imagen_mock(file_id)
+
+    tmp_name = f"{file_id}.tmp"
     try:
         drive = get_drive_instance()
+        if not drive:
+            logger.warning(f"No hay conexión a Drive para descargar {file_id}, usando fallback mock.")
+            return generar_imagen_mock(file_id)
         file = drive.CreateFile({'id': file_id})
-        tmp_name = f"{file_id}.tmp"
         file.GetContentFile(tmp_name)
         
         from PIL import Image, ImageOps
-        import io
+        
+        with open(tmp_name, "rb") as f:
+            raw_bytes = f.read()
+            
         try:
-            with Image.open(tmp_name) as img:
+            with Image.open(io.BytesIO(raw_bytes)) as img:
                 img = ImageOps.exif_transpose(img)
                 out_buffer = io.BytesIO()
                 img.save(out_buffer, format=img.format or "JPEG")
                 content = out_buffer.getvalue()
         except Exception as img_err:
-            logger.warning(f"No se pudo rotar la imagen {file_id}, usando original: {img_err}")
-            with open(tmp_name, "rb") as f:
-                content = f.read()
+            logger.warning(f"No se pudo rotar la imagen {file_id}, usando bytes originales: {img_err}")
+            content = raw_bytes
                 
-        os.remove(tmp_name)
         return content
     except Exception as e:
         logger.error(f"Error descargando imagen {file_id}: {e}")
-        return b""
+        return generar_imagen_mock(file_id)
+    finally:
+        if os.path.exists(tmp_name):
+            try:
+                os.remove(tmp_name)
+            except Exception:
+                pass
 
 def subir_archivo(ruta_local: str, nombre: str, carpeta_id: str) -> dict:
     try:

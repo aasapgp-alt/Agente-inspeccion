@@ -85,23 +85,53 @@ export const apiService = {
 
   getItinerarioHoy: async () => {
     try {
-      let response = await fetch(`${API_BASE_URL}/itinerarios/`, { headers: getAuthHeaders() });
+      let response = await fetch(`${API_BASE_URL}/itinerarios/hoy`, { headers: getAuthHeaders() });
       checkAuthStatus(response);
       if (!response.ok) {
-        response = await fetch(`${API_BASE_URL}/itinerario/hoy/`, { headers: getAuthHeaders() });
+        response = await fetch(`${API_BASE_URL}/itinerarios/`, { headers: getAuthHeaders() });
         checkAuthStatus(response);
       }
 
       if (!response.ok) {
-        console.warn(`[apiService.getItinerarioHoy] HTTP ${response.status}: usando caché IndexedDB.`);
+        console.warn(`[apiService.getItinerarioHoy] HTTP ${response.status}: fallback a caché IndexedDB.`);
         return [];
       }
 
       const data = await response.json();
-      return Array.isArray(data) ? data : (data.itinerario || data.itinerarios || data.equipos || []);
+      return Array.isArray(data) ? data : (data.itinerarios || data.itinerario || data.equipos || []);
     } catch (error) {
       console.warn('[apiService.getItinerarioHoy] Red no disponible:', error.message);
       return [];
+    }
+  },
+
+  recargarItinerarioLocal: async () => {
+    try {
+      if (typeof window === 'undefined' || !navigator.onLine) {
+        return { success: false, offline: true };
+      }
+      const { db } = await import('../utils/db');
+      const itinerario = await apiService.getItinerarioHoy();
+      
+      await db.transaction('rw', db.itinerario_cache, async () => {
+        await db.itinerario_cache.clear();
+        if (Array.isArray(itinerario) && itinerario.length > 0) {
+          await db.itinerario_cache.bulkPut(
+            itinerario.map((item, index) => ({
+              id: item.id || index + 1,
+              activo_id: item.activo_id || item.equipo_id || item.id,
+              orden: item.orden || index + 1,
+              codigo: item.codigo || item.codigo_activo || `EQ-${item.id}`,
+              nombre: item.nombre || item.nombre_activo || item.equipo_nombre || 'Equipo Asignado',
+              estado_anterior: item.estado_actual || item.estado_anterior || 'BUENO'
+            }))
+          );
+        }
+      });
+      return { success: true, count: Array.isArray(itinerario) ? itinerario.length : 0 };
+    } catch (error) {
+      console.error('[apiService.recargarItinerarioLocal] Error:', error);
+      return { success: false, error: error.message };
     }
   },
 
@@ -325,6 +355,54 @@ export const apiService = {
     }
   },
 
+  openReportPDF: async (equipoId, token, campania) => {
+    try {
+      const params = new URLSearchParams();
+      if (campania) params.append('campania', campania);
+      const url = `${API_BASE_URL}/reportes/equipo/${equipoId}/pdf?${params.toString()}`;
+      const response = await fetch(url, {
+        headers: getAuthHeaders(token)
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'No se pudo abrir el reporte PDF.');
+      }
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (error) {
+      console.error('[openReportPDF] Error:', error);
+      alert(error.message || 'Error al abrir el reporte PDF.');
+    }
+  },
+
+  downloadReportPDF: async (equipoId, filename, token, campania) => {
+    try {
+      const params = new URLSearchParams({ download: 'true' });
+      if (campania) params.append('campania', campania);
+      const url = `${API_BASE_URL}/reportes/equipo/${equipoId}/pdf?${params.toString()}`;
+      const response = await fetch(url, {
+        headers: getAuthHeaders(token)
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'No se pudo descargar el reporte PDF.');
+      }
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || `Reporte_Equipo_${equipoId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('[downloadReportPDF] Error:', error);
+      alert(error.message || 'Error al descargar el reporte PDF.');
+    }
+  },
+
   getDriveRoot: async (token) => {
     try {
       const response = await fetch(`${API_BASE_URL}/drive/root`, {
@@ -403,6 +481,30 @@ export const apiService = {
       return await response.json();
     } catch (error) {
       console.error('[subirInspeccionesBatch] Error:', error);
+      throw error;
+    }
+  },
+
+  consultarAsistenteEquipo: async (equipoId, mensaje, historial = [], modo = 'desktop', token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ia/chat-equipo`, {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+          equipo_id: Number(equipoId),
+          mensaje,
+          historial,
+          modo
+        })
+      });
+      checkAuthStatus(response);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Error consultando al asistente del equipo');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('[consultarAsistenteEquipo] Error:', error);
       throw error;
     }
   }

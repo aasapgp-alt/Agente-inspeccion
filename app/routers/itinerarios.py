@@ -20,21 +20,55 @@ def get_itinerarios(fecha: Optional[str] = None, user_id: Optional[int] = None, 
             FROM plan_inspeccion_diaria pid
             JOIN usuarios u ON pid.usuario_id = u.id
             JOIN equipos e ON pid.equipo_id = e.id
-            WHERE 1=1
+            WHERE e.activo = 1
         """
         params = []
-        if fecha:
-            query += " AND pid.fecha = ?"
-            params.append(fecha)
-        if user_id:
-            query += " AND pid.usuario_id = ?"
-            params.append(user_id)
+        
+        # Si el usuario es inspector, restringir a sus propias tareas y por defecto al día de hoy
+        if current_user.get("rol") == "inspector":
+            target_user_id = current_user.get("id")
+            target_fecha = fecha or date.today().isoformat()
+            query += " AND pid.usuario_id = ? AND pid.fecha = ?"
+            params.extend([target_user_id, target_fecha])
+        else:
+            if fecha:
+                query += " AND pid.fecha = ?"
+                params.append(fecha)
+            if user_id:
+                query += " AND pid.usuario_id = ?"
+                params.append(user_id)
             
         query += " ORDER BY pid.fecha DESC, pid.usuario_id, pid.orden ASC"
         
         cursor = db.execute(query, params)
         rows = cursor.fetchall()
         return {"itinerarios": [dict(r) for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hoy")
+def get_itinerario_hoy(user_id: Optional[int] = None, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Obtiene específicamente la ruta asignada para hoy al usuario autenticado."""
+    try:
+        hoy = date.today().isoformat()
+        target_user_id = current_user.get("id")
+        
+        # Administradores y supervisores pueden consultar el de otro usuario si lo indican
+        if current_user.get("rol") in ("admin", "supervisor") and user_id:
+            target_user_id = user_id
+            
+        query = """
+            SELECT pid.*, u.username, u.nombre_completo, e.codigo, e.nombre as equipo_nombre, e.estado_actual
+            FROM plan_inspeccion_diaria pid
+            JOIN usuarios u ON pid.usuario_id = u.id
+            JOIN equipos e ON pid.equipo_id = e.id
+            WHERE pid.fecha = ? AND pid.usuario_id = ? AND e.activo = 1
+            ORDER BY pid.orden ASC
+        """
+        cursor = db.execute(query, (hoy, target_user_id))
+        rows = cursor.fetchall()
+        return {"itinerarios": [dict(r) for r in rows], "fecha": hoy, "usuario_id": target_user_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

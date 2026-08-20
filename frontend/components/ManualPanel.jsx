@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import VoiceDictationButton from './VoiceDictationButton';
+import ImageViewerModal from './ImageViewerModal';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -19,15 +20,17 @@ const renderVal = (val) => {
 
 export default function ManualPanel({ equipoId }) {
   const { token } = useAuth();
+  const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
   const [equipo, setEquipo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [previewImage, setPreviewImage] = useState(null);
 
   const authFetch = (url, options = {}) => {
     return fetch(url, {
       ...options,
       headers: {
         ...options.headers,
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${activeToken || token}`
       }
     });
   };
@@ -664,9 +667,15 @@ export default function ManualPanel({ equipoId }) {
                           boxShadow: isSelected ? '0 0 0 2px rgba(14, 165, 233, 0.3)' : '0 2px 5px rgba(0,0,0,0.2)',
                           backgroundColor: 'rgba(255,255,255,0.02)',
                           transition: 'all 0.2s',
-                          aspectRatio: '1 / 1'
+                          aspectRatio: '1 / 1',
+                          cursor: 'pointer'
                         }}
                         onClick={() => toggleImage(img.id)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewImage(img);
+                        }}
+                        title="Clic para seleccionar · Doble clic para maximizar"
                       >
                         <input 
                           type="checkbox" 
@@ -683,23 +692,53 @@ export default function ManualPanel({ equipoId }) {
                             boxShadow: '0 0 5px rgba(0,0,0,0.5)'
                           }} 
                         />
-                        <img 
-                          src={`http://localhost:8000/api/drive/imagen/${img.id}?token=${token}`} 
-                          alt={img.name} 
-                          loading="lazy"
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'cover',
-                            transition: 'transform 0.3s',
-                            transform: isSelected ? 'scale(1.05)' : 'scale(1)'
-                          }} 
-                          onError={(e) => {
-                            e.target.style.display = 'none';
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImage(img);
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                          onMouseLeave={(e) => e.currentTarget.style.transform = isSelected ? 'scale(1.05)' : 'scale(1)'}
-                        />
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            borderRadius: '4px',
+                            padding: '2px 6px',
+                            fontSize: '0.7rem',
+                            color: 'white',
+                            cursor: 'pointer',
+                            zIndex: 2,
+                            backdropFilter: 'blur(4px)'
+                          }}
+                          title="Maximizar foto"
+                        >
+                          🔍
+                        </button>
+                        {activeToken ? (
+                          <img 
+                            key={`${img.id}-${activeToken}`}
+                            src={`http://localhost:8000/api/drive/imagen/${img.id}?token=${activeToken}`} 
+                            alt={img.name} 
+                            loading="lazy"
+                            style={{ 
+                              width: '100%', 
+                              height: '100%', 
+                              objectFit: 'cover',
+                              transition: 'transform 0.3s',
+                              transform: isSelected ? 'scale(1.05)' : 'scale(1)'
+                            }} 
+                            onError={(e) => {
+                              e.currentTarget.style.opacity = '0';
+                            }}
+                            onLoad={(e) => {
+                              e.currentTarget.style.opacity = '1';
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = isSelected ? 'scale(1.05)' : 'scale(1)'}
+                          />
+                        ) : null}
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', zIndex: -1 }}>
                           🖼️
                         </div>
@@ -746,12 +785,16 @@ export default function ManualPanel({ equipoId }) {
                     return (
                       <div key={imgId} style={{ display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
                         <div style={{ position: 'relative', width: '50px', height: '50px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                          <img 
-                            src={`http://localhost:8000/api/drive/imagen/${imgId}?token=${token}`} 
-                            alt={img.name} 
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
+                          {activeToken ? (
+                            <img 
+                              key={`${imgId}-${activeToken}`}
+                              src={`http://localhost:8000/api/drive/imagen/${imgId}?token=${activeToken}`} 
+                              alt={img.name} 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => { e.currentTarget.style.opacity = '0'; }}
+                              onLoad={(e) => { e.currentTarget.style.opacity = '1'; }}
+                            />
+                          ) : null}
                           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: -1 }}>
                             🖼️
                           </div>
@@ -789,6 +832,17 @@ export default function ManualPanel({ equipoId }) {
           </div>
         </div>
       </div>
+
+      {previewImage && (
+        <ImageViewerModal
+          image={previewImage}
+          images={items.images || []}
+          token={token}
+          onClose={() => setPreviewImage(null)}
+          isSelected={selectedImages.includes(previewImage.id)}
+          onSelectImage={(id) => toggleImage(id)}
+        />
+      )}
     </div>
   );
 }

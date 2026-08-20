@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { FolderOpen, AlertTriangle, Folder, Edit3 } from 'lucide-react';
+import { FolderOpen, AlertTriangle, Folder, Edit3, Sparkles } from 'lucide-react';
 import { db } from '../../../../utils/db';
 import { apiService } from '../../../../services/api';
 import { useOnlineStatus } from '../../../../hooks/useOnlineStatus';
@@ -20,6 +20,7 @@ import { Observaciones } from '../../../../components/campo/inspeccion/Observaci
 import { GuardarSiguiente } from '../../../../components/campo/inspeccion/GuardarSiguiente';
 import { CampoBottomNav } from '../../../../components/campo/navegacion/CampoBottomNav';
 import { HistorialActivoModal } from '../../../../components/campo/shared/HistorialActivoModal';
+import { AsistenteCampoModal } from '../../../../components/campo/shared/AsistenteCampoModal';
 
 function ModoCapturaInspeccionContent() {
   const params = useParams();
@@ -52,6 +53,7 @@ function ModoCapturaInspeccionContent() {
   const [isGuardando, setIsGuardando] = useState(false);
   const [mostrarModalConfirmacion, setMostrarModalConfirmacion] = useState(false);
   const [showHistorialModal, setShowHistorialModal] = useState(false);
+  const [showAsistenteModal, setShowAsistenteModal] = useState(false);
   const [siguienteEquipoId, setSiguienteEquipoId] = useState(null);
   const [errorValidacion, setErrorValidacion] = useState('');
   const [isEscuchandoDictado, setIsEscuchandoDictado] = useState(false);
@@ -64,18 +66,15 @@ function ModoCapturaInspeccionContent() {
         const user = apiService.getCurrentUser();
         if (user && active) setUsuarioActual(user);
 
-        const eqData = await db.equipos_cache.get(idActivo);
-        let currentCodigo = `EQ-${idActivo}`;
-        let currentNombre = 'Equipo Industrial';
+        let eqData = await db.equipos_cache.get(idActivo);
+        if (!eqData && navigator.onLine) {
+          eqData = await apiService.getEquipoById(idActivo);
+        }
 
-        if (eqData && active) {
-          currentCodigo = eqData.codigo || `EQ-${idActivo}`;
-          currentNombre = eqData.nombre || 'Equipo Industrial';
-          setCodigoActivo(currentCodigo);
-          setNombreActivo(currentNombre);
-        } else if (active && idActivo === 107) {
-          currentCodigo = '107';
-          currentNombre = 'VENTILADOR 431-506';
+        let currentCodigo = eqData?.codigo || eqData?.tag || `EQ-${idActivo}`;
+        let currentNombre = eqData?.nombre || eqData?.descripcion || 'Equipo Industrial';
+
+        if (active) {
           setCodigoActivo(currentCodigo);
           setNombreActivo(currentNombre);
         }
@@ -328,6 +327,31 @@ function ModoCapturaInspeccionContent() {
             onOpenOptions={() => setShowHistorialModal(true)}
           />
 
+          {/* Barra de Acciones Inteligentes: Asistente IA + Historial */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                vibrar(25);
+                setShowAsistenteModal(true);
+              }}
+              className="flex-1 py-2 px-3 bg-gradient-to-r from-sky-950 to-indigo-950 hover:from-sky-900 hover:to-indigo-900 border border-sky-600/50 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-sky-200 shadow-sm active:scale-95 transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-sky-400" />
+              <span>Asistente Técnico IA</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                vibrar(25);
+                setShowHistorialModal(true);
+              }}
+              className="py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold text-slate-300 active:scale-95 transition-all"
+            >
+              <span>Historial</span>
+            </button>
+          </div>
+
           {/* Indicador de Carpeta Drive Vinculada con Botón Cambiar */}
           <div className="bg-[#131c2e] border border-slate-800/80 p-2.5 px-3 rounded-xl space-y-1.5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -499,6 +523,22 @@ function ModoCapturaInspeccionContent() {
         nombreActivo={nombreActivo}
         isOpen={showHistorialModal}
         onClose={() => setShowHistorialModal(false)}
+      />
+
+      {/* Modal Asistente Técnico IA con Gemini */}
+      <AsistenteCampoModal
+        equipoId={idActivo}
+        codigoActivo={codigoActivo}
+        nombreActivo={nombreActivo}
+        isOpen={showAsistenteModal}
+        onClose={() => setShowAsistenteModal(false)}
+        onInsertarNotas={(texto) => {
+          const nuevoTexto = notasTexto ? `${notasTexto}\n\n[Asistente IA]: ${texto}` : `[Asistente IA]: ${texto}`;
+          setNotasTexto(nuevoTexto);
+          if (inspeccionId) {
+            db.inspecciones_pendientes.update(inspeccionId, { notas: nuevoTexto });
+          }
+        }}
       />
 
       {/* Drawer / Modal de Drive para Selección Manual */}

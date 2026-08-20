@@ -5,3 +5,4 @@ export { CampoInput } from './CampoInput';
 export { CampoBadge } from './CampoBadge';
 export { BannerInstalacionPWA } from './BannerInstalacionPWA';
 export { HistorialActivoModal } from './HistorialActivoModal';
+export { AsistenteCampoModal } from './AsistenteCampoModal';

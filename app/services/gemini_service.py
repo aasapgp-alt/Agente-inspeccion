@@ -198,3 +198,92 @@ def build_annotation_context(annotations: list) -> str:
                     f"on {img_w}x{img_h}px image"
                 )
     return "\n".join(lines)
+
+
+def consultar_asistente_equipo(
+    equipo: dict,
+    historial_2024: dict,
+    mensaje: str,
+    historial_chat: list = None,
+    aprendizaje: str = "",
+    reglas_negocio: str = "",
+    modo: str = "desktop"
+) -> str:
+    """
+    Asistente técnico interactivo especializado en el equipo en inspección.
+    Delimita estrictamente las respuestas al contexto del equipo y sus normativas.
+    """
+    try:
+        model = inicializar_gemini()
+        
+        formato_instruccion = ""
+        if modo == "mobile":
+            formato_instruccion = (
+                "ESTILO PARA DISPOSITIVO MÓVIL EN CAMPO:\n"
+                "- Responde de forma muy concisa, telegráfica y directa (máximo 2-3 viñetas breves).\n"
+                "- Prioriza la seguridad, acciones inmediatas en terreno y puntos clave a verificar con la vista.\n"
+                "- Evita introducciones largas, saludos o rodeos teóricos."
+            )
+        else:
+            formato_instruccion = (
+                "ESTILO PARA DASHBOARD DE ESCRITORIO:\n"
+                "- Responde con lenguaje técnico de ingeniería industrial de alto nivel.\n"
+                "- Utiliza formato Markdown con títulos, listas o tablas si clarifica la explicación.\n"
+                "- Si se pide redacción, redacta en tiempo impersonal (diagnóstico en presente, acciones en pasado, recomendaciones en infinitivo)."
+            )
+
+        system_instruction = f"""Eres el Copiloto Técnico y Asistente Experto en Inspección Industrial asignado exclusivamente a este equipo:
+- Nombre: {equipo.get('nombre', 'Desconocido')}
+- Código / Tag: {equipo.get('codigo') or equipo.get('numero') or 'N/A'}
+- Área / Ubicación: {equipo.get('area', 'N/A')}
+- Material: {equipo.get('material', 'N/A')}
+- Criticidad: {equipo.get('criticidad', 'N/A')}
+
+ANTECEDENTES HISTÓRICOS (PGP 2024):
+- Estado: {historial_2024.get('estado', 'Sin datos')}
+- Diagnóstico previo: {historial_2024.get('diagnostico', 'Sin datos')}
+- Acciones previas: {historial_2024.get('acciones', 'Sin datos')}
+- Recomendaciones previas: {historial_2024.get('recomendaciones', 'Sin datos')}
+
+LECCIONES APRENDIDAS Y REGLAS DE NEGOCIO:
+{reglas_negocio or 'Reglas generales de inspección de recipientes, cañerías y tanques.'}
+{f"Lecciones aprendidas: {aprendizaje}" if aprendizaje else ""}
+
+DIRECTIVAS CRÍTICAS DE COMPORTAMIENTO (GUARDRAILS):
+1. TU ENFOQUE ES EXCLUSIVO: Solo responde dudas sobre este equipo específico, su material, modos de falla, normativas de inspección y antecedentes históricos.
+2. PREGUNTAS FUERA DE ÁMBITO: Si el usuario te pregunta sobre temas ajenos a la inspección o a este equipo, declina amablemente y recuérdale que estás enfocado en la inspección de {equipo.get('nombre')}.
+3. MATERIALES PLÁSTICOS (FRP, ACRBA, PP): Recuerda siempre las precauciones de sobreajuste de bulonería, fisuras en bridas y compatibilidad química si aplica.
+
+{formato_instruccion}
+"""
+
+        # Preparar historial formateado si viene provisto
+        history_formatted = []
+        if historial_chat:
+            for item in historial_chat:
+                role = "user" if item.get("rol") in ("user", "usuario") else "model"
+                texto = item.get("texto") or item.get("mensaje") or ""
+                if texto:
+                    history_formatted.append({"role": role, "parts": [texto]})
+
+        # Iniciar chat con system instruction inyectada en la primera interacción o en el modelo
+        # Para compatibilidad con SDK de genai, añadimos el prompt de contexto si es nuevo
+        if not history_formatted:
+            chat = model.start_chat(history=[
+                {"role": "user", "parts": [f"[INSTRUCCIÓN DE SISTEMA Y CONTEXTO DEL EQUIPO]\n{system_instruction}\nPor favor confirma que estás listo."]},
+                {"role": "model", "parts": [f"Entendido. Soy el asistente técnico para la inspección del equipo {equipo.get('nombre')} ({equipo.get('codigo') or ''}). ¿En qué puedo ayudarte?"]}
+            ])
+        else:
+            # Insertar system instruction al inicio del historial existente
+            full_history = [
+                {"role": "user", "parts": [f"[INSTRUCCIÓN DE SISTEMA Y CONTEXTO DEL EQUIPO]\n{system_instruction}"]},
+                {"role": "model", "parts": [f"Entendido. Asistente técnico activo para {equipo.get('nombre')}."]}
+            ] + history_formatted
+            chat = model.start_chat(history=full_history)
+
+        response = chat.send_message(mensaje, request_options={"timeout": 30})
+        return response.text.strip() if response and response.text else "No se pudo obtener una respuesta del asistente."
+    except Exception as e:
+        logger.error(f"Error en consultar_asistente_equipo: {e}", exc_info=True)
+        return f"Error consultando el asistente técnico: {str(e)}"
+

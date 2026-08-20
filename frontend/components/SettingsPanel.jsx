@@ -1809,18 +1809,43 @@ export default function SettingsPanel() {
               {filteredSettings.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>No hay configuraciones en esta categoría.</p>
               ) : (
-                filteredSettings.map(item => {
+                filteredSettings.map((item, idx) => {
                   const inputId = `setting-${item.clave}`;
                   const isFieldEditable = isAdmin && item.editable;
                   const value = localValues[item.clave] ?? '';
                   const hasError = validationErrors[item.clave];
 
+                  const fieldLabelMap = {
+                    reporte_campania: "Nombre de la Campaña Activa",
+                    empresa_inspectora_nombre: "Razón Social de la Empresa Inspectora",
+                    empresa_inspectora_subtitulo: "Subtítulo Institucional",
+                    reporte_contacto_pie: "Dirección y Contacto del Pie de Página",
+                    reporte_criterios_normas: "Criterios Técnicos y Normativas Aplicables",
+                    reporte_firmante_1_nombre: "Primer Firmante: Nombre y Apellido",
+                    reporte_firmante_1_cargo: "Primer Firmante: Cargo / Rol",
+                    reporte_firmante_1_matricula: "Primer Firmante: Matrícula Profesional",
+                    reporte_firmante_2_nombre: "Segundo Firmante: Nombre y Apellido",
+                    reporte_firmante_2_cargo: "Segundo Firmante: Cargo / Rol",
+                    reporte_firmante_2_matricula: "Segundo Firmante: Matrícula Profesional",
+                    reporte_max_fotos_individual: "Máximo de Fotos en Reporte Individual",
+                    reporte_max_fotos_libro: "Máximo de Fotos por Equipo en Libro Consolidado",
+                    libro_objetivo_plantilla: "Plantilla del Objetivo en Portada del Libro",
+                    reportes_dir: "Ruta Local de Reportes Individuales",
+                    libros_dir: "Ruta Local de Libros Consolidados"
+                  };
+
+                  const isMultiline = item.clave === 'system_instruction' || 
+                                     item.clave === 'reglas_negocio' || 
+                                     item.clave === 'reporte_criterios_normas' || 
+                                     item.clave === 'libro_objetivo_plantilla' || 
+                                     item.clave === 'reporte_contacto_pie';
+
                   return (
-                    <div key={item.clave} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div key={item.clave} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: activeSubTab === 'reportes' ? 'rgba(255,255,255,0.02)' : 'transparent', padding: activeSubTab === 'reportes' ? '1rem' : '0', borderRadius: activeSubTab === 'reportes' ? '8px' : '0', border: activeSubTab === 'reportes' ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <label htmlFor={inputId} style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                          {item.clave.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          {fieldLabelMap[item.clave] || item.clave.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                         </label>
                         {!item.editable && (
                           <span style={{ fontSize: '0.7rem', backgroundColor: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)', padding: '0.1rem 0.4rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 600 }}>
@@ -1902,13 +1927,13 @@ export default function SettingsPanel() {
                               {showApiKey ? '👁️ Ocultar' : '👁️ Mostrar'}
                             </button>
                           </div>
-                        ) : (item.clave === 'system_instruction' || item.clave === 'reglas_negocio') ? (
+                        ) : isMultiline ? (
                           <textarea
                             id={inputId}
                             value={value}
                             disabled={!isFieldEditable}
                             onChange={(e) => handleChange(item.clave, e.target.value, 'string')}
-                            rows={10}
+                            rows={item.clave === 'reporte_criterios_normas' ? 6 : item.clave === 'libro_objetivo_plantilla' ? 4 : item.clave === 'reporte_contacto_pie' ? 2 : 10}
                             style={{
                               width: '100%',
                               borderColor: hasError ? 'var(--status-critical)' : 'var(--border-color)',

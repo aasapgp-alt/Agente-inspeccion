@@ -46,6 +46,86 @@ def list_reports(
     cursor.execute(query, params)
     return [dict(row) for row in cursor.fetchall()]
 
+@router.get("/equipo/{equipo_id}/pdf")
+def get_reporte_pdf_by_equipo(
+    equipo_id: int,
+    campania: Optional[str] = Query(None),
+    download: bool = Query(False),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Retorna o genera bajo demanda el archivo PDF del reporte técnico de inspección para un equipo.
+    """
+    cursor = db.cursor()
+    
+    # 1. Buscar en reportes existentes
+    rep_query = "SELECT * FROM reportes WHERE equipo_id = ?"
+    rep_params = [equipo_id]
+    if campania:
+        rep_query += " AND campania = ?"
+        rep_params.append(campania)
+    rep_query += " ORDER BY id DESC LIMIT 1"
+    
+    cursor.execute(rep_query, rep_params)
+    rep_row = cursor.fetchone()
+    
+    local_pdf = rep_row["ruta_pdf_local"] if rep_row else None
+    
+    # 2. Si no está en reportes o el archivo físico no existe, buscar en inspecciones
+    if not local_pdf or not os.path.exists(local_pdf):
+        insp_query = "SELECT * FROM inspecciones WHERE equipo_id = ?"
+        insp_params = [equipo_id]
+        if campania:
+            import re
+            m = re.search(r'\b(20\d{2})\b', campania)
+            if m:
+                insp_query += " AND anio = ?"
+                insp_params.append(int(m.group(1)))
+        insp_query += " ORDER BY anio DESC, id DESC LIMIT 1"
+        cursor.execute(insp_query, insp_params)
+        insp_row = cursor.fetchone()
+        
+        if insp_row and insp_row["ruta_pdf_local"] and os.path.exists(insp_row["ruta_pdf_local"]):
+            local_pdf = insp_row["ruta_pdf_local"]
+            
+    # 3. Si aún no existe el archivo físico pero hay datos de inspección registrados, generarlo bajo demanda
+    if not local_pdf or not os.path.exists(local_pdf):
+        cursor.execute("""
+            SELECT e.*, i.id as inspeccion_id, i.estado, i.diagnostico, i.acciones
+            FROM equipos e
+            LEFT JOIN inspecciones i ON i.equipo_id = e.id
+            WHERE e.id = ? AND (i.estado IN ('BUENO', 'REGULAR', 'CRITICO') OR (i.diagnostico IS NOT NULL AND length(i.diagnostico) > 3))
+            ORDER BY i.anio DESC, i.id DESC LIMIT 1
+        """, (equipo_id,))
+        eq_inspec = cursor.fetchone()
+        
+        if eq_inspec:
+            try:
+                from app.services.reporte_service import crear_reporte_individual_completo
+                res = crear_reporte_individual_completo(equipo_id, db, current_user.get("id", 1))
+                if res and res.get("ruta") and os.path.exists(res.get("ruta")):
+                    local_pdf = res.get("ruta")
+            except Exception as gen_err:
+                import logging
+                logging.getLogger(__name__).error(f"Error generando reporte bajo demanda para equipo {equipo_id}: {gen_err}")
+                
+    if not local_pdf or not os.path.exists(local_pdf):
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No se encontró ni pudo generarse el archivo PDF para el equipo ID {equipo_id}. Asegúrese de que posea una inspección completada."
+        )
+        
+    filename = os.path.basename(local_pdf)
+    disposition = "attachment" if download else "inline"
+    
+    return FileResponse(
+        path=local_pdf,
+        media_type="application/pdf",
+        filename=filename,
+        headers={"Content-Disposition": f"{disposition}; filename={filename}"}
+    )
+
 @router.get("/minuta_resumen", response_model=List[Dict[str, Any]])
 def get_minuta_resumen(
     empresa_id: Optional[int] = Query(None),
@@ -57,7 +137,7 @@ def get_minuta_resumen(
 ):
     """
     Retorna la lista estructurada para la Minuta Resumen PGP (Tabla estilo Pág. 15 del reporte).
-    Soporta filtrado dinámico por campaña y empresa en tiempo real.
+    Soporta filtrado dinámico por campaña y empresa en tiempo real, con estado de inspección validado.
     """
     import re
     anio_target = None
@@ -94,11 +174,15 @@ def get_minuta_resumen(
             i.numero_acta as informe,
             i.ruta_pdf_local,
             i.ruta_pdf_drive,
-            i.drive_file_id
+            i.drive_file_id,
+            rep.id as reporte_id,
+            rep.ruta_pdf_local as rep_pdf_local,
+            rep.ruta_pdf_drive as rep_pdf_drive
         FROM equipos e
         JOIN ubicaciones u ON e.ubicacion_id = u.id
         JOIN empresas emp ON u.empresa_id = emp.id
         {join_clause}
+        LEFT JOIN reportes rep ON rep.id = (SELECT id FROM reportes WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1)
         WHERE 1=1
     """
     params = join_param.copy()
@@ -107,8 +191,9 @@ def get_minuta_resumen(
         params.append(empresa_id)
         
     if criticidad:
-        query += " AND e.criticidad = ?"
-        params.append(criticidad)
+        clean_crit_filter = str(criticidad).strip()
+        query += " AND (e.criticidad = ? OR e.criticidad LIKE ?)"
+        params.extend([clean_crit_filter, f"%{clean_crit_filter}%"])
         
     if search:
         query += " AND (e.codigo LIKE ? OR e.nombre LIKE ? OR u.nombre LIKE ? OR i.numero_acta LIKE ?)"
@@ -134,11 +219,14 @@ def get_minuta_resumen(
             else:
                 informe_val = f"ACTA-{r.get('tag')}-{anio_target or 2024}"
 
-        recom_flag = "SI" if (r.get("recomendaciones") and len(r.get("recomendaciones").strip()) > 2) else "NO"
+        recom_flag = "SI" if (r.get("recomendaciones") and len(str(r.get("recomendaciones")).strip()) > 2) else "NO"
         
         acciones_str = (r.get("acciones") or "").lower()
-        acc_correct = "SI" if ("correctiv" in acciones_str or "reparaci" in acciones_str or "servicio condicional" in (r.get("observaciones") or "").lower() or r.get("estado") == "REGULAR" or r.get("estado") == "CRITICO") else "NO"
-        acc_prevent = "SI" if ("preventiv" in acciones_str or "inspecci" in acciones_str or r.get("estado") in ["BUENO", "REGULAR", "CRITICO"]) else "NO"
+        obs_existente = (r.get("observaciones") or "").lower()
+        estado_raw = (r.get("estado") or "PENDIENTE").upper()
+        
+        acc_correct = "SI" if ("correctiv" in acciones_str or "reparaci" in acciones_str or "servicio condicional" in obs_existente or estado_raw in ["REGULAR", "CRITICO"]) else "NO"
+        acc_prevent = "SI" if ("preventiv" in acciones_str or "inspecci" in acciones_str or estado_raw in ["BUENO", "REGULAR", "CRITICO"]) else "NO"
         
         sector_nombre = r.get("sector") or ""
         sector_abrev = sector_nombre
@@ -157,7 +245,7 @@ def get_minuta_resumen(
             
         observaciones = ""
         diag_obs = (r.get("diagnostico") or "").upper()
-        if "CONDICIONAL" in diag_obs or "CONDICIONAL" in (r.get("acciones") or "").upper() or r.get("estado") == "REGULAR":
+        if "CONDICIONAL" in diag_obs or "CONDICIONAL" in (r.get("acciones") or "").upper() or estado_raw == "REGULAR":
             observaciones = "Servicio condicional."
         if "AISLADO" in diag_obs or "AISLADO" in (r.get("acciones") or "").upper():
             observaciones = ("TK AISLADO. " + observaciones).strip()
@@ -167,13 +255,41 @@ def get_minuta_resumen(
             if "Recinto" not in observaciones:
                 observaciones = ("Incluye Anexo para Recinto de Contención. " + observaciones).strip()
 
-        crit = str(r.get("criticidad") or "2")
-        anio_base = r.get("anio") or 2026
+        # Normalizar criticidad
+        raw_crit = str(r.get("criticidad") or "2").replace("\xa0", "").strip()
+        if raw_crit.startswith("1"):
+            crit = "1"
+        elif raw_crit.startswith("3"):
+            crit = "3"
+        else:
+            crit = "2" if raw_crit in ["2", ""] else "1"
 
-        # Definir la próxima inspección como Próxima PGP según criticidad
-        prox_insp = "Próxima PGP"
+        # Determinación de estado de inspección real
+        tiene_inspeccion = bool(
+            r.get("inspeccion_id") and 
+            estado_raw in ["BUENO", "REGULAR", "CRITICO"] or 
+            (r.get("diagnostico") and len(str(r.get("diagnostico")).strip()) > 3)
+        )
 
-            
+        # Definir la próxima inspección según criticidad y estado
+        if not tiene_inspeccion:
+            prox_insp = "Próxima PGP"
+        elif crit == "1" or estado_raw == "CRITICO":
+            prox_insp = "Próxima PGP (1 año)"
+        elif crit == "2" or estado_raw == "REGULAR":
+            prox_insp = "2 años"
+        elif crit == "3":
+            prox_insp = "5 años"
+        else:
+            prox_insp = "Próxima PGP"
+
+        # Resolver URLs de reporte (ignorando mock-links)
+        raw_drive = r.get("ruta_pdf_drive") or r.get("rep_pdf_drive")
+        valid_drive = raw_drive if (raw_drive and "mock-link" not in raw_drive and raw_drive.startswith("http")) else None
+        
+        local_path = r.get("ruta_pdf_local") or r.get("rep_pdf_local")
+        tiene_reporte = bool(local_path or valid_drive or tiene_inspeccion)
+
         resumen_list.append({
             "numero": idx,
             "equipo_id": r["equipo_id"],
@@ -191,10 +307,13 @@ def get_minuta_resumen(
             "observaciones": observaciones,
             "criticidad": crit,
             "proxima_inspeccion": prox_insp,
-            "estado": r.get("estado") or "PENDIENTE",
-            "ruta_pdf_local": r.get("ruta_pdf_local"),
-            "ruta_pdf_drive": r.get("ruta_pdf_drive"),
-            "drive_file_id": r.get("drive_file_id")
+            "estado": estado_raw,
+            "tiene_inspeccion": tiene_inspeccion,
+            "tiene_reporte": tiene_reporte,
+            "reporte_id": r.get("reporte_id"),
+            "ruta_pdf_local": local_path,
+            "ruta_pdf_drive": valid_drive,
+            "drive_file_id": r.get("drive_file_id") if valid_drive else None
         })
         idx += 1
         

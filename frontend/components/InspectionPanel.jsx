@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { apiService } from '../services/api';
 import VersionHistoryModal from './VersionHistoryModal';
 import AnnotationModal from './AnnotationModal';
+import ImageViewerModal from './ImageViewerModal';
 import VoiceDictationButton from './VoiceDictationButton';
+import EquipoCopilotDrawer from './EquipoCopilotDrawer';
 import { guardarInspeccionOffline } from '../utils/offlineStore';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -24,6 +27,7 @@ const renderVal = (val) => {
 
 export default function InspectionPanel({ equipoId }) {
   const { token } = useAuth();
+  const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
   const [equipo, setEquipo] = useState(null);
   const [loading, setLoading] = useState(true);
   
@@ -32,7 +36,7 @@ export default function InspectionPanel({ equipoId }) {
       ...options,
       headers: {
         ...options.headers,
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${activeToken || token}`
       }
     });
   };
@@ -62,7 +66,9 @@ export default function InspectionPanel({ equipoId }) {
   const [inspeccionId, setInspeccionId] = useState(null);
   const [reportState, setReportState] = useState(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showCopilot, setShowCopilot] = useState(false);
   const [annotatingImage, setAnnotatingImage] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
   const [annotationsRefreshKey, setAnnotationsRefreshKey] = useState(0);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // 'drive', 'ia', or null
 
@@ -502,9 +508,37 @@ export default function InspectionPanel({ equipoId }) {
 
   return (
     <div className="glass-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
-        <h2 style={{ margin: 0 }}>{equipo?.nombre || equipo?.equipo}</h2>
-        <p style={{ margin: 0, color: 'var(--text-muted)' }}>{equipo?.area} - Número: {equipo?.numero}</p>
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>{equipo?.nombre || equipo?.equipo}</h2>
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+            {equipo?.area} - Número: {equipo?.numero} {equipo?.material ? `| Material: ${equipo.material}` : ''}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCopilot(true)}
+          className="btn"
+          style={{
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)',
+            border: '1px solid rgba(59, 130, 246, 0.5)',
+            color: '#93c5fd',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '0.45rem 0.9rem',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)',
+            transition: 'all 0.2s ease'
+          }}
+          title="Abrir Copiloto Técnico Gemini para este equipo"
+        >
+          <Sparkles size={16} color="#60a5fa" />
+          <span>Copiloto IA</span>
+        </button>
       </div>
 
       <div style={{
@@ -752,23 +786,82 @@ export default function InspectionPanel({ equipoId }) {
                   }} 
                   style={{ width: 'auto', cursor: 'pointer' }}
                 />
-                <div style={{ position: 'relative', width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)', backgroundColor: 'rgba(0,0,0,0.2)', flexShrink: 0 }}>
-                  <img 
-                    src={`http://localhost:8000/api/drive/imagen/${img.id}?token=${token}`} 
-                    alt={img.name}
-                    loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
+                <div 
+                  style={{ 
+                    position: 'relative', 
+                    width: '120px', 
+                    height: '120px', 
+                    borderRadius: '8px', 
+                    overflow: 'hidden', 
+                    border: '1px solid rgba(255,255,255,0.15)', 
+                    backgroundColor: 'rgba(0,0,0,0.2)', 
+                    flexShrink: 0,
+                    cursor: 'zoom-in'
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewImage(img);
+                  }}
+                  title="Doble clic para ver en tamaño grande / Pantalla completa"
+                >
+                  {activeToken ? (
+                    <img 
+                      key={`${img.id}-${activeToken}`}
+                      src={`http://localhost:8000/api/drive/imagen/${img.id}?token=${activeToken}`} 
+                      alt={img.name}
+                      loading="lazy"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s' }}
+                      onError={(e) => {
+                        e.currentTarget.style.opacity = '0';
+                      }}
+                      onLoad={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.06)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                    />
+                  ) : null}
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', zIndex: -1 }}>
                     🖼️
                   </div>
+                  {/* Badge flotante de zoom en la esquina */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewImage(img);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '4px',
+                      bottom: '4px',
+                      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '4px',
+                      padding: '2px 5px',
+                      fontSize: '0.7rem',
+                      color: 'white',
+                      cursor: 'pointer',
+                      backdropFilter: 'blur(4px)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px'
+                    }}
+                    title="Maximizar foto"
+                  >
+                    🔍 Zoom
+                  </button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <span style={{ fontWeight: 500, fontSize: '0.9rem', color: selectedImages.includes(img.id) ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                    <span 
+                      style={{ fontWeight: 500, fontSize: '0.9rem', color: selectedImages.includes(img.id) ? 'var(--accent-primary)' : 'var(--text-primary)', cursor: 'pointer' }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewImage(img);
+                      }}
+                      title="Doble clic para ver en tamaño grande"
+                    >
                       {img.name}
                     </span>
                     {/* Badge de anotaciones */}
@@ -799,38 +892,59 @@ export default function InspectionPanel({ equipoId }) {
                       return null;
                     })()}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginTop: '0.2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '0.2rem' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                       {(img.size / 1024).toFixed(1)} KB
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAnnotatingImage(img);
-                      }}
-                      className="btn"
-                      style={{
-                        padding: '0.25rem 0.6rem',
-                        fontSize: '0.75rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                      onMouseEnter={(btn) => {
-                        btn.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-                        btn.currentTarget.style.borderColor = 'var(--accent-primary)';
-                      }}
-                      onMouseLeave={(btn) => {
-                        btn.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
-                        btn.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                      }}
-                    >
-                      ✏️ Anotar
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewImage(img);
+                        }}
+                        className="btn btn-secondary"
+                        style={{
+                          padding: '0.25rem 0.6rem',
+                          fontSize: '0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                        title="Ver foto en tamaño grande / Pantalla completa"
+                      >
+                        🔍 Ver
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAnnotatingImage(img);
+                        }}
+                        className="btn"
+                        style={{
+                          padding: '0.25rem 0.6rem',
+                          fontSize: '0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                        onMouseEnter={(btn) => {
+                          btn.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                          btn.currentTarget.style.borderColor = 'var(--accent-primary)';
+                        }}
+                        onMouseLeave={(btn) => {
+                          btn.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+                          btn.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                        }}
+                      >
+                        ✏️ Anotar
+                      </button>
+                    </div>
                   </div>
                 </div>
               </li>
@@ -1259,6 +1373,28 @@ export default function InspectionPanel({ equipoId }) {
           equipoId={equipoId}
           onClose={() => setAnnotatingImage(null)}
           onSave={() => setAnnotationsRefreshKey(prev => prev + 1)}
+        />
+      )}
+
+      {previewImage && (
+        <ImageViewerModal
+          image={previewImage}
+          images={items.images || []}
+          token={token}
+          onClose={() => setPreviewImage(null)}
+          isSelected={selectedImages.includes(previewImage.id)}
+          onSelectImage={(id) => toggleImage(id)}
+          onOpenAnnotator={(img) => setAnnotatingImage(img)}
+        />
+      )}
+
+      {equipo && (
+        <EquipoCopilotDrawer
+          isOpen={showCopilot}
+          onClose={() => setShowCopilot(false)}
+          equipo={equipo}
+          onApplyDiagnostico={(texto) => setEditedDiagnostico(texto)}
+          onApplyRecomendaciones={(texto) => setEditedRecomendaciones(texto)}
         />
       )}
     </div>

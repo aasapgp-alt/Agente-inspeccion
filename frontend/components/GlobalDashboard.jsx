@@ -6,16 +6,19 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
   const [metrics, setMetrics] = useState({
     critical_alerts: 0,
     under_observation: 0,
-    plants_up_to_date: 0,
-    inspections_today: 0,
-    pending_inspections: 0
+    pending_inspections: 0,
+    good_condition: 0,
+    campaign_progress_pct: 0,
+    inspected_equipos: 0,
+    total_equipos: 0,
+    inspections_today: 0
   });
   
   const [factories, setFactories] = useState([]);
   const [equipments, setEquipments] = useState([]);
   
   // Selected views
-  const [selectedCondition, setSelectedCondition] = useState(null); // 'CRITICO', 'REGULAR', 'PENDIENTE'
+  const [selectedCondition, setSelectedCondition] = useState(null); // 'CRITICO', 'REGULAR', 'PENDIENTE', 'BUENO'
   const [selectedPlant, setSelectedPlant] = useState(null); // { id: X, name: Y }
 
   useEffect(() => {
@@ -67,25 +70,25 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
       id: 'PENDIENTE', 
       title: 'Pendientes', 
       count: metrics.pending_inspections, 
-      subtitle: 'Activos sin inspección en campaña activa', 
+      subtitle: 'Activos pendientes de inspección / resolución', 
       colorClass: 'glow-purple',
       clickable: true
     },
     { 
-      id: 'AL_DIA', 
-      title: 'Plantas al Día', 
-      count: metrics.plants_up_to_date, 
-      subtitle: 'Áreas con inspección completa en campaña activa', 
-      colorClass: 'glow-green',
+      id: 'AVANCE', 
+      title: 'Avance de Campaña', 
+      count: `${metrics.campaign_progress_pct || 0}%`, 
+      subtitle: `${metrics.inspected_equipos || 0} de ${metrics.total_equipos || 0} activos inspeccionados`, 
+      colorClass: 'glow-blue',
       clickable: false
     },
     { 
-      id: 'HOY', 
-      title: 'Inspecciones de Hoy', 
-      count: metrics.inspections_today, 
-      subtitle: 'Instancias de inspección del día', 
-      colorClass: 'glow-blue',
-      clickable: false
+      id: 'BUENO', 
+      title: 'Aptos para Operar', 
+      count: metrics.good_condition || 0, 
+      subtitle: 'Equipos en condición operativa óptima', 
+      colorClass: 'glow-green',
+      clickable: true
     },
   ];
 
@@ -308,11 +311,13 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
       if (selectedCondition === 'CRITICO') return eq.estado_actual === 'CRITICO';
       if (selectedCondition === 'REGULAR') return eq.estado_actual === 'REGULAR';
       if (selectedCondition === 'PENDIENTE') return eq.estado_actual === 'PENDIENTE';
+      if (selectedCondition === 'BUENO') return eq.estado_actual === 'BUENO' || eq.estado_actual === 'BUENOS';
       return false;
     });
 
     const conditionTitle = selectedCondition === 'CRITICO' ? 'Alertas Críticas' :
-                           selectedCondition === 'REGULAR' ? 'Bajo Observación' : 'Pendientes de Inspección';
+                           selectedCondition === 'REGULAR' ? 'Bajo Observación' : 
+                           selectedCondition === 'BUENO' ? 'Aptos para Operar (Buen Estado)' : 'Pendientes de Inspección';
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>

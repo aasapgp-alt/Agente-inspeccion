@@ -22,7 +22,7 @@ import { DriveMobile } from '../../components/campo/drive/DriveMobile';
 export default function CampoHomePage() {
   const router = useRouter();
   const { isOnline, pendingCount, errorCount, draftCount, completedTodayCount, forceSync, retryErrors } = useOnlineStatus();
-  const { isPreCargando } = usePreCargaInicial();
+  const { isPreCargando, recargarItinerario } = usePreCargaInicial();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showDriveDrawer, setShowDriveDrawer] = useState(false);
@@ -127,6 +127,7 @@ export default function CampoHomePage() {
         <ItinerarioList
           itinerarioHoy={itinerarioHoy}
           isPreCargando={isPreCargando}
+          onRecargarItinerario={recargarItinerario}
         />
       </main>
 

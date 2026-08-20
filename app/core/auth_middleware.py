@@ -35,7 +35,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = None
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
-            elif path.startswith("/api/drive/imagen/"):
+            elif path.startswith("/api/drive/imagen/") or path.startswith("/api/drive/proxy_thumbnail"):
                 token = request.query_params.get("token")
                 
             if not token:

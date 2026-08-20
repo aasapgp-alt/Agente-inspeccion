@@ -380,8 +380,21 @@ def init_db():
             # PDF
             ("reportes_dir", "data/reportes", "string", "Ruta local del directorio de almacenamiento para reportes individuales", "pdf", 1),
             ("libros_dir", "data/libros", "string", "Ruta local del directorio de almacenamiento para libros de reportes completados", "pdf", 1),
-            # Reportes
+            # Reportes y Libros
             ("reporte_campania", "PGP 2026", "string", "Nombre de la campaña de inspección por defecto en los reportes", "reportes", 1),
+            ("empresa_inspectora_nombre", "SULVY SRL", "string", "Razón social de la empresa inspectora (aparece en encabezados y firmas)", "reportes", 1),
+            ("empresa_inspectora_subtitulo", "Sistema de Gestión de Calidad y Ambiental Certificado", "string", "Subtítulo institucional en portadas y encabezados", "reportes", 1),
+            ("reporte_contacto_pie", "Miranda 549 (B1686GNA) Hurlingham, Buenos Aires  •  Tel: +54 11 4665-2875 / 4662-2558  •  info@sulvy.com", "string", "Información de contacto, dirección y teléfono al pie de página", "reportes", 1),
+            ("reporte_criterios_normas", "• ASTM D 2563-94 Standard Practice for Classifying Visual Defects in Glass-Reinforced Plastic Laminate Parts\n• Manuales específicos Ashland y Reichhold, Lineamientos y criterios específicos.\n• NOGA Guía 055-97 Guía recomendada para ensayos no destructivos (NDT) en tanques y sistemas de tuberías PRFV, Norwegian Oil & Gas Association.\n• Proyecto MTI 129-99 Guía práctica para inspección de campo para equipos y tuberías PRFV, Materials Technology Institute St. Louis MO, USA.\n• ESA/FSA pub. nº 009/98 Guía para la utilización segura de elementos de sellado - Juntas y Bridas", "string", "Criterios y normativas técnicas aplicadas en los reportes (un ítem por línea con viñeta)", "reportes", 1),
+            ("reporte_firmante_1_nombre", "Marco G. Paltrinieri", "string", "Nombre del primer firmante técnico (Director / Supervisor)", "reportes", 1),
+            ("reporte_firmante_1_cargo", "Director Técnico", "string", "Cargo del primer firmante", "reportes", 1),
+            ("reporte_firmante_1_matricula", "Matrícula COPIME Nº 12345", "string", "Matrícula profesional del primer firmante", "reportes", 1),
+            ("reporte_firmante_2_nombre", "Ing. Esteban M. Irioni", "string", "Nombre del segundo firmante técnico (Inspector)", "reportes", 1),
+            ("reporte_firmante_2_cargo", "Inspector Autorizado", "string", "Cargo del segundo firmante", "reportes", 1),
+            ("reporte_firmante_2_matricula", "Matrícula COPIME Nº 67890", "string", "Matrícula profesional del segundo firmante", "reportes", 1),
+            ("reporte_max_fotos_individual", "6", "number", "Cantidad máxima de fotografías en el cuerpo del reporte individual", "reportes", 1),
+            ("reporte_max_fotos_libro", "2", "number", "Cantidad máxima de fotografías por equipo en el Libro consolidado", "reportes", 1),
+            ("libro_objetivo_plantilla", "Consolidar los informes de inspección técnica realizados en la ubicación {ubicacion} de la empresa {empresa} durante la campaña {campania}, detallando los hallazgos técnicos, el estado de conservación de los activos, y las recomendaciones de mantenimiento propuestas para el período {next_camp}.", "string", "Texto del objetivo en la portada del Libro consolidado por área", "reportes", 1),
             # Notificaciones
             ("notificaciones_habilitadas", "true", "boolean", "Habilitar el envío de notificaciones del sistema", "notificaciones", 1),
             ("notificaciones_email", "alertas@empresa.com", "string", "Dirección de correo electrónico para alertas del sistema", "notificaciones", 1)
