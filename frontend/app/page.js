@@ -75,6 +75,18 @@ function DashboardContent() {
     }
   }, []);
 
+  // Atajo de teclado F1 para abrir el Centro de Ayuda
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        setShowHelp(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const empresaActivaObj = empresas.find(e => String(e.id) === String(empresaSeleccionada));
   const nombreEmpresaActiva = empresaActivaObj ? empresaActivaObj.nombre : null;
 
@@ -199,7 +211,7 @@ function DashboardContent() {
 
             <span className="header-clock" suppressHydrationWarning>{fecha}</span>
 
-            <button className="btn-help" onClick={() => setShowHelp(true)} title="Manual de Uso / Ayuda" aria-label="Manual de Uso">
+            <button className="btn-help" onClick={() => setShowHelp(true)} title="Manual de Uso / Ayuda (F1)" aria-label="Manual de Uso">
               ❓
             </button>
 
@@ -243,6 +255,7 @@ function DashboardContent() {
                 onSelectEquipo={setEquipoSeleccionado} 
                 onSelectUbicacion={setUbicacionSeleccionada}
                 onChangeTab={setActiveTab} 
+                onOpenHelp={() => setShowHelp(true)}
               />
             )
           )}

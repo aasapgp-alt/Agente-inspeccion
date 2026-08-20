@@ -878,6 +878,60 @@ body:not(:has(.campo-wrapper)) button:active {
   transform: translateY(-1px);
 }
 
+/* Callouts / Alerts inside Help Modal */
+.help-callout {
+  padding: 1rem 1.2rem;
+  border-radius: 8px;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.help-callout--info {
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+.help-callout--tip {
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+.help-callout--important {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.help-callout--warning {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.help-callout-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.help-callout-body {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.help-highlight {
+  background-color: rgba(234, 179, 8, 0.35);
+  color: #fef08a;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.help-code-wrapper {
+  position: relative;
+  margin: 0.8rem 0;
+}
+
+
 /* Estilos PWA y Navegación Móvil Inferior */
 @keyframes pulse {
   0% { transform: scale(1); opacity: 1; }

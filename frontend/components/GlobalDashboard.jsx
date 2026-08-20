@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 
-export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbicacion, onChangeTab }) {
+export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbicacion, onChangeTab, onOpenHelp }) {
   const { token } = useAuth();
   const [metrics, setMetrics] = useState({
     critical_alerts: 0,
@@ -16,6 +16,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
   
   const [factories, setFactories] = useState([]);
   const [equipments, setEquipments] = useState([]);
+  const [showQuickGuide, setShowQuickGuide] = useState(false);
   
   // Selected views
   const [selectedCondition, setSelectedCondition] = useState(null); // 'CRITICO', 'REGULAR', 'PENDIENTE', 'BUENO'
@@ -126,26 +127,38 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
             <div className="eyebrow" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>VISTA DETALLADA DE PLANTA</div>
             <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginTop: '0.2rem' }}>Planta: {selectedPlant.name}</h1>
           </div>
-          <button 
-            onClick={() => {
-              setSelectedPlant(null);
-              if (onSelectUbicacion) onSelectUbicacion(''); // Clear sidebar select
-            }}
-            style={{
-              padding: '0.6rem 1.2rem',
-              background: 'rgba(255, 255, 255, 0.05)',
-              color: 'var(--text-primary)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              transition: 'background 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-          >
-            ← Volver al Dashboard Global
-          </button>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            {onOpenHelp && (
+              <button 
+                onClick={onOpenHelp}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                title="Abrir Manual de Uso"
+              >
+                <span>📖</span> Manual de Uso
+              </button>
+            )}
+            <button 
+              onClick={() => {
+                setSelectedPlant(null);
+                if (onSelectUbicacion) onSelectUbicacion('');
+              }}
+              style={{
+                padding: '0.6rem 1.2rem',
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-primary)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+            >
+              ← Volver al Dashboard Global
+            </button>
+          </div>
         </div>
 
         {/* Local Plant Metrics Row */}
@@ -426,9 +439,132 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '2rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>
       
-      <h1 style={{ fontSize: '1.8rem', fontWeight: 700 }}>Panel de Control Global</h1>
+      {/* Header with Title and Help Quick Action */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 700, margin: 0 }}>Panel de Control Global</h1>
+          <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            Monitoreo en tiempo real del estado de salud de activos y avance de Parada General de Planta
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+          <button 
+            onClick={() => setShowQuickGuide(!showQuickGuide)}
+            style={{
+              padding: '0.5rem 0.9rem',
+              backgroundColor: showQuickGuide ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+              color: showQuickGuide ? 'var(--accent-primary)' : 'var(--text-primary)',
+              border: showQuickGuide ? '1px solid var(--accent-primary)' : '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span>💡</span> {showQuickGuide ? 'Ocultar Guía' : 'Guía del Dashboard'}
+          </button>
+
+          {onOpenHelp && (
+            <button 
+              onClick={onOpenHelp}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              title="Abrir Manual Completo de Uso"
+            >
+              <span>📖</span> Manual de Uso
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Interactive Quick Guide Banner (Collapsible) */}
+      {showQuickGuide && (
+        <div className="glass-panel" style={{ 
+          padding: '1.5rem', 
+          backgroundColor: 'rgba(15, 23, 42, 0.75)', 
+          border: '1px solid rgba(14, 165, 233, 0.3)',
+          borderRadius: '10px',
+          animation: 'fadeIn 0.2s ease-in-out'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>🧭</span> Guía Rápida de Interpretación y Flujo de Trabajo
+            </h3>
+            <button 
+              onClick={() => setShowQuickGuide(false)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1rem' }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', fontSize: '0.82rem', lineHeight: '1.5' }}>
+            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>🔴</span> Alertas Críticas (Urgente)
+              </div>
+              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                Equipos con fallas estructurales, fugas activas o corrosión severa que impiden la operación segura. Requieren intervención inmediata.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontWeight: 600, color: '#f59e0b', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>🟡</span> Bajo Observación (Regular)
+              </div>
+              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                Equipos con desgaste moderado o recomendaciones preventivas programadas para el próximo ciclo de parada de planta.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontWeight: 600, color: '#10b981', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>🟢</span> Aptos para Operar (Bueno)
+              </div>
+              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                Activos en condición técnica óptima sin anomalías funcionales ni desvíos respecto a las tolerancias de diseño.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontWeight: 600, color: '#38bdf8', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>⚡</span> Atajos y Acciones Rápidas
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.3rem' }}>
+                {onChangeTab && (
+                  <>
+                    <span 
+                      onClick={() => onChangeTab('FACTORY')} 
+                      style={{ color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      👉 Ir a Inspección con IA (Gemini)
+                    </span>
+                    <span 
+                      onClick={() => onChangeTab('MINUTA')} 
+                      style={{ color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      👉 Ver Minutas y Resumen PGP
+                    </span>
+                    <span 
+                      onClick={() => onChangeTab('REPORTS')} 
+                      style={{ color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      👉 Generar Libros y Reportes PDF
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div className="dashboard-metrics-grid">
@@ -452,7 +588,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
         ))}
       </div>
 
-      <h2 style={{ fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginTop: '1rem' }}>Vista por Área / Planta</h2>
+      <h2 style={{ fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Vista por Área / Planta</h2>
 
       {/* Factories Grid Row */}
       <div className="dashboard-factories-grid">
