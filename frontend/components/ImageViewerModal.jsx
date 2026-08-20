@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ZoomIn, ZoomOut, RotateCw, Maximize2, Minimize2, X, ChevronLeft, ChevronRight, CheckCircle2, Circle, Edit3 } from 'lucide-react';
+import { API_BASE_URL } from '../services/api';
 
 export default function ImageViewerModal({
   image,
@@ -36,7 +37,7 @@ export default function ImageViewerModal({
 
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
   const imageUrl = currentImgId 
-    ? (currentImg?.data || `http://localhost:8000/api/drive/imagen/${currentImgId}?token=${activeToken}`) 
+    ? (currentImg?.data || `${API_BASE_URL}/drive/imagen/${currentImgId}?token=${activeToken}`) 
     : '';
 
   const handleReset = () => {
@@ -407,7 +408,7 @@ export default function ImageViewerModal({
           {images.map((img, idx) => {
             const imgId = img?.id || img;
             const isCurrent = idx === currentIndex;
-            const thumbUrl = img?.data || `http://localhost:8000/api/drive/imagen/${imgId}?token=${activeToken}`;
+            const thumbUrl = img?.data || `${API_BASE_URL}/drive/imagen/${imgId}?token=${activeToken}`;
             return (
               <div
                 key={imgId || idx}

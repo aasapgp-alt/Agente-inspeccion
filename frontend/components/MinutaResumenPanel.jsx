@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 import { useAuth } from './AuthProvider';
 
 export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEquipoAndTab }) {
@@ -21,7 +21,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
       const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
       if (!activeToken) return;
       try {
-        const res = await fetch('http://localhost:8000/api/empresas', {
+        const res = await fetch(`${API_BASE_URL}/empresas`, {
           headers: { 'Authorization': `Bearer ${activeToken}` }
         });
         if (res.ok) {
@@ -47,7 +47,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
     async function loadCampanias() {
       try {
         const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
-        const url = empresaId ? `http://localhost:8000/api/campanias?empresa_id=${empresaId}` : 'http://localhost:8000/api/campanias';
+        const url = empresaId ? `${API_BASE_URL}/campanias?empresa_id=${empresaId}` : `${API_BASE_URL}/campanias`;
         const res = await fetch(url, {
           headers: activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}
         });

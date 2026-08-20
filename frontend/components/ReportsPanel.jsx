@@ -3,8 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import VersionHistoryModal from './VersionHistoryModal';
 import LibroValidationModal from './LibroValidationModal';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '../services/api';
 
 export default function ReportsPanel() {
   const { user, token } = useAuth();

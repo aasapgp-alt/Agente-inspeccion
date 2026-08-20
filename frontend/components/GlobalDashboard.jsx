@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbicacion, onChangeTab, onOpenHelp }) {
   const { token } = useAuth();
@@ -26,7 +27,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
     const urlParams = empresaId ? `?empresa_id=${empresaId}` : '';
     
     // Fetch stats
-    fetch(`http://localhost:8000/api/dashboard/stats${urlParams}`, {
+    fetch(`${API_BASE_URL}/dashboard/stats${urlParams}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -34,7 +35,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
       .catch(err => console.error(err));
 
     // Fetch factory distribution list
-    fetch(`http://localhost:8000/api/dashboard/factories${urlParams}`, {
+    fetch(`${API_BASE_URL}/dashboard/factories${urlParams}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -42,7 +43,7 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
       .catch(err => console.error(err));
 
     // Fetch all equipments with states for details filtering
-    fetch(`http://localhost:8000/api/dashboard/history${urlParams}`, {
+    fetch(`${API_BASE_URL}/dashboard/history${urlParams}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())

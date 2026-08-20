@@ -12,14 +12,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 def get_db() -> Generator[sqlite3.Connection, None, None]:
     """
     Generador de dependencia que provee la conexión a la base de datos SQLite.
-    Asegura que la conexión se cierre correctamente después de usarse.
+    Asegura alta concurrencia y previene bloqueos mediante modo WAL y busy_timeout.
     """
     conn = None
     try:
-        conn = sqlite3.connect(settings.DB_PATH, check_same_thread=False)
+        conn = sqlite3.connect(settings.DB_PATH, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        # Integridad referencial activa por conexión.
+        # Configuración de concurrencia e integridad
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA synchronous = NORMAL")
         yield conn
     except sqlite3.Error as e:
         raise HTTPException(

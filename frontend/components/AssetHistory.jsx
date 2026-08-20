@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 const renderVal = (val) => {
   if (!val) return '';
@@ -41,7 +42,7 @@ export default function AssetHistory({ empresaId }) {
     }
     setRevertingAsset(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/equipos/${selectedAsset.id}/revertir-inspeccion`, {
+      const res = await fetch(`${API_BASE_URL}/equipos/${selectedAsset.id}/revertir-inspeccion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,7 +73,7 @@ export default function AssetHistory({ empresaId }) {
 
   const handleDeleteAsset = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/equipos/${selectedAsset.id}`, {
+      const res = await fetch(`${API_BASE_URL}/equipos/${selectedAsset.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -105,7 +106,7 @@ export default function AssetHistory({ empresaId }) {
 
   const handleSaveAssetDetails = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/equipos/${selectedAsset.id}`, {
+      const res = await fetch(`${API_BASE_URL}/equipos/${selectedAsset.id}`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -145,7 +146,7 @@ export default function AssetHistory({ empresaId }) {
     setLoading(true);
     const urlParams = empresaId ? `?empresa_id=${empresaId}` : '';
     
-    fetch(`http://localhost:8000/api/dashboard/history${urlParams}`, {
+    fetch(`${API_BASE_URL}/dashboard/history${urlParams}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())

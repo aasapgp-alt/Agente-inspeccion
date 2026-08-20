@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 
 export default function SettingsPanel() {
   const { token, user } = useAuth();
@@ -117,7 +117,7 @@ export default function SettingsPanel() {
   // APIs para la gestión de Campañas
   const fetchEmpresas = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/empresas', {
+      const response = await fetch(`${API_BASE_URL}/empresas`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -136,7 +136,7 @@ export default function SettingsPanel() {
     if (!empId) return;
     setCampaniasLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/campanias?empresa_id=${empId}`, {
+      const response = await fetch(`${API_BASE_URL}/campanias?empresa_id=${empId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -168,7 +168,7 @@ export default function SettingsPanel() {
     
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/campanias/tareas/${currentTaskId}`, {
+        const res = await fetch(`${API_BASE_URL}/campanias/tareas/${currentTaskId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -248,7 +248,7 @@ export default function SettingsPanel() {
     setItinerariosLoading(true);
     setError(null);
     try {
-      const resIt = await fetch('http://localhost:8000/api/itinerarios', {
+      const resIt = await fetch(`${API_BASE_URL}/itinerarios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resIt.ok) {
@@ -256,7 +256,7 @@ export default function SettingsPanel() {
         setItinerarios(data.itinerarios || []);
       }
 
-      const resUs = await fetch('http://localhost:8000/api/itinerarios/usuarios', {
+      const resUs = await fetch(`${API_BASE_URL}/itinerarios/usuarios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resUs.ok) {
@@ -267,7 +267,7 @@ export default function SettingsPanel() {
         }
       }
 
-      const resEq = await fetch('http://localhost:8000/api/itinerarios/equipos', {
+      const resEq = await fetch(`${API_BASE_URL}/itinerarios/equipos`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resEq.ok) {
@@ -297,7 +297,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch('http://localhost:8000/api/itinerarios', {
+      const res = await fetch(`${API_BASE_URL}/itinerarios`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -326,7 +326,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/itinerarios?username=${username}&fecha=${fecha}`, {
+      const res = await fetch(`${API_BASE_URL}/itinerarios?username=${username}&fecha=${fecha}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -347,7 +347,7 @@ export default function SettingsPanel() {
     setUsuariosLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:8000/api/auth/usuarios', {
+      const res = await fetch(`${API_BASE_URL}/auth/usuarios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -367,7 +367,7 @@ export default function SettingsPanel() {
   const fetchRevertEquipos = async () => {
     setRevertEquiposLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/dashboard/history', {
+      const res = await fetch(`${API_BASE_URL}/dashboard/history`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -402,7 +402,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/equipos/${revertSelectedEquipoId}/revertir-inspeccion`, {
+      const res = await fetch(`${API_BASE_URL}/equipos/${revertSelectedEquipoId}/revertir-inspeccion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -444,7 +444,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch('http://localhost:8000/api/auth/register', {
+      const res = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -480,7 +480,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/auth/usuarios/${userId}/toggle`, {
+      const res = await fetch(`${API_BASE_URL}/auth/usuarios/${userId}/toggle`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -501,7 +501,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/auth/usuarios/${userId}/role?rol=${nuevoRol}`, {
+      const res = await fetch(`${API_BASE_URL}/auth/usuarios/${userId}/role?rol=${nuevoRol}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -524,7 +524,7 @@ export default function SettingsPanel() {
     
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/drive/sincronizar/estado/${syncTaskId}`, {
+        const res = await fetch(`${API_BASE_URL}/drive/sincronizar/estado/${syncTaskId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -549,7 +549,7 @@ export default function SettingsPanel() {
     setSyncProgress(null);
     
     try {
-      const response = await fetch('http://localhost:8000/api/drive/sincronizar', {
+      const response = await fetch(`${API_BASE_URL}/drive/sincronizar`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -579,7 +579,7 @@ export default function SettingsPanel() {
     const subList = subcarpetasDrive.split(',').map(s => s.trim()).filter(s => s.length > 0);
     
     try {
-      const response = await fetch('http://localhost:8000/api/campanias', {
+      const response = await fetch(`${API_BASE_URL}/campanias`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -619,7 +619,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const response = await fetch(`http://localhost:8000/api/campanias/${campId}`, {
+      const response = await fetch(`${API_BASE_URL}/campanias/${campId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -646,7 +646,7 @@ export default function SettingsPanel() {
     setError(null);
     setSuccess(null);
     try {
-      const response = await fetch(`http://localhost:8000/api/campanias/${campId}`, {
+      const response = await fetch(`${API_BASE_URL}/campanias/${campId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

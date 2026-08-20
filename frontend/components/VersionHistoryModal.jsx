@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 export default function VersionHistoryModal({ reporteId, tipo = 'individual', inspeccionId, onClose }) {
   const { token } = useAuth();
@@ -12,11 +13,11 @@ export default function VersionHistoryModal({ reporteId, tipo = 'individual', in
         let url;
         if (inspeccionId) {
           // Retrocompatibilidad
-          url = `http://localhost:8000/api/reportes/versiones/${inspeccionId}`;
+          url = `${API_BASE_URL}/reportes/versiones/${inspeccionId}`;
         } else if (tipo === 'libro') {
-          url = `http://localhost:8000/api/libros/${reporteId}/versiones`;
+          url = `${API_BASE_URL}/libros/${reporteId}/versiones`;
         } else {
-          url = `http://localhost:8000/api/reportes/${reporteId}/versiones`;
+          url = `${API_BASE_URL}/reportes/${reporteId}/versiones`;
         }
 
         const response = await fetch(url, {

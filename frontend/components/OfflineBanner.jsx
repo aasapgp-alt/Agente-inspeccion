@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { obtenerInspeccionesOffline, eliminarInspeccionOffline } from '../utils/offlineStore';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 export default function OfflineBanner({ onSyncComplete }) {
   const { token } = useAuth();
@@ -49,7 +50,7 @@ export default function OfflineBanner({ onSyncComplete }) {
 
     for (const item of list) {
       try {
-        const res = await fetch('http://localhost:8000/api/ia/guardar', {
+        const res = await fetch(`${API_BASE_URL}/ia/guardar`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

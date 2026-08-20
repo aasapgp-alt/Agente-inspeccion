@@ -15,6 +15,7 @@ import MinutaResumenPanel from '../components/MinutaResumenPanel';
 import OfflineBanner from '../components/OfflineBanner';
 import ItineraryProgressBar from '../components/ItineraryProgressBar';
 import MobileNav from '../components/MobileNav';
+import { API_BASE_URL } from '../services/api';
 
 export default function Home() {
   return (
@@ -40,7 +41,7 @@ function DashboardContent() {
       const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
       if (!activeToken) return;
       try {
-        const res = await fetch('http://localhost:8000/api/empresas', {
+        const res = await fetch(`${API_BASE_URL}/empresas`, {
           headers: { 'Authorization': `Bearer ${activeToken}` }
         });
         if (res.ok) {

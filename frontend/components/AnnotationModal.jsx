@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ImageAnnotator from './ImageAnnotator';
+import { API_BASE_URL } from '../services/api';
 
 export default function AnnotationModal({ image, token, equipoId, onClose, onSave }) {
   const [annotations, setAnnotations] = useState([]);
@@ -26,7 +27,7 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
 
       // 2. Cargar desde el backend
       try {
-        const res = await fetch(`http://localhost:8000/api/anotaciones/${equipoId}`, {
+        const res = await fetch(`${API_BASE_URL}/anotaciones/${equipoId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -80,7 +81,7 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
 
     // 2. Guardar en backend
     try {
-      await fetch('http://localhost:8000/api/anotaciones', {
+      await fetch(`${API_BASE_URL}/anotaciones`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +106,7 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
   };
 
   // URL de la imagen en el backend con token de autorización
-  const imageUrl = image ? `http://localhost:8000/api/drive/imagen/${image.id}?token=${token}` : '';
+  const imageUrl = image ? `${API_BASE_URL}/drive/imagen/${image.id}?token=${token}` : '';
 
   return (
     <div style={{

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 export default function ItineraryProgressBar({ compact = false }) {
   const { token } = useAuth();
@@ -10,7 +11,7 @@ export default function ItineraryProgressBar({ compact = false }) {
     if (!activeToken) return;
 
     try {
-      const res = await fetch('http://localhost:8000/api/itinerarios/progreso', {
+      const res = await fetch(`${API_BASE_URL}/itinerarios/progreso`, {
         headers: { 'Authorization': `Bearer ${activeToken}` }
       });
       if (res.ok) {

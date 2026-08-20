@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import VoiceDictationButton from './VoiceDictationButton';
 import ImageViewerModal from './ImageViewerModal';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '../services/api';
 
 const renderVal = (val) => {
   if (!val) return '';
@@ -719,7 +718,7 @@ export default function ManualPanel({ equipoId }) {
                         {activeToken ? (
                           <img 
                             key={`${img.id}-${activeToken}`}
-                            src={`http://localhost:8000/api/drive/imagen/${img.id}?token=${activeToken}`} 
+                            src={`${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`} 
                             alt={img.name} 
                             loading="lazy"
                             style={{ 
@@ -788,7 +787,7 @@ export default function ManualPanel({ equipoId }) {
                           {activeToken ? (
                             <img 
                               key={`${imgId}-${activeToken}`}
-                              src={`http://localhost:8000/api/drive/imagen/${imgId}?token=${activeToken}`} 
+                              src={`${API_BASE_URL}/drive/imagen/${imgId}?token=${activeToken}`} 
                               alt={img.name} 
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={(e) => { e.currentTarget.style.opacity = '0'; }}

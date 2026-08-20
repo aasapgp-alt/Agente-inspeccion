@@ -11,10 +11,13 @@ LEGACY_DB_PATH = os.getenv("LEGACY_DB_PATH", "legacy_database.db")
 def get_db_connection() -> sqlite3.Connection:
     # Ensure directory exists
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    # Integridad referencial: las FK deben activarse en cada conexión, no solo en init_db.
+    # Integridad referencial y alta concurrencia
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 def get_legacy_connection() -> sqlite3.Connection:

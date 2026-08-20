@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useAuth } from './AuthProvider';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 import VersionHistoryModal from './VersionHistoryModal';
 import AnnotationModal from './AnnotationModal';
 import ImageViewerModal from './ImageViewerModal';
@@ -9,7 +9,6 @@ import VoiceDictationButton from './VoiceDictationButton';
 import EquipoCopilotDrawer from './EquipoCopilotDrawer';
 import { guardarInspeccionOffline } from '../utils/offlineStore';
 
-const API_BASE_URL = 'http://localhost:8000/api';
 const DRIVE_FALLBACK_FOLDER_ID = '19OdKrn1SLDLSuMj8e73q-8tovcw-CJA_';
 
 const renderVal = (val) => {
@@ -807,7 +806,7 @@ export default function InspectionPanel({ equipoId }) {
                   {activeToken ? (
                     <img 
                       key={`${img.id}-${activeToken}`}
-                      src={`http://localhost:8000/api/drive/imagen/${img.id}?token=${activeToken}`} 
+                      src={`${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`} 
                       alt={img.name}
                       loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s' }}

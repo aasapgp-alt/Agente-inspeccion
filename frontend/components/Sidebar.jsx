@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 import { useAuth } from './AuthProvider';
 import LibroValidationModal from './LibroValidationModal';
 import DriveFolderSelector from './DriveFolderSelector';
@@ -88,7 +88,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     if (!ubicacionSeleccionada) return;
     if (confirm("¿Está seguro de que desea detener la generación del libro por área?")) {
       try {
-        await fetch(`http://localhost:8000/api/libro/cancelar/${ubicacionSeleccionada}`, {
+        await fetch(`${API_BASE_URL}/libro/cancelar/${ubicacionSeleccionada}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -106,7 +106,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
       try {
         setLibroProgress("Validando criterios...");
         setGenerandoLibro(true);
-        const valRes = await fetch(`http://localhost:8000/api/libro/validar/${ubicacionSeleccionada}`, {
+        const valRes = await fetch(`${API_BASE_URL}/libro/validar/${ubicacionSeleccionada}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setGenerandoLibro(false);
@@ -137,7 +137,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     // Start progress polling
     let intervalId = setInterval(async () => {
       try {
-        const pRes = await fetch(`http://localhost:8000/api/libro/progreso/${ubicacionSeleccionada}`, {
+        const pRes = await fetch(`${API_BASE_URL}/libro/progreso/${ubicacionSeleccionada}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (pRes.ok) {
@@ -152,7 +152,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     }, 1000);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/libro/generar/${ubicacionSeleccionada}?solo_aprobados=${overrideSoloAprobados}`, {
+      const res = await fetch(`${API_BASE_URL}/libro/generar/${ubicacionSeleccionada}?solo_aprobados=${overrideSoloAprobados}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -187,7 +187,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   // 1. Cargar Empresas al inicio
   const fetchEmpresas = useCallback(() => {
     if (!token) return;
-    fetch('http://localhost:8000/api/empresas', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(`${API_BASE_URL}/empresas`, { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => {
         if (!res.ok) throw new Error("Error fetching empresas");
         return res.json();
@@ -217,7 +217,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   // 2. Cargar Ubicaciones cuando cambia la empresa
   const fetchUbicaciones = useCallback(() => {
     if (empresaSeleccionada && token) {
-      fetch(`http://localhost:8000/api/ubicaciones?empresa_id=${empresaSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
+      fetch(`${API_BASE_URL}/ubicaciones?empresa_id=${empresaSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
         .then(res => {
           if (!res.ok) throw new Error("Error fetching ubicaciones");
           return res.json();
@@ -249,7 +249,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   // 3. Cargar Equipos cuando cambia la ubicación
   const fetchEquipos = useCallback(() => {
     if (ubicacionSeleccionada && token) {
-      fetch(`http://localhost:8000/api/equipos?ubicacion_id=${ubicacionSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
+      fetch(`${API_BASE_URL}/equipos?ubicacion_id=${ubicacionSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
         .then(res => res.json())
         .then(data => {
           if (data && data.equipos) {
@@ -277,7 +277,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
   const handleAddEmpresa = async () => {
     const nombre = prompt("Nombre de la nueva empresa:");
     if (!nombre) return;
-    const res = await fetch('http://localhost:8000/api/empresas', {
+    const res = await fetch(`${API_BASE_URL}/empresas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ nombre })
@@ -307,7 +307,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         const parentId = ubiParentFolderId || 'root';
         const folderName = nuevaUbiNombre.trim();
         
-        const folderRes = await fetch('http://localhost:8000/api/drive/crear_carpeta', {
+        const folderRes = await fetch(`${API_BASE_URL}/drive/crear_carpeta`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -332,7 +332,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         }
       }
       
-      const res = await fetch('http://localhost:8000/api/ubicaciones', {
+      const res = await fetch(`${API_BASE_URL}/ubicaciones`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
@@ -369,7 +369,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     
     if (confirm(`¿Está seguro de que desea eliminar el área / ubicación técnica "${ubiObj.nombre}"?`)) {
       try {
-        const res = await fetch(`http://localhost:8000/api/ubicaciones/${ubicacionSeleccionada}`, {
+        const res = await fetch(`${API_BASE_URL}/ubicaciones/${ubicacionSeleccionada}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -405,7 +405,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
     
     setCreandoEquipo(true);
     try {
-      const res = await fetch('http://localhost:8000/api/equipos/', {
+      const res = await fetch(`${API_BASE_URL}/equipos/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -721,7 +721,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
               <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <span style={{ color: '#22c55e', fontSize: '0.8rem', fontWeight: 'bold' }}>¡Libro generado con éxito!</span>
                 <a 
-                  href={`http://localhost:8000/api/libro/descargar/${libroResult.libro_id}`}
+                  href={`${API_BASE_URL}/libro/descargar/${libroResult.libro_id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="btn btn-secondary"

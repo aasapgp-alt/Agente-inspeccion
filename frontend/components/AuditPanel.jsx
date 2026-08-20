@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 export default function AuditPanel() {
   const { token, user } = useAuth();
@@ -29,7 +30,7 @@ export default function AuditPanel() {
   const fetchFiltersData = async () => {
     try {
       // Fetch users
-      const usersRes = await fetch('http://localhost:8000/api/auth/usuarios', {
+      const usersRes = await fetch(`${API_BASE_URL}/auth/usuarios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (usersRes.ok) {
@@ -38,7 +39,7 @@ export default function AuditPanel() {
       }
       
       // Fetch actions list
-      const actionsRes = await fetch('http://localhost:8000/api/audit/acciones', {
+      const actionsRes = await fetch(`${API_BASE_URL}/audit/acciones`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (actionsRes.ok) {
@@ -55,7 +56,7 @@ export default function AuditPanel() {
     setError(null);
     try {
       const offset = (page - 1) * limit;
-      let url = `http://localhost:8000/api/audit/logs?limit=${limit}&offset=${offset}`;
+      let url = `${API_BASE_URL}/audit/logs?limit=${limit}&offset=${offset}`;
       
       if (selectedUsuario) {
         url += `&usuario_id=${selectedUsuario}`;

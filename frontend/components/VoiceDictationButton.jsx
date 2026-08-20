@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
+import { API_BASE_URL } from '../services/api';
 
 export default function VoiceDictationButton({ onTranscript, initialValue = '', placeholder = 'Dictar nota' }) {
   const { token } = useAuth();
@@ -88,7 +89,7 @@ export default function VoiceDictationButton({ onTranscript, initialValue = '', 
           formData.append('audio', audioBlob, 'grabacion.webm');
 
           const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
-          const res = await fetch('http://localhost:8000/api/ia/transcribir-audio', {
+          const res = await fetch(`${API_BASE_URL}/ia/transcribir-audio`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${activeToken}`
