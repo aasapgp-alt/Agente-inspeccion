@@ -26,7 +26,7 @@ def get_legacy_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
-def obtener_lista_equipos_db(empresa: str = None, area: str = None, anio: int = None, estado: str = None) -> list:
+def obtener_lista_equipos_db(empresa: str = None, area: str = None, anio: int = None, estado: str = None, q: str = None) -> list:
     try:
         with get_db_connection() as conn:
             query = """
@@ -46,6 +46,10 @@ def obtener_lista_equipos_db(empresa: str = None, area: str = None, anio: int = 
             if estado:
                 query += " AND e.estado_actual = ?"
                 params.append(estado)
+            if q and q.strip():
+                term_pattern = f"%{q.strip()}%"
+                query += " AND (e.codigo LIKE ? OR e.nombre LIKE ? OR e.tag LIKE ? OR u.nombre LIKE ?)"
+                params.extend([term_pattern, term_pattern, term_pattern, term_pattern])
             # Nota: 'anio' era de inspecciones, en este caso filtramos estado_actual directo o habria que joinear inspecciones
             # si realmente se requiere filtrar equipos por anio de inspeccion. 
                 

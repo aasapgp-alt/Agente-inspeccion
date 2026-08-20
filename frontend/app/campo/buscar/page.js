@@ -49,7 +49,31 @@ function BuscarEquiposContent() {
         if (typeof window !== 'undefined' && navigator.onLine) {
           const apiRes = await apiService.getEquipos(term);
           if (active && Array.isArray(apiRes)) {
-            setResultados(apiRes);
+            const apiFiltrados = apiRes.filter(
+              (eq) =>
+                (eq.codigo && String(eq.codigo).toLowerCase().includes(term)) ||
+                (eq.nombre && String(eq.nombre).toLowerCase().includes(term)) ||
+                (eq.tag && String(eq.tag).toLowerCase().includes(term)) ||
+                (eq.empresa && String(eq.empresa).toLowerCase().includes(term)) ||
+                (eq.area && String(eq.area).toLowerCase().includes(term))
+            );
+            setResultados(apiFiltrados.length > 0 ? apiFiltrados : apiRes);
+            
+            // Si la cache local estaba vacia, poblarla en segundo plano
+            if (enCache.length === 0 && apiRes.length > 0) {
+              db.equipos_cache.bulkPut(
+                apiRes.map((eq) => ({
+                  id: eq.id,
+                  codigo: eq.codigo || eq.tag || `EQ-${eq.id}`,
+                  nombre: eq.nombre || eq.descripcion || 'Sin Nombre',
+                  empresa: eq.empresa || '',
+                  area: eq.area || '',
+                  tag: eq.tag || '',
+                  ubicacion_id: eq.ubicacion_id || null,
+                  estado_anterior: eq.estado_actual || 'BUENO'
+                }))
+              ).catch(() => {});
+            }
           }
         } else if (active) {
           setResultados(filtradosLocal);

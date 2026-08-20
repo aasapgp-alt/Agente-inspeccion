@@ -32,17 +32,16 @@ def list_equipos(
     anio: Optional[str] = None,
     estado: Optional[str] = None,
     ubicacion_id: Optional[int] = None,
+    q: Optional[str] = None,
     db: sqlite3.Connection = Depends(get_db)
-    # Sin current_user explícito acá para dejarlo abierto, o agregar si es estricto
 ):
     if ubicacion_id:
-        # Consulta directa para filtro por id de ubicación (nuevo formato)
         cursor = db.execute("SELECT * FROM equipos WHERE activo = 1 AND ubicacion_id = ?", (ubicacion_id,))
         equipos = [dict(row) for row in cursor.fetchall()]
         return {"equipos": equipos}
     
-    # Consulta usando db_service para retrocompatibilidad
-    equipos = db_service.obtener_lista_equipos_db(empresa=empresa, area=area, anio=anio, estado=estado)
+    # Consulta usando db_service para retrocompatibilidad y búsqueda global
+    equipos = db_service.obtener_lista_equipos_db(empresa=empresa, area=area, anio=anio, estado=estado, q=q)
     return {"equipos": equipos}
 
 @router.post("/", response_model=Dict[str, Any])
