@@ -47,6 +47,8 @@ def autenticar_drive() -> Optional[GoogleAuth]:
     service_paths = [
         "service_account.json",
         "c:\\Agente-Inspector\\service_account.json",
+        "agente-inspector-propietario-71d32fd94d89.json",
+        "c:\\Agente-Inspector\\agente-inspector-propietario-71d32fd94d89.json",
         "praxis-effort-464216-u5-b302073b59eb.json",
         "c:\\Agente-Inspector\\praxis-effort-464216-u5-b302073b59eb.json"
     ]

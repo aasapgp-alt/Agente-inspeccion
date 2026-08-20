@@ -13,6 +13,7 @@ google-auth-oauthlib>=1.0.0
 Pillow>=10.0.0
 reportlab>=4.0.0
 PyDrive2>=1.15.0
+python-dotenv>=1.0.0
 
 # Pruebas (desarrollo)
 pytest>=8.0.0
