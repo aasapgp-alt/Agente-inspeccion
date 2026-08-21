@@ -122,16 +122,35 @@ def procesar_inspecciones_batch(
                     VALUES (?, ?, '[]', ?, CURRENT_TIMESTAMP)
                 """, (equipo_id, image_id, comentario_foto))
 
-                # Subida opcional a Google Drive si se especificó la carpeta destino
+                # Subida automática a Google Drive
                 drive_folder_id = item.get("drive_folder_id")
+                if not drive_folder_id:
+                    cursor.execute("""
+                        SELECT u.drive_folder_id 
+                        FROM equipos e 
+                        LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id 
+                        WHERE e.id = ?
+                    """, (equipo_id,))
+                    row_u = cursor.fetchone()
+                    if row_u:
+                        drive_folder_id = row_u["drive_folder_id"] if isinstance(row_u, (sqlite3.Row, dict)) else row_u[0]
+
+                if not drive_folder_id:
+                    from app.core.config import settings
+                    drive_folder_id = getattr(settings, "DRIVE_FOLDER_ID", None) or os.getenv("DRIVE_FOLDER_ID")
+
                 if drive_folder_id:
                     try:
                         from app.services.drive_service import subir_archivo
                         res_drive = subir_archivo(filepath, filename, drive_folder_id)
                         if res_drive and "id" in res_drive:
                             logger.info(f"Foto {filename} subida a Drive carpeta {drive_folder_id} (ID: {res_drive['id']})")
+                        else:
+                            logger.warning(f"No se pudo obtener confirmación de subida para {filename} en carpeta {drive_folder_id}")
                     except Exception as drive_err:
-                        logger.error(f"Error subiendo foto a Drive ({drive_folder_id}): {drive_err}")
+                        logger.error(f"Error subiendo foto a Drive ({drive_folder_id}): {drive_err}", exc_info=True)
+                else:
+                    logger.warning(f"No se encontró carpeta de Google Drive para subir la foto {filename} del equipo {equipo_id}")
 
             # 4. Procesar y transcribir audios
             audios = item.get("audios") or []
