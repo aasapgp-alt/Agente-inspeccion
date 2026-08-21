@@ -152,8 +152,8 @@ export default function Login() {
             <label htmlFor="username" style={{
               display: 'block',
               fontSize: '0.85rem',
-              fontWeight: 500,
-              color: 'var(--text-secondary)',
+              fontWeight: 600,
+              color: '#cbd5e1',
               marginBottom: '0.5rem',
               marginLeft: '0.2rem'
             }}>
@@ -168,15 +168,20 @@ export default function Login() {
               disabled={loading}
               autoComplete="username"
               style={{
-                background: 'rgba(15, 23, 42, 0.6)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: '#0f172a',
+                border: '1.5px solid rgba(148, 163, 184, 0.35)',
                 padding: '12px 16px',
                 borderRadius: '10px',
-                fontSize: '0.95rem',
-                color: 'var(--text-primary)',
+                fontSize: '1rem',
+                color: '#ffffff',
+                fontWeight: 500,
                 width: '100%',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                outline: 'none',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)'
               }}
+              onFocus={(e) => e.target.style.borderColor = '#38bdf8'}
+              onBlur={(e) => e.target.style.borderColor = 'rgba(148, 163, 184, 0.35)'}
             />
           </div>
 
@@ -184,8 +189,8 @@ export default function Login() {
             <label htmlFor="password" style={{
               display: 'block',
               fontSize: '0.85rem',
-              fontWeight: 500,
-              color: 'var(--text-secondary)',
+              fontWeight: 600,
+              color: '#cbd5e1',
               marginBottom: '0.5rem',
               marginLeft: '0.2rem'
             }}>
@@ -201,15 +206,20 @@ export default function Login() {
                 disabled={loading}
                 autoComplete="current-password"
                 style={{
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: '#0f172a',
+                  border: '1.5px solid rgba(148, 163, 184, 0.35)',
                   padding: '12px 48px 12px 16px',
                   borderRadius: '10px',
-                  fontSize: '0.95rem',
-                  color: 'var(--text-primary)',
+                  fontSize: '1rem',
+                  color: '#ffffff',
+                  fontWeight: 500,
                   width: '100%',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  outline: 'none',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)'
                 }}
+                onFocus={(e) => e.target.style.borderColor = '#38bdf8'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(148, 163, 184, 0.35)'}
               />
               <button
                 type="button"
@@ -222,9 +232,9 @@ export default function Login() {
                   background: 'none',
                   border: 'none',
                   padding: '0',
-                  color: 'var(--text-secondary)',
+                  color: '#94a3b8',
                   cursor: 'pointer',
-                  fontSize: '1rem',
+                  fontSize: '1.1rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
