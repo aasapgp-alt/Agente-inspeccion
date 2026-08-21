@@ -73,23 +73,40 @@ export default function InspectionPanel({ equipoId }) {
 
   const cameraInputRef = useRef(null);
 
-  const handleCameraCapture = (e) => {
+  const handleCameraCapture = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const base64Data = evt.target.result;
-      // Generar ID único temporal para la foto capturada con cámara
-      const tempId = `cam_${Date.now()}`;
-      setItems(prev => ({
-        ...prev,
-        images: [{ id: tempId, name: `Cam_${new Date().toLocaleTimeString()}.jpg`, size: file.size, data: base64Data }, ...prev.images]
-      }));
-      setSelectedImages(prev => [...prev, tempId]);
-      alert('📸 Foto tomada con cámara y añadida a la selección.');
-    };
-    reader.readAsDataURL(file);
+    const formData = new FormData();
+    formData.append('file', file);
+    if (currentFolderId && currentFolderId !== 'root') {
+      formData.append('carpeta_id', currentFolderId);
+    }
+    if (equipoId) {
+      formData.append('equipo_id', equipoId);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/drive/subir`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        setItems(prev => ({
+          ...prev,
+          images: [{ id: data.id, name: data.title || file.name, size: file.size }, ...prev.images]
+        }));
+        setSelectedImages(prev => [...prev, data.id]);
+        alert('📸 Foto subida exitosamente a Google Drive y seleccionada para análisis.');
+      } else {
+        alert('⚠️ Error al subir la foto a Google Drive: ' + (data.detail || 'Error desconocido'));
+      }
+    } catch (err) {
+      console.error('Error subiendo foto:', err);
+      alert('Error de red al subir la foto a Google Drive.');
+    }
   };
 
   useEffect(() => {

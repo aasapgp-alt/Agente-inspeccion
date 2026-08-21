@@ -261,3 +261,68 @@ def create_folder(folder: FolderCreate, current_user: dict = Depends(get_current
         return {"id": folder_id, "title": folder.nombre, "message": "Carpeta creada exitosamente"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi import UploadFile, File, Form
+import tempfile
+import shutil
+
+@router.post("/subir", response_model=Dict[str, Any])
+async def upload_file_to_drive(
+    file: UploadFile = File(...),
+    carpeta_id: Optional[str] = Form(None),
+    equipo_id: Optional[int] = Form(None),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Sube un archivo o foto directamente a Google Drive dentro de la carpeta seleccionada
+    o en la carpeta de la ubicación técnica / equipo correspondiente.
+    """
+    try:
+        from app.services.drive_service import subir_archivo
+        
+        target_folder_id = carpeta_id
+        if not target_folder_id and equipo_id:
+            cursor = db.cursor()
+            cursor.execute("""
+                SELECT u.drive_folder_id 
+                FROM equipos e 
+                LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id 
+                WHERE e.id = ?
+            """, (equipo_id,))
+            row_u = cursor.fetchone()
+            if row_u:
+                target_folder_id = row_u["drive_folder_id"] if isinstance(row_u, (sqlite3.Row, dict)) else row_u[0]
+                
+        if not target_folder_id or target_folder_id == "root":
+            from app.services.db_service import get_config_value_db
+            target_folder_id = get_config_value_db("drive_folder_id") or os.getenv("DRIVE_FOLDER_ID") or "1Ovv-3p3Q406jDUKANcU1f6EFrULH_pXD"
+            
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
+            
+        try:
+            res = subir_archivo(tmp_path, file.filename, target_folder_id)
+            if not res or "id" not in res:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Google Drive no devolvió ID de archivo. Verifique que la carpeta tenga permisos de Editor para la cuenta de servicio."
+                )
+            return {
+                "id": res["id"],
+                "title": res.get("title", file.filename),
+                "carpeta_id": target_folder_id,
+                "status": "success"
+            }
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error en /api/drive/subir: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al subir a Google Drive: {str(e)}")
