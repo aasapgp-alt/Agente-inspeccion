@@ -51,32 +51,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Manejo de excepciones globales
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Error global detectado: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Ha ocurrido un error interno en el servidor."}
-    )
-
+from app.core.config import settings
+from app.core.db import init_pg_pool, close_pg_pool
 from scripts.init_db import init_db
 
 @app.on_event("startup")
 async def startup_event():
     try:
-        init_db()
-        logger.info("Base de datos inicializada correctamente mediante scripts.init_db.")
-        try:
-            from scripts.migrate_auditoria import migrate
-            migrate()
-            logger.info("Migración de auditoría y carga de usuarios realizada.")
-        except Exception as mig_err:
-            logger.error(f"Error al correr la migración de auditoría: {mig_err}")
-            
-
+        if settings.IS_POSTGRES:
+            logger.info("Modo Neon PostgreSQL detectado. Inicializando pool de conexiones...")
+            init_pg_pool()
+            logger.info("Conexión con Neon PostgreSQL establecida exitosamente.")
+        else:
+            init_db()
+            logger.info("Base de datos SQLite inicializada correctamente mediante scripts.init_db.")
+            try:
+                from scripts.migrate_auditoria import migrate
+                migrate()
+                logger.info("Migración de auditoría y carga de usuarios realizada.")
+            except Exception as mig_err:
+                logger.error(f"Error al correr la migración de auditoría: {mig_err}")
     except Exception as e:
         logger.error(f"Error al inicializar la base de datos: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    if settings.IS_POSTGRES:
+        close_pg_pool()
 
 # Incluir routers
 app.include_router(auth.router)

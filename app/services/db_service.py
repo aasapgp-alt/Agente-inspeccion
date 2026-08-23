@@ -3,22 +3,13 @@ import os
 import logging
 from typing import List, Dict, Optional, Any
 
+from app.core.config import settings
+from app.core.db import get_db_connection
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.getenv("DB_PATH", os.path.join("data", "inspecciones.db"))
-LEGACY_DB_PATH = os.getenv("LEGACY_DB_PATH", "legacy_database.db")
-
-def get_db_connection() -> sqlite3.Connection:
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    # Integridad referencial y alta concurrencia
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    return conn
+DB_PATH = settings.DB_PATH
+LEGACY_DB_PATH = settings.DB_LEGACY_PATH
 
 def get_legacy_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(LEGACY_DB_PATH, check_same_thread=False)
@@ -114,12 +105,20 @@ def guardar_inspeccion_db(datos: dict) -> int:
         with get_db_connection() as conn:
             columns = ", ".join(datos.keys())
             placeholders = ", ".join(["?"] * len(datos))
-            cursor = conn.execute(
-                f"INSERT INTO inspecciones ({columns}) VALUES ({placeholders})",
-                list(datos.values())
-            )
-            conn.commit()
-            return cursor.lastrowid
+            if settings.IS_POSTGRES:
+                cursor = conn.execute(
+                    f"INSERT INTO inspecciones ({columns}) VALUES ({placeholders}) RETURNING id",
+                    list(datos.values())
+                )
+                row = cursor.fetchone()
+                return row[0] if row else 0
+            else:
+                cursor = conn.execute(
+                    f"INSERT INTO inspecciones ({columns}) VALUES ({placeholders})",
+                    list(datos.values())
+                )
+                conn.commit()
+                return cursor.lastrowid
     except Exception as e:
         logger.error(f"Error al guardar inspeccion: {e}")
         return 0

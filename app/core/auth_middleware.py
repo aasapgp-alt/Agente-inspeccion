@@ -1,6 +1,8 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from app.core.security import verify_access_token
 from app.services.db_service import get_db_connection
 import logging
@@ -27,7 +29,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Verificar si la ruta está excluida
         if any(path.startswith(excluded_path) for excluded_path in EXCLUDED_PATHS):
-            return await call_next(request)
+            try:
+                return await call_next(request)
+            except (StarletteHTTPException, FastAPIHTTPException) as http_exc:
+                return JSONResponse(
+                    status_code=http_exc.status_code,
+                    content={"detail": http_exc.detail},
+                    headers=getattr(http_exc, "headers", None)
+                )
             
         # Si es ruta de API y no está en excepciones, verificar token
         if path.startswith("/api/"):
@@ -74,4 +83,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 
         # Continuar con el request
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        except (StarletteHTTPException, FastAPIHTTPException) as http_exc:
+            return JSONResponse(
+                status_code=http_exc.status_code,
+                content={"detail": http_exc.detail},
+                headers=getattr(http_exc, "headers", None)
+            )

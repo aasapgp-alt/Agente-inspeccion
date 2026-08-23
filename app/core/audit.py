@@ -4,12 +4,11 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from app.core.config import settings
+from app.core.db import get_db_connection
 
 def _get_audit_db_connection():
-    """Establece una conexión aislada a la base de datos para registrar auditorías."""
-    conn = sqlite3.connect(settings.DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Establece una conexión a la base de datos para registrar auditorías."""
+    return get_db_connection()
 
 def registrar_auditoria(
     usuario_id: int, 

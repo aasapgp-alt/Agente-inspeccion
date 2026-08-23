@@ -15,5 +15,7 @@ services:
         sync: false
       - key: DRIVE_FOLDER_ID
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: ADMIN_INITIAL_PASSWORD
         sync: false

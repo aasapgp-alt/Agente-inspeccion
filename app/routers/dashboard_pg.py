@@ -174,14 +174,18 @@ def get_asset_history(empresa_id: Optional[int] = None, db: sqlite3.Connection =
             e.codigo as tag_codigo, 
             e.nombre as descripcion, 
             u.nombre as area_nombre, 
+            emp.nombre as empresa_nombre,
             e.estado_actual,
             e.material,
             e.fluido,
             e.presion_diseno,
             e.temperatura_diseno,
-            (SELECT diagnostico FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1) as diagnostico
+            (SELECT diagnostico FROM inspecciones WHERE equipo_id = e.id AND diagnostico IS NOT NULL AND diagnostico != '' ORDER BY anio DESC LIMIT 1) as diagnostico,
+            (SELECT recomendaciones FROM inspecciones WHERE equipo_id = e.id AND recomendaciones IS NOT NULL AND recomendaciones != '' ORDER BY anio DESC LIMIT 1) as recomendaciones,
+            (SELECT acciones FROM inspecciones WHERE equipo_id = e.id AND acciones IS NOT NULL AND acciones != '' ORDER BY anio DESC LIMIT 1) as acciones
         FROM equipos e
         LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
+        LEFT JOIN empresas emp ON u.empresa_id = emp.id
     """
     params = []
     
@@ -199,11 +203,14 @@ def get_asset_history(empresa_id: Optional[int] = None, db: sqlite3.Connection =
             "tag_codigo": row["tag_codigo"] or "",
             "descripcion": row["descripcion"] or "",
             "area_nombre": row["area_nombre"] or "",
+            "empresa_nombre": row["empresa_nombre"] or "Arauco",
             "estado_actual": row["estado_actual"] or "BUENO",
             "material": row["material"] or "",
             "fluido": row["fluido"] or "",
             "presion_diseno": row["presion_diseno"] or 0,
             "temperatura_diseno": row["temperatura_diseno"] or 0,
-            "diagnostico": row["diagnostico"] or ""
+            "diagnostico": row["diagnostico"] or "",
+            "recomendaciones": row["recomendaciones"] or "",
+            "acciones": row["acciones"] or ""
         })
     return results

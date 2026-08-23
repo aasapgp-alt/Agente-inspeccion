@@ -43,6 +43,24 @@ class Settings:
     DRIVE_FOLDER_ID: str = os.getenv("DRIVE_FOLDER_ID", "")
 
     # Configuración BD
+    DATABASE_URL_RAW: str = os.getenv("DATABASE_URL", "").strip()
+
+    @property
+    def DATABASE_URL(self) -> str:
+        url = self.DATABASE_URL_RAW
+        if not url:
+            return ""
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        if "sslmode=" not in url and ("neon.tech" in url or "amazonaws.com" in url or "render.com" in url):
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+        return url
+
+    @property
+    def IS_POSTGRES(self) -> bool:
+        return bool(self.DATABASE_URL_RAW)
+
     DB_PATH: str = os.getenv("DB_PATH", os.path.join("data", "inspecciones.db"))
     DB_LEGACY_PATH: str = os.getenv("DB_LEGACY_PATH", "legacy.sqlite")
 

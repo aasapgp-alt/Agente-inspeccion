@@ -23,6 +23,9 @@ export default function AssetHistory({ empresaId }) {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [materialFilter, setMaterialFilter] = useState('ALL');
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [assetInspections, setAssetInspections] = useState([]);
+  const [loadingInspections, setLoadingInspections] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(2024);
 
   // Edit States
   const [isEditing, setIsEditing] = useState(false);
@@ -35,6 +38,39 @@ export default function AssetHistory({ empresaId }) {
   const [showRevertModal, setShowRevertModal] = useState(false);
   const [revertReason, setRevertReason] = useState('');
   const [revertingAsset, setRevertingAsset] = useState(false);
+
+  useEffect(() => {
+    if (selectedAsset) {
+      setEditMaterial(selectedAsset.material || '');
+      setEditFluido(selectedAsset.fluido || '');
+      setEditPresion(selectedAsset.presion_diseno || 0);
+      setEditTemperatura(selectedAsset.temperatura_diseno || 0);
+      setEditEstado(selectedAsset.estado_actual || 'BUENO');
+      setIsEditing(false);
+
+      // Fetch historial de inspecciones para este equipo
+      setLoadingInspections(true);
+      fetch(`${API_BASE_URL}/inspecciones/${selectedAsset.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setAssetInspections(data);
+            // Default to the first year available (e.g. 2026 or 2024)
+            setSelectedYear(data[0].anio);
+          } else {
+            setAssetInspections([]);
+          }
+          setLoadingInspections(false);
+        })
+        .catch(err => {
+          console.error("Error fetching inspections:", err);
+          setAssetInspections([]);
+          setLoadingInspections(false);
+        });
+    }
+  }, [selectedAsset]);
 
   const handleRevertAsset = async () => {
     if (!revertReason.trim()) {
@@ -93,17 +129,6 @@ export default function AssetHistory({ empresaId }) {
     }
   };
 
-  useEffect(() => {
-    if (selectedAsset) {
-      setEditMaterial(selectedAsset.material || '');
-      setEditFluido(selectedAsset.fluido || '');
-      setEditPresion(selectedAsset.presion_diseno || 0);
-      setEditTemperatura(selectedAsset.temperatura_diseno || 0);
-      setEditEstado(selectedAsset.estado_actual || 'BUENO');
-      setIsEditing(false);
-    }
-  }, [selectedAsset]);
-
   const handleSaveAssetDetails = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/equipos/${selectedAsset.id}`, {
@@ -141,6 +166,8 @@ export default function AssetHistory({ empresaId }) {
       alert("Error al guardar.");
     }
   };
+
+  const currentInsp = assetInspections.find(i => i.anio === selectedYear) || assetInspections[0] || {};
 
   useEffect(() => {
     setLoading(true);
@@ -564,35 +591,147 @@ export default function AssetHistory({ empresaId }) {
             )}
 
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-              <div>
-                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Diagnóstico Reciente (Gemini):</span>
-                <p style={{ 
-                  margin: '0.3rem 0 0 0', 
-                  fontSize: '0.85rem', 
-                  backgroundColor: 'rgba(0,0,0,0.2)', 
-                  padding: '0.6rem', 
-                  borderRadius: '6px',
-                  color: 'var(--text-primary)',
-                  border: '1px solid rgba(255,255,255,0.05)'
-                }}>
-                  {renderVal(selectedAsset.diagnostico) || 'No hay diagnósticos registrados para este activo.'}
-                </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--accent-primary)', fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  📜 Historial por Campaña
+                </span>
+                {loadingInspections && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Cargando...</span>}
               </div>
 
-              <div>
-                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Recomendación Preventiva:</span>
-                <p style={{ 
-                  margin: '0.3rem 0 0 0', 
-                  fontSize: '0.85rem', 
-                  backgroundColor: 'rgba(0,0,0,0.2)', 
-                  padding: '0.6rem', 
-                  borderRadius: '6px',
-                  color: 'var(--text-primary)',
-                  border: '1px solid rgba(255,255,255,0.05)'
-                }}>
-                  {renderVal(selectedAsset.recomendaciones) || 'Ninguna recomendación disponible.'}
-                </p>
-              </div>
+              {/* Selector de Años / Campañas */}
+              {assetInspections.length > 0 ? (
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {assetInspections.map(insp => (
+                    <button
+                      key={insp.anio}
+                      onClick={() => setSelectedYear(insp.anio)}
+                      style={{
+                        padding: '0.3rem 0.6rem',
+                        fontSize: '0.78rem',
+                        borderRadius: '4px',
+                        border: selectedYear === insp.anio ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)',
+                        backgroundColor: selectedYear === insp.anio ? 'rgba(14, 165, 233, 0.25)' : 'rgba(0,0,0,0.3)',
+                        color: selectedYear === insp.anio ? '#38bdf8' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontWeight: selectedYear === insp.anio ? 700 : 500
+                      }}
+                    >
+                      PGP {insp.anio}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Detalle de la Inspección Seleccionada */}
+              {currentInsp && currentInsp.anio ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Estado Campaña {currentInsp.anio}:</span>
+                    {getStatusBadge(currentInsp.estado)}
+                  </div>
+
+                  {currentInsp.acciones && (
+                    <div>
+                      <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', fontWeight: 600 }}>Acciones Realizadas:</span>
+                      <p style={{ 
+                        margin: '0.2rem 0 0 0', 
+                        fontSize: '0.82rem', 
+                        backgroundColor: 'rgba(0,0,0,0.25)', 
+                        padding: '0.5rem', 
+                        borderRadius: '6px',
+                        color: 'var(--text-primary)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        {renderVal(currentInsp.acciones)}
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', fontWeight: 600 }}>Diagnóstico Técnico:</span>
+                    <p style={{ 
+                      margin: '0.2rem 0 0 0', 
+                      fontSize: '0.82rem', 
+                      backgroundColor: 'rgba(0,0,0,0.25)', 
+                      padding: '0.5rem', 
+                      borderRadius: '6px',
+                      color: 'var(--text-primary)',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {renderVal(currentInsp.diagnostico) || 'Sin diagnóstico registrado para este año.'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', fontWeight: 600 }}>Recomendaciones:</span>
+                    <p style={{ 
+                      margin: '0.2rem 0 0 0', 
+                      fontSize: '0.82rem', 
+                      backgroundColor: 'rgba(0,0,0,0.25)', 
+                      padding: '0.5rem', 
+                      borderRadius: '6px',
+                      color: 'var(--text-primary)',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {renderVal(currentInsp.recomendaciones) || 'Sin recomendaciones registradas para este año.'}
+                    </p>
+                  </div>
+
+                  {currentInsp.ruta_pdf_drive && (
+                    <a
+                      href={currentInsp.ruta_pdf_drive}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                      style={{ 
+                        display: 'block', 
+                        textAlign: 'center', 
+                        padding: '0.4rem', 
+                        fontSize: '0.8rem', 
+                        marginTop: '0.3rem',
+                        textDecoration: 'none',
+                        color: '#38bdf8'
+                      }}
+                    >
+                      📄 Ver Informe PDF en Drive
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', fontWeight: 600 }}>Diagnóstico Reciente:</span>
+                    <p style={{ 
+                      margin: '0.2rem 0 0 0', 
+                      fontSize: '0.82rem', 
+                      backgroundColor: 'rgba(0,0,0,0.25)', 
+                      padding: '0.5rem', 
+                      borderRadius: '6px',
+                      color: 'var(--text-primary)',
+                      border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                      {renderVal(selectedAsset.diagnostico) || 'No hay diagnósticos registrados para este activo.'}
+                    </p>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', fontWeight: 600 }}>Recomendación Preventiva:</span>
+                    <p style={{ 
+                      margin: '0.2rem 0 0 0', 
+                      fontSize: '0.82rem', 
+                      backgroundColor: 'rgba(0,0,0,0.25)', 
+                      padding: '0.5rem', 
+                      borderRadius: '6px',
+                      color: 'var(--text-primary)',
+                      border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                      {renderVal(selectedAsset.recomendaciones) || 'Ninguna recomendación disponible.'}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
