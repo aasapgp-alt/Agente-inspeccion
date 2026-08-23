@@ -112,40 +112,61 @@ def get_dashboard_stats(empresa_id: Optional[int] = None, db: sqlite3.Connection
 def list_factories(empresa_id: Optional[int] = None, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     cursor = db.cursor()
     
-    ubi_query = "SELECT id, nombre FROM ubicaciones"
+    ubi_query = "SELECT id, nombre FROM ubicaciones WHERE activo = 1"
     ubi_params = []
     if empresa_id:
-        ubi_query += " WHERE empresa_id = ?"
+        ubi_query += " AND empresa_id = ?"
         ubi_params.append(empresa_id)
+    ubi_query += " ORDER BY id"
         
     cursor.execute(ubi_query, ubi_params)
     ubicaciones = [dict(row) for row in cursor.fetchall()]
-    
+    if not ubicaciones:
+        return []
+
+    # Obtener el estado de inspección más reciente de todos los equipos activos en una sola consulta
+    if empresa_id:
+        eq_query = """
+            SELECT e.ubicacion_id,
+                   COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1), 'BUENO') as estado
+            FROM equipos e
+            JOIN ubicaciones u ON e.ubicacion_id = u.id
+            WHERE e.activo = 1 AND u.empresa_id = ?
+        """
+        cursor.execute(eq_query, (empresa_id,))
+    else:
+        eq_query = """
+            SELECT e.ubicacion_id,
+                   COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1), 'BUENO') as estado
+            FROM equipos e
+            WHERE e.activo = 1
+        """
+        cursor.execute(eq_query)
+
+    from collections import defaultdict
+    loc_states = defaultdict(list)
+    for row in cursor.fetchall():
+        loc_states[row['ubicacion_id']].append(row['estado'])
+
     factories = []
     for ubi in ubicaciones:
-        cursor.execute("SELECT id FROM equipos WHERE ubicacion_id = ? AND activo = 1", (ubi['id'],))
-        eqs = [row[0] for row in cursor.fetchall()]
-        if not eqs:
+        states = loc_states.get(ubi['id'], [])
+        total_cnt = len(states)
+        if total_cnt == 0:
             continue
             
         good_cnt = 0
         alert_cnt = 0
         broken_cnt = 0
-        total_cnt = len(eqs)
         
-        for eq_id in eqs:
-            cursor.execute("SELECT estado FROM inspecciones WHERE equipo_id = ? ORDER BY id DESC LIMIT 1", (eq_id,))
-            row = cursor.fetchone()
-            if not row:
-                good_cnt += 1
+        for est_raw in states:
+            est = str(est_raw or '').upper()
+            if 'CRIT' in est:
+                broken_cnt += 1
+            elif 'REGULAR' in est:
+                alert_cnt += 1
             else:
-                est = str(row[0]).upper()
-                if 'CRIT' in est:
-                    broken_cnt += 1
-                elif 'REGULAR' in est:
-                    alert_cnt += 1
-                else:
-                    good_cnt += 1
+                good_cnt += 1
                     
         factories.append({
             "id": ubi['id'],
@@ -160,7 +181,7 @@ def list_factories(empresa_id: Optional[int] = None, db: sqlite3.Connection = De
 @router.get("/areas", response_model=List[Dict[str, Any]])
 def list_areas(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     cursor = db.cursor()
-    cursor.execute("SELECT DISTINCT area FROM equipos")
+    cursor.execute("SELECT DISTINCT nombre FROM ubicaciones WHERE activo = 1 ORDER BY nombre")
     areas = [{"nombre": row[0]} for row in cursor.fetchall() if row[0]]
     return areas
 

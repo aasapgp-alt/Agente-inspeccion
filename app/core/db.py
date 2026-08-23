@@ -59,6 +59,8 @@ def adapt_sql_for_pg(sql: str) -> str:
     Traduce sintaxis común de SQLite a PostgreSQL para máxima compatibilidad:
     - Reemplaza placeholders '?' por '%s'
     - Traduce funciones de fecha como date('now') o date(col) = date('now')
+    - Traduce comparaciones booleanas (e.g. activo = 1 -> activo = TRUE)
+    - Traduce SQLite GLOB a Postgres regex
     """
     if not sql:
         return sql
@@ -71,6 +73,13 @@ def adapt_sql_for_pg(sql: str) -> str:
     adapted = adapted.replace("date('now')", "CURRENT_DATE")
     adapted = adapted.replace("datetime('now')", "CURRENT_TIMESTAMP")
     adapted = re.sub(r"date\(([^)]+)\)\s*=\s*CURRENT_DATE", r"\1::date = CURRENT_DATE", adapted)
+
+    # Adaptaciones booleanas SQLite (= 1 / = 0) -> PostgreSQL (= TRUE / = FALSE)
+    adapted = re.sub(r'(\b\w+\.)?(activo|activa|editable|reporte_generado)\s*=\s*1\b', r'\1\2 = TRUE', adapted, flags=re.IGNORECASE)
+    adapted = re.sub(r'(\b\w+\.)?(activo|activa|editable|reporte_generado)\s*=\s*0\b', r'\1\2 = FALSE', adapted, flags=re.IGNORECASE)
+
+    # Adaptar GLOB '[0-9]*' -> ~ '^[0-9]'
+    adapted = re.sub(r"GLOB\s*'\[0-9\]\*'", r"~ '^[0-9]'", adapted, flags=re.IGNORECASE)
 
     return adapted
 
