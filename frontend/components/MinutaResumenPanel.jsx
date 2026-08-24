@@ -5,12 +5,12 @@ import { useAuth } from './AuthProvider';
 
 const cleanStr = (val) => (val !== undefined && val !== null ? String(val).trim() : '');
 
-export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEquipoAndTab }) {
+export default function MinutaResumenPanel({ empresaIdInicial = null, onSelectEquipoAndTab }) {
   const { token } = useAuth();
   const [data, setData] = useState([]);
   const [empresas, setEmpresas] = useState([]);
   const [campanias, setCampanias] = useState([]);
-  const [empresaId, setEmpresaId] = useState(empresaIdInicial);
+  const [empresaId, setEmpresaId] = useState(empresaIdInicial || '');
   const [campania, setCampania] = useState('');
   const [search, setSearch] = useState('');
   const [criticidadFiltro, setCriticidadFiltro] = useState('');
@@ -30,6 +30,14 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
         if (res.ok) {
           const list = await res.json();
           setEmpresas(list);
+          if (Array.isArray(list) && list.length > 0) {
+            setEmpresaId(prev => {
+              if (!prev || !list.some(e => String(e.id) === String(prev))) {
+                return list[0].id;
+              }
+              return prev;
+            });
+          }
         }
       } catch (err) {
         console.error('Error cargando empresas:', err);
@@ -40,7 +48,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
 
   // Sincronizar empresaId desde el prop inicial (Sidebar)
   useEffect(() => {
-    if (empresaIdInicial !== undefined && empresaIdInicial !== null) {
+    if (empresaIdInicial !== undefined && empresaIdInicial !== null && empresaIdInicial !== '') {
       setEmpresaId(empresaIdInicial);
     }
   }, [empresaIdInicial]);
@@ -72,7 +80,8 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
 
     setLoading(true);
     try {
-      const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, campania, activeToken, areaFiltro);
+      const activeEmpresa = empresaId || (empresas.length > 0 ? empresas[0].id : null);
+      const result = await apiService.getMinutaResumen(activeEmpresa, search, criticidadFiltro, campania, activeToken, areaFiltro);
       setData(result || []);
     } catch (err) {
       console.error('Error cargando Minuta Resumen:', err);
