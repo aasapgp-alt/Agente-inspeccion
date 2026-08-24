@@ -185,8 +185,8 @@ def get_minuta_resumen(
     """
     params = join_param.copy()
     if empresa_id:
-        query += " AND (u.empresa_id = ? OR emp.id = ? OR emp.nombre LIKE '%Arauco%' OR emp.nombre LIKE '%arauco%')"
-        params.extend([empresa_id, empresa_id])
+        query += " AND (u.empresa_id = ? OR emp.id = ? OR emp.nombre = ?)"
+        params.extend([empresa_id, empresa_id, 'Arauco'])
 
     if ubicacion_id:
         query += " AND u.id = ?"
