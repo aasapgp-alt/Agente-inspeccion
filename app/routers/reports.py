@@ -149,12 +149,11 @@ def get_minuta_resumen(
         if match:
             anio_target = int(match.group(1))
 
+    anio_clause = ""
+    join_param = []
     if anio_target:
-        join_clause = "LEFT JOIN inspecciones i ON i.equipo_id = e.id AND i.anio = ?"
+        anio_clause = "AND i.anio = ?"
         join_param = [anio_target]
-    else:
-        join_clause = "LEFT JOIN inspecciones i ON i.id = (SELECT id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)"
-        join_param = []
 
     query = f"""
         SELECT 
@@ -168,49 +167,45 @@ def get_minuta_resumen(
             u.id as ubicacion_id,
             emp.nombre as empresa_nombre,
             emp.id as empresa_id,
-            i.id as inspeccion_id,
-            i.anio,
-            i.estado,
-            i.acciones,
-            i.diagnostico,
-            i.recomendaciones,
-            i.numero_acta as informe,
-            i.ruta_pdf_local,
-            i.ruta_pdf_drive,
-            i.drive_file_id
+            COALESCE(i.id, (SELECT id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)) as inspeccion_id,
+            COALESCE(i.anio, (SELECT anio FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)) as anio,
+            COALESCE(i.estado, (SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), 'PENDIENTE') as estado,
+            COALESCE(i.acciones, (SELECT acciones FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as acciones,
+            COALESCE(i.diagnostico, (SELECT diagnostico FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as diagnostico,
+            COALESCE(i.recomendaciones, (SELECT recomendaciones FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as recomendaciones,
+            COALESCE(i.numero_acta, (SELECT numero_acta FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as informe,
+            COALESCE(i.ruta_pdf_local, (SELECT ruta_pdf_local FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as ruta_pdf_local,
+            COALESCE(i.ruta_pdf_drive, (SELECT ruta_pdf_drive FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as ruta_pdf_drive,
+            COALESCE(i.drive_file_id, (SELECT drive_file_id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as drive_file_id
         FROM equipos e
         LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
         LEFT JOIN empresas emp ON u.empresa_id = emp.id
-        {join_clause}
+        LEFT JOIN inspecciones i ON (i.equipo_id = e.id {anio_clause})
         WHERE 1=1
     """
     params = join_param.copy()
     if empresa_id:
-        query += """ AND (
-            u.empresa_id = ? 
-            OR emp.id = ?
-            OR (? = 170 AND (emp.nombre LIKE '%Arauco%' OR emp.nombre LIKE '%arauco%'))
-        )"""
-        params.extend([empresa_id, empresa_id, empresa_id])
+        query += " AND (u.empresa_id = ? OR emp.id = ? OR emp.nombre LIKE '%Arauco%' OR emp.nombre LIKE '%arauco%')"
+        params.extend([empresa_id, empresa_id])
 
     if ubicacion_id:
         query += " AND u.id = ?"
         params.append(ubicacion_id)
         
-    if area:
+    if area and str(area).strip() and str(area).strip().lower() not in ["todas las áreas", "todas", "all", ""]:
         clean_area = str(area).strip()
         query += " AND (u.nombre = ? OR u.nombre LIKE ?)"
         params.extend([clean_area, f"%{clean_area}%"])
         
-    if criticidad:
+    if criticidad and str(criticidad).strip() and str(criticidad).strip().lower() not in ["todas las criticidades", "todas", "all", ""]:
         clean_crit_filter = str(criticidad).strip()
         query += " AND (e.criticidad = ? OR e.criticidad LIKE ?)"
         params.extend([clean_crit_filter, f"%{clean_crit_filter}%"])
         
-    if search:
-        query += " AND (e.codigo LIKE ? OR e.nombre LIKE ? OR u.nombre LIKE ? OR i.numero_acta LIKE ?)"
-        like_str = f"%{search}%"
-        params.extend([like_str, like_str, like_str, like_str])
+    if search and str(search).strip():
+        query += " AND (e.codigo LIKE ? OR e.nombre LIKE ? OR u.nombre LIKE ?)"
+        like_str = f"%{str(search).strip()}%"
+        params.extend([like_str, like_str, like_str])
         
     query += " ORDER BY e.id ASC"
     
