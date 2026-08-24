@@ -3,6 +3,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiService, API_BASE_URL } from '../services/api';
 import { useAuth } from './AuthProvider';
 
+const cleanStr = (val) => (val !== undefined && val !== null ? String(val).trim() : '');
+
 export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEquipoAndTab }) {
   const { token } = useAuth();
   const [data, setData] = useState([]);
@@ -12,6 +14,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
   const [campania, setCampania] = useState('');
   const [search, setSearch] = useState('');
   const [criticidadFiltro, setCriticidadFiltro] = useState('');
+  const [areaFiltro, setAreaFiltro] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingPdfId, setLoadingPdfId] = useState(null);
 
@@ -69,7 +72,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
 
     setLoading(true);
     try {
-      const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, campania, activeToken);
+      const result = await apiService.getMinutaResumen(empresaId, search, criticidadFiltro, campania, activeToken, areaFiltro);
       setData(result || []);
     } catch (err) {
       console.error('Error cargando Minuta Resumen:', err);
@@ -80,7 +83,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
 
   useEffect(() => {
     fetchData();
-  }, [empresaId, search, criticidadFiltro, campania, token]);
+  }, [empresaId, search, criticidadFiltro, campania, areaFiltro, token]);
 
   // Escuchar eventos globales de inspección actualizada para refrescar automáticamente
   useEffect(() => {
@@ -89,21 +92,41 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
     };
     window.addEventListener('inspeccion_actualizada', handleRefresh);
     return () => window.removeEventListener('inspeccion_actualizada', handleRefresh);
-  }, [empresaId, search, criticidadFiltro, campania, token]);
+  }, [empresaId, search, criticidadFiltro, campania, areaFiltro, token]);
 
   // Empresa activa resuelta
   const empresaActivaObj = empresas.find(e => String(e.id) === String(empresaId));
   const nombreEmpresaActiva = empresaActivaObj ? empresaActivaObj.nombre : (empresaId ? `Empresa ${empresaId}` : 'Todas las Empresas');
 
+  // Derivar lista de Áreas únicas disponibles
+  const uniqueAreas = useMemo(() => {
+    const set = new Set();
+    data.forEach(d => {
+      const area = d.sector_completo || d.sector;
+      if (area && area.trim()) set.add(area.trim());
+    });
+    return Array.from(set).sort();
+  }, [data]);
+
+  // Filtrado de data en cliente si aplica
+  const displayData = useMemo(() => {
+    if (!areaFiltro) return data;
+    return data.filter(d => {
+      const area = d.sector_completo || d.sector || '';
+      return area.toLowerCase().includes(areaFiltro.toLowerCase());
+    });
+  }, [data, areaFiltro]);
+
   // Cálculos de métricas KPI y Avance
   const stats = useMemo(() => {
-    const total = data.length;
-    const inspeccionados = data.filter(d => d.tiene_inspeccion).length;
+    const total = displayData.length;
+    const inspeccionados = displayData.filter(d => d.tiene_inspeccion).length;
     const pendientes = total - inspeccionados;
-    const condicionales = data.filter(d => (d.observaciones || '').toLowerCase().includes('condicional') || d.estado === 'REGULAR').length;
-    const nivel1 = data.filter(d => str(d.criticidad) === '1').length;
-    const proximaPrioritaria = data.filter(d => 
-      str(d.criticidad) === '1' || 
+    const condicionales = displayData.filter(d => (d.observaciones || '').toLowerCase().includes('condicional') || d.estado === 'REGULAR').length;
+    const nivel1 = displayData.filter(d => cleanStr(d.criticidad) === '1' || cleanStr(d.criticidad).startsWith('1')).length;
+    const proximaPrioritaria = displayData.filter(d => 
+      cleanStr(d.criticidad) === '1' || 
+      cleanStr(d.criticidad).startsWith('1') ||
       (d.proxima_inspeccion || '').includes('1 año') || 
       (d.proxima_inspeccion || '').includes('Prioritaria') || 
       d.estado === 'CRITICO'
@@ -111,7 +134,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
     const porcentajeAvance = total > 0 ? Math.round((inspeccionados / total) * 100) : 0;
     
     return { total, inspeccionados, pendientes, condicionales, nivel1, proximaPrioritaria, porcentajeAvance };
-  }, [data]);
+  }, [displayData]);
 
   // Abrir reporte técnico PDF
   const handleOpenPDF = async (equipoId, informeRef) => {
@@ -132,9 +155,9 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
 
   // Exportar a CSV
   const exportToCSV = () => {
-    if (!data.length) return;
+    if (!displayData.length) return;
     const headers = ['Nº', 'TAG', 'Sector', 'Descripción Ubicación Técnica', 'Estado Inspección', 'Informe Ref.', 'Recom', 'Acc. Correctivas', 'Acc. Preventivas', 'Comentarios', 'Observaciones', 'Criticidad', 'Próx. Inspección'];
-    const rows = data.map(d => [
+    const rows = displayData.map(d => [
       d.numero,
       `"${d.tag}"`,
       `"${d.sector}"`,
@@ -154,15 +177,11 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Minuta_Resumen_PGP_${empresaId || 'Todas'}_${campania || 'Actual'}.csv`);
+    link.setAttribute('download', `Minuta_Resumen_PGP_${empresaId || 'Todas'}_${areaFiltro ? areaFiltro.replace(/\s+/g, '_') : 'General'}_${campania || 'Actual'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
-
-  function str(val) {
-    return val !== undefined && val !== null ? String(val).trim() : '';
-  }
 
   return (
     <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%', overflowY: 'auto' }}>
@@ -352,6 +371,29 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
           </select>
         </div>
 
+        {/* Selector de Área */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '1 1 170px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Área</label>
+          <select
+            value={areaFiltro}
+            onChange={(e) => setAreaFiltro(e.target.value)}
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '0.88rem',
+              outline: 'none'
+            }}
+          >
+            <option value="">Todas las Áreas</option>
+            {uniqueAreas.map(area => (
+              <option key={area} value={area}>{area}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Buscador general */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: '2 1 220px' }}>
           <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Buscar por TAG, Informe o Área</label>
@@ -381,7 +423,7 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
             <div className="spinner" style={{ margin: '0 auto 1rem auto' }} />
             Sincronizando minuta resumen con inspecciones...
           </div>
-        ) : data.length === 0 ? (
+        ) : displayData.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
             🔍 No se encontraron registros de inspección con los filtros seleccionados.
           </div>
@@ -405,9 +447,9 @@ export default function MinutaResumenPanel({ empresaIdInicial = 170, onSelectEqu
                 </tr>
               </thead>
               <tbody>
-                {data.map((row, i) => {
-                  const crit = str(row.criticidad);
-                  const prox = str(row.proxima_inspeccion);
+                {displayData.map((row, i) => {
+                  const crit = cleanStr(row.criticidad);
+                  const prox = cleanStr(row.proxima_inspeccion);
                   
                   // Estilos de badge para criticidad (idéntico a Pág. 15)
                   const critBg = crit === '1' ? '#ef4444' : crit === '2' ? '#f59e0b' : '#22c55e';

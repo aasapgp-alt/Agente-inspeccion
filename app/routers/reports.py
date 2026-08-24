@@ -127,17 +127,20 @@ def get_reporte_pdf_by_equipo(
     )
 
 @router.get("/minuta_resumen", response_model=List[Dict[str, Any]])
+@router.get("/minuta-resumen", response_model=List[Dict[str, Any]])
 def get_minuta_resumen(
     empresa_id: Optional[int] = Query(None),
     campania: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     criticidad: Optional[str] = Query(None),
+    area: Optional[str] = Query(None),
+    ubicacion_id: Optional[int] = Query(None),
     db: sqlite3.Connection = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Retorna la lista estructurada para la Minuta Resumen PGP (Tabla estilo Pág. 15 del reporte).
-    Soporta filtrado dinámico por campaña y empresa en tiempo real, con estado de inspección validado.
+    Soporta filtrado dinámico por campaña, empresa, área y criticidad en tiempo real, con estado de inspección validado.
     """
     import re
     anio_target = None
@@ -189,6 +192,15 @@ def get_minuta_resumen(
     if empresa_id:
         query += " AND u.empresa_id = ?"
         params.append(empresa_id)
+
+    if ubicacion_id:
+        query += " AND u.id = ?"
+        params.append(ubicacion_id)
+        
+    if area:
+        clean_area = str(area).strip()
+        query += " AND (u.nombre = ? OR u.nombre LIKE ?)"
+        params.extend([clean_area, f"%{clean_area}%"])
         
     if criticidad:
         clean_crit_filter = str(criticidad).strip()

@@ -333,13 +333,14 @@ export const apiService = {
     }
   },
 
-  getMinutaResumen: async (empresaId, search, criticidad, campania, token) => {
+  getMinutaResumen: async (empresaId, search, criticidad, campania, token, area = '') => {
     try {
       const params = new URLSearchParams();
       if (empresaId) params.append('empresa_id', empresaId);
       if (search) params.append('search', search);
       if (criticidad) params.append('criticidad', criticidad);
       if (campania) params.append('campania', campania);
+      if (area) params.append('area', area);
 
       const response = await fetch(`${API_BASE_URL}/reportes/minuta_resumen?${params.toString()}`, {
         headers: getAuthHeaders(token)

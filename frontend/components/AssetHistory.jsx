@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
-import { API_BASE_URL } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 
 const renderVal = (val) => {
   if (!val) return '';
@@ -22,9 +22,11 @@ export default function AssetHistory({ empresaId }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [materialFilter, setMaterialFilter] = useState('ALL');
+  const [areaFilter, setAreaFilter] = useState('ALL');
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [assetInspections, setAssetInspections] = useState([]);
   const [loadingInspections, setLoadingInspections] = useState(false);
+  const [loadingReportPdf, setLoadingReportPdf] = useState(false);
   const [selectedYear, setSelectedYear] = useState(2024);
 
   // Edit States
@@ -187,8 +189,23 @@ export default function AssetHistory({ empresaId }) {
       });
   }, [empresaId]);
 
-  // Derive unique materials for the filter dropdown
+  // Derive unique materials & areas for the filter dropdowns
   const uniqueMaterials = Array.from(new Set(assets.map(a => a.material).filter(m => m && m.trim() !== ''))).sort();
+  const uniqueAreas = Array.from(new Set(assets.map(a => a.area_nombre).filter(m => m && m.trim() !== ''))).sort();
+
+  // Review Report Handler
+  const handleReviewReport = async () => {
+    if (!selectedAsset) return;
+    setLoadingReportPdf(true);
+    try {
+      const campaniaTarget = selectedYear ? `PGP ${selectedYear}` : undefined;
+      await apiService.openReportPDF(selectedAsset.id, token, campaniaTarget);
+    } catch (err) {
+      console.error('Error al abrir reporte:', err);
+    } finally {
+      setLoadingReportPdf(false);
+    }
+  };
 
   // Filtered Assets
   const filteredAssets = assets.filter(asset => {
@@ -207,7 +224,11 @@ export default function AssetHistory({ empresaId }) {
       materialFilter === 'ALL' ||
       asset.material === materialFilter;
 
-    return matchesSearch && matchesStatus && matchesMaterial;
+    const matchesArea =
+      areaFilter === 'ALL' ||
+      asset.area_nombre === areaFilter;
+
+    return matchesSearch && matchesStatus && matchesMaterial && matchesArea;
   });
 
   const getStatusBadge = (status) => {
@@ -262,9 +283,9 @@ export default function AssetHistory({ empresaId }) {
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Filtros interactivos de la base de datos.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Search Input */}
-          <div style={{ position: 'relative', minWidth: '250px' }}>
+          <div style={{ position: 'relative', minWidth: '220px' }}>
             <input 
               type="text" 
               placeholder="Buscar por Tag, Área o Nombre..." 
@@ -278,6 +299,27 @@ export default function AssetHistory({ empresaId }) {
               }}
             />
             <span style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>🔍</span>
+          </div>
+
+          {/* Area Select */}
+          <div style={{ minWidth: '150px' }}>
+            <select 
+              value={areaFilter} 
+              onChange={(e) => setAreaFilter(e.target.value)}
+              style={{
+                fontSize: '0.9rem',
+                backgroundColor: 'rgba(0,0,0,0.3)',
+                borderColor: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                padding: '0.5rem',
+                borderRadius: '4px'
+              }}
+            >
+              <option value="ALL">TODAS LAS ÁREAS</option>
+              {uniqueAreas.map(area => (
+                <option key={area} value={area}>{area}</option>
+              ))}
+            </select>
           </div>
 
           {/* Status Select */}
@@ -680,6 +722,32 @@ export default function AssetHistory({ empresaId }) {
                     </p>
                   </div>
 
+                  {/* Botón para Realizar Revisión de Reporte */}
+                  <button
+                    onClick={handleReviewReport}
+                    disabled={loadingReportPdf}
+                    className="btn"
+                    style={{
+                      backgroundColor: 'rgba(34, 197, 94, 0.18)',
+                      border: '1px solid rgba(34, 197, 94, 0.4)',
+                      color: '#4ade80',
+                      padding: '0.6rem 1rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      cursor: loadingReportPdf ? 'wait' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      marginTop: '0.6rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {loadingReportPdf ? '⏳ Abriendo Reporte...' : '🔍 Revisión de Reporte Técnico (PDF)'}
+                  </button>
+
                   {currentInsp.ruta_pdf_drive && (
                     <a
                       href={currentInsp.ruta_pdf_drive}
@@ -696,7 +764,7 @@ export default function AssetHistory({ empresaId }) {
                         color: '#38bdf8'
                       }}
                     >
-                      📄 Ver Informe PDF en Drive
+                      ☁️ Ver Informe PDF en Google Drive
                     </a>
                   )}
                 </div>
@@ -730,6 +798,32 @@ export default function AssetHistory({ empresaId }) {
                       {renderVal(selectedAsset.recomendaciones) || 'Ninguna recomendación disponible.'}
                     </p>
                   </div>
+
+                  {/* Botón para Realizar Revisión de Reporte en Activo General */}
+                  <button
+                    onClick={handleReviewReport}
+                    disabled={loadingReportPdf}
+                    className="btn"
+                    style={{
+                      backgroundColor: 'rgba(34, 197, 94, 0.18)',
+                      border: '1px solid rgba(34, 197, 94, 0.4)',
+                      color: '#4ade80',
+                      padding: '0.6rem 1rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      cursor: loadingReportPdf ? 'wait' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      marginTop: '0.6rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {loadingReportPdf ? '⏳ Abriendo Reporte...' : '🔍 Revisión de Reporte Técnico (PDF)'}
+                  </button>
                 </div>
               )}
             </div>
