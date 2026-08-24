@@ -43,7 +43,23 @@ def autenticar_drive() -> Optional[GoogleAuth]:
         except Exception as oauth_err:
             logger.warning(f"Error con OAuth de usuario ({oauth_err}). Probando Cuenta de Servicio...")
 
-    # 2. Si existe Service Account, usarla
+    # 2. Si existe Service Account en variable de entorno (para Render/Cloud), usarla
+    sa_env = os.getenv("SERVICE_ACCOUNT_JSON") or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON") or os.getenv("GOOGLE_CREDENTIALS")
+    if sa_env and sa_env.strip():
+        try:
+            import json
+            from oauth2client.service_account import ServiceAccountCredentials
+            scope = ["https://www.googleapis.com/auth/drive"]
+            key_dict = json.loads(sa_env)
+            gauth = GoogleAuth()
+            gauth.auth_method = 'service'
+            gauth.credentials = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+            logger.info("Autenticado exitosamente en Google Drive usando Cuenta de Servicio desde variable de entorno.")
+            return gauth
+        except Exception as env_sa_err:
+            logger.warning(f"Error al autenticar Cuenta de Servicio desde variable de entorno: {env_sa_err}")
+
+    # 3. Si existe archivo físico de Service Account, usarlo
     service_paths = [
         "service_account.json",
         "c:\\Agente-Inspector\\service_account.json",

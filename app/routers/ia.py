@@ -15,6 +15,7 @@ from app.services.drive_service import descargar_imagen
 from app.services.gemini_service import (
     analizar_imagenes,
     inicializar_gemini,
+    sanitizar_nombre_modelo_gemini,
     build_annotation_context,
     chat_inspeccion,
     consultar_asistente_equipo,
@@ -229,15 +230,16 @@ RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impe
 
         # 6. Inicializar y llamar a Gemini
         db_api_key = get_config_value_db("google_api_key")
-        api_key = db_api_key if db_api_key else os.getenv("GEMINI_API_KEY")
+        api_key = db_api_key if db_api_key else (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
         
         if not api_key:
             raise HTTPException(
                 status_code=500, 
-                detail="La clave de la API de Gemini (google_api_key o variable de entorno) no está configurada en el servidor. Por favor agréguela en Configuración."
+                detail="La clave de la API de Gemini (google_api_key en base de datos o GEMINI_API_KEY en Render) no está configurada en el servidor. Por favor agréguela en Configuración."
             )
 
-        db_model = get_config_value_db("gemini_model") or "gemini-3.5-flash"
+        raw_model = get_config_value_db("gemini_model") or os.getenv("GEMINI_MODEL") or "gemini-1.5-flash"
+        db_model = sanitizar_nombre_modelo_gemini(raw_model)
         db_system_instruction = get_config_value_db("system_instruction")
         db_temperature = get_config_value_db("temperature", 0.2)
         db_top_p = get_config_value_db("top_p", 0.95)

@@ -143,17 +143,26 @@ def get_minuta_resumen(
     Soporta filtrado dinámico por campaña, empresa, área y criticidad en tiempo real, con estado de inspección validado.
     """
     import re
+    # Sanitizar parámetros si provienen de FastAPI Query o llamadas directas
+    empresa_id = empresa_id if isinstance(empresa_id, int) else None
+    ubicacion_id = ubicacion_id if isinstance(ubicacion_id, int) else None
+    campania = campania if isinstance(campania, str) else None
+    search = search if isinstance(search, str) else None
+    criticidad = criticidad if isinstance(criticidad, str) else None
+    area = area if isinstance(area, str) else None
+
     anio_target = None
     if campania:
         match = re.search(r'\b(20\d{2})\b', campania)
         if match:
             anio_target = int(match.group(1))
 
-    anio_clause = ""
-    join_param = []
+    params = []
     if anio_target:
-        anio_clause = "AND i.anio = ?"
-        join_param = [anio_target]
+        insp_subquery = "(SELECT id FROM inspecciones WHERE equipo_id = e.id AND anio = ? ORDER BY id DESC LIMIT 1)"
+        params.append(anio_target)
+    else:
+        insp_subquery = "(SELECT id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)"
 
     query = f"""
         SELECT 
@@ -167,23 +176,22 @@ def get_minuta_resumen(
             u.id as ubicacion_id,
             emp.nombre as empresa_nombre,
             emp.id as empresa_id,
-            COALESCE(i.id, (SELECT id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)) as inspeccion_id,
-            COALESCE(i.anio, (SELECT anio FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1)) as anio,
-            COALESCE(i.estado, (SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), 'PENDIENTE') as estado,
-            COALESCE(i.acciones, (SELECT acciones FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as acciones,
-            COALESCE(i.diagnostico, (SELECT diagnostico FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as diagnostico,
-            COALESCE(i.recomendaciones, (SELECT recomendaciones FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as recomendaciones,
-            COALESCE(i.numero_acta, (SELECT numero_acta FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as informe,
-            COALESCE(i.ruta_pdf_local, (SELECT ruta_pdf_local FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as ruta_pdf_local,
-            COALESCE(i.ruta_pdf_drive, (SELECT ruta_pdf_drive FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as ruta_pdf_drive,
-            COALESCE(i.drive_file_id, (SELECT drive_file_id FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1), '') as drive_file_id
+            i.id as inspeccion_id,
+            i.anio,
+            COALESCE(i.estado, 'PENDIENTE') as estado,
+            COALESCE(i.acciones, '') as acciones,
+            COALESCE(i.diagnostico, '') as diagnostico,
+            COALESCE(i.recomendaciones, '') as recomendaciones,
+            COALESCE(i.numero_acta, '') as informe,
+            COALESCE(i.ruta_pdf_local, '') as ruta_pdf_local,
+            COALESCE(i.ruta_pdf_drive, '') as ruta_pdf_drive,
+            COALESCE(i.drive_file_id, '') as drive_file_id
         FROM equipos e
         LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
         LEFT JOIN empresas emp ON u.empresa_id = emp.id
-        LEFT JOIN inspecciones i ON (i.equipo_id = e.id {anio_clause})
-        WHERE 1=1
+        LEFT JOIN inspecciones i ON i.id = {insp_subquery}
+        WHERE (e.activo = 1 OR e.activo IS NULL)
     """
-    params = join_param.copy()
     if empresa_id:
         query += " AND (u.empresa_id = ? OR emp.id = ? OR emp.nombre = ?)"
         params.extend([empresa_id, empresa_id, 'Arauco'])
