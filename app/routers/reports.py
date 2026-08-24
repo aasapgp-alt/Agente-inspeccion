@@ -177,24 +177,21 @@ def get_minuta_resumen(
             i.numero_acta as informe,
             i.ruta_pdf_local,
             i.ruta_pdf_drive,
-            i.drive_file_id,
-            rep.id as reporte_id,
-            rep.ruta_pdf_local as rep_pdf_local,
-            rep.ruta_pdf_drive as rep_pdf_drive
+            i.drive_file_id
         FROM equipos e
-        JOIN ubicaciones u ON e.ubicacion_id = u.id
-        JOIN empresas emp ON u.empresa_id = emp.id
+        LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
+        LEFT JOIN empresas emp ON u.empresa_id = emp.id
         {join_clause}
-        LEFT JOIN reportes rep ON rep.id = (SELECT id FROM reportes WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1)
         WHERE 1=1
     """
     params = join_param.copy()
     if empresa_id:
         query += """ AND (
             u.empresa_id = ? 
-            OR (? = 170 AND u.empresa_id = (SELECT id FROM empresas WHERE nombre LIKE '%Arauco%' OR nombre LIKE '%arauco%' LIMIT 1))
+            OR emp.id = ?
+            OR (? = 170 AND (emp.nombre LIKE '%Arauco%' OR emp.nombre LIKE '%arauco%'))
         )"""
-        params.extend([empresa_id, empresa_id])
+        params.extend([empresa_id, empresa_id, empresa_id])
 
     if ubicacion_id:
         query += " AND u.id = ?"
@@ -299,10 +296,10 @@ def get_minuta_resumen(
             prox_insp = "Próxima PGP"
 
         # Resolver URLs de reporte (ignorando mock-links)
-        raw_drive = r.get("ruta_pdf_drive") or r.get("rep_pdf_drive")
+        raw_drive = r.get("ruta_pdf_drive")
         valid_drive = raw_drive if (raw_drive and "mock-link" not in raw_drive and raw_drive.startswith("http")) else None
         
-        local_path = r.get("ruta_pdf_local") or r.get("rep_pdf_local")
+        local_path = r.get("ruta_pdf_local")
         tiene_reporte = bool(local_path or valid_drive or tiene_inspeccion)
 
         resumen_list.append({
@@ -312,8 +309,8 @@ def get_minuta_resumen(
             "equipo_nombre": r["equipo_nombre"],
             "sector": sector_abrev,
             "sector_completo": sector_nombre,
-            "empresa_nombre": r["empresa_nombre"],
-            "empresa_id": r["empresa_id"],
+            "empresa_nombre": r.get("empresa_nombre") or "Arauco",
+            "empresa_id": r.get("empresa_id") or 1,
             "informe": informe_val,
             "recom": recom_flag,
             "acciones_correctivas": acc_correct,
@@ -325,7 +322,7 @@ def get_minuta_resumen(
             "estado": estado_raw,
             "tiene_inspeccion": tiene_inspeccion,
             "tiene_reporte": tiene_reporte,
-            "reporte_id": r.get("reporte_id"),
+            "reporte_id": r.get("inspeccion_id"),
             "ruta_pdf_local": local_path,
             "ruta_pdf_drive": valid_drive,
             "drive_file_id": r.get("drive_file_id") if valid_drive else None
