@@ -2,6 +2,7 @@ import os
 import re
 import json
 import logging
+from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai import GenerativeModel
