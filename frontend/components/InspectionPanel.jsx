@@ -836,12 +836,18 @@ export default function InspectionPanel({ equipoId }) {
                   {activeToken ? (
                     <img 
                       key={`${img.id}-${activeToken}`}
-                      src={`${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`} 
+                      src={img.thumbnail || `${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`} 
                       alt={img.name}
                       loading="lazy"
+                      referrerPolicy="no-referrer"
                       style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s' }}
                       onError={(e) => {
-                        e.currentTarget.style.opacity = '0';
+                        const fallbackUrl = `${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`;
+                        if (e.currentTarget.src !== fallbackUrl) {
+                          e.currentTarget.src = fallbackUrl;
+                        } else {
+                          e.currentTarget.style.opacity = '0.5';
+                        }
                       }}
                       onLoad={(e) => {
                         e.currentTarget.style.opacity = '1';

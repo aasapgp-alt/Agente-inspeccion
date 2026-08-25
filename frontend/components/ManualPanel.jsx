@@ -718,9 +718,10 @@ export default function ManualPanel({ equipoId }) {
                         {activeToken ? (
                           <img 
                             key={`${img.id}-${activeToken}`}
-                            src={`${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`} 
+                            src={img.thumbnail || `${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`} 
                             alt={img.name} 
                             loading="lazy"
+                            referrerPolicy="no-referrer"
                             style={{ 
                               width: '100%', 
                               height: '100%', 
@@ -729,7 +730,12 @@ export default function ManualPanel({ equipoId }) {
                               transform: isSelected ? 'scale(1.05)' : 'scale(1)'
                             }} 
                             onError={(e) => {
-                              e.currentTarget.style.opacity = '0';
+                              const fallbackUrl = `${API_BASE_URL}/drive/imagen/${img.id}?token=${activeToken}`;
+                              if (e.currentTarget.src !== fallbackUrl) {
+                                e.currentTarget.src = fallbackUrl;
+                              } else {
+                                e.currentTarget.style.opacity = '0.5';
+                              }
                             }}
                             onLoad={(e) => {
                               e.currentTarget.style.opacity = '1';

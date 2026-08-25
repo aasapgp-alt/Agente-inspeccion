@@ -144,10 +144,6 @@ def list_imagenes(folder_id: str, current_user: dict = Depends(get_current_user)
         for f in archivos:
             if f.get('mimeType', '').startswith('image/'):
                 thumb_url = f.get('thumbnailLink', '')
-                if thumb_url:
-                    encoded_url = urllib.parse.quote(thumb_url)
-                    thumb_url = f"http://localhost:8000/api/drive/proxy_thumbnail?url={encoded_url}"
-                    
                 imagenes.append({
                     "id": f['id'], 
                     "name": f['title'], 
