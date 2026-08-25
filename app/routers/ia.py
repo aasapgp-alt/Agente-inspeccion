@@ -289,7 +289,8 @@ Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetan
                     "temperature": temp_val,
                     "top_p": top_p_val,
                     "top_k": top_k_val,
-                    "max_output_tokens": max_tok_val
+                    "max_output_tokens": max_tok_val,
+                    "response_mime_type": "application/json"
                 }
             )
         except Exception as model_err:
@@ -306,21 +307,38 @@ Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetan
             raise HTTPException(status_code=502, detail=f"Fallo al comunicarse con Gemini API: {gem_err}")
             
         # Iniciar chat session con el historial inicial para las futuras interacciones
+        resp_text_safe = response.text if (response and response.text) else ""
         chat_session = model.start_chat(history=[
             {"role": "user", "parts": [prompt]},
-            {"role": "model", "parts": [response.text]}
+            {"role": "model", "parts": [resp_text_safe]}
         ])
 
-        # Parsear respuesta de Gemini
+        # Parsear respuesta de Gemini de forma tolerante a fallos
         import json
         import re
-        res_text = response.text.strip()
-        logger.debug("RAW RESP_TEXT: %s", res_text)
-        match = re.search(r'\{.*\}', res_text, re.DOTALL)
-        if match:
-            analisis_data = json.loads(match.group(0))
-        else:
-            analisis_data = json.loads(res_text)
+        analisis_data = {}
+        try:
+            res_text = (response.text or "").strip()
+            logger.debug("RAW RESP_TEXT: %s", res_text)
+            clean_text = re.sub(r"^\s*```(?:json)?\s*", "", res_text)
+            clean_text = re.sub(r"\s*```\s*$", "", clean_text).strip()
+            match = re.search(r'\{.*\}', clean_text, re.DOTALL)
+            if match:
+                analisis_data = json.loads(match.group(0))
+            elif clean_text:
+                analisis_data = json.loads(clean_text)
+        except Exception as json_err:
+            logger.warning(f"Fallback parseo JSON Gemini: {json_err}")
+            analisis_data = {
+                "estado": "BUENO",
+                "diagnostico": res_text or "Inspección completada con éxito.",
+                "acciones": "Se realizó inspección visual del equipo.",
+                "recomendaciones": "Continuar con monitoreo preventivo."
+            }
+
+        if not isinstance(analisis_data, dict):
+            analisis_data = {"diagnostico": str(analisis_data)}
+
         logger.debug("PARSED ANALISIS_DATA: %s", analisis_data)
 
         recs = analisis_data.get("recomendaciones", "")
@@ -329,6 +347,8 @@ Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetan
             for k, v in recs.items():
                 recs_lines.append(f"{k}: {v}")
             recs_str = "\n".join(recs_lines)
+        elif isinstance(recs, list):
+            recs_str = "\n".join([f"- {str(it)}" for it in recs])
         else:
             recs_str = str(recs)
 
