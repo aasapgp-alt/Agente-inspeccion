@@ -15,80 +15,24 @@ def registrar_auditoria(
     accion: str, 
     tabla: Optional[str] = None, 
     registro_id: Optional[int] = None, 
-    detalles: Optional[str] = None
+    detalles: Optional[str] = None,
+    ip_address: Optional[str] = None
 ) -> bool:
     """
-    Registra un evento de auditoría genérico en la base de datos de manera dinámica y tolerante a esquemas.
+    Registra un evento de auditoría en la base de datos (compatible con Neon PostgreSQL y SQLite).
     """
     try:
         with _get_audit_db_connection() as conn:
             cursor = conn.cursor()
-            
-            # Verificar las columnas existentes de la tabla auditoria
-            cursor.execute("PRAGMA table_info(auditoria)")
-            cols = {row[1] for row in cursor.fetchall()}
-            
-            if not cols:
-                # Si la tabla no existe, crearla con el esquema esperado
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS auditoria (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER,
-                        accion TEXT NOT NULL,
-                        tabla TEXT,
-                        registro_id INTEGER,
-                        detalles TEXT,
-                        ip_address TEXT,
-                        created_at TEXT NOT NULL
-                    )
-                ''')
-                cols = {"id", "user_id", "accion", "tabla", "registro_id", "detalles", "ip_address", "created_at"}
-                
-            insert_cols = []
-            vals = []
-            
-            if "user_id" in cols:
-                insert_cols.append("user_id")
-                vals.append(usuario_id)
-            elif "usuario_id" in cols:
-                insert_cols.append("usuario_id")
-                vals.append(usuario_id)
-                
-            insert_cols.append("accion")
-            vals.append(accion)
-            
-            if "tabla" in cols and tabla is not None:
-                insert_cols.append("tabla")
-                vals.append(tabla)
-                
-            if "registro_id" in cols and registro_id is not None:
-                insert_cols.append("registro_id")
-                vals.append(registro_id)
-                
-            if "detalles" in cols and detalles is not None:
-                insert_cols.append("detalles")
-                vals.append(detalles)
-                
-            fecha_iso = datetime.now(timezone.utc).isoformat()
-            if "created_at" in cols:
-                insert_cols.append("created_at")
-                vals.append(fecha_iso)
-            elif "fecha" in cols:
-                insert_cols.append("fecha")
-                vals.append(fecha_iso)
-                
-            cols_str = ", ".join(insert_cols)
-            placeholders = ", ".join(["?"] * len(insert_cols))
-            
-            query = f"INSERT INTO auditoria ({cols_str}) VALUES ({placeholders})"
-            cursor.execute(query, vals)
+            query = """
+                INSERT INTO auditoria (user_id, accion, tabla, registro_id, detalles, ip_address)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """
+            cursor.execute(query, (usuario_id, accion, tabla, registro_id, detalles, ip_address))
             conn.commit()
             return True
-    except sqlite3.Error as e:
-        print(f"Error de base de datos al registrar auditoría: {e}")
-        return False
     except Exception as e:
-        print(f"Error inesperado al registrar auditoría: {e}")
+        print(f"Error al registrar auditoría: {e}")
         return False
 
 def obtener_auditoria(filtros: dict) -> List[Dict[str, Any]]:
@@ -100,7 +44,7 @@ def obtener_auditoria(filtros: dict) -> List[Dict[str, Any]]:
         params = []
         
         if "usuario_id" in filtros and filtros["usuario_id"] is not None:
-            query += " AND usuario_id = ?"
+            query += " AND user_id = ?"
             params.append(filtros["usuario_id"])
             
         if "accion" in filtros and filtros["accion"] is not None:
@@ -112,28 +56,19 @@ def obtener_auditoria(filtros: dict) -> List[Dict[str, Any]]:
             params.append(filtros["tabla"])
             
         if "fecha_desde" in filtros and filtros["fecha_desde"] is not None:
-            query += " AND fecha >= ?"
+            query += " AND created_at >= ?"
             params.append(filtros["fecha_desde"])
             
-        query += " ORDER BY fecha DESC LIMIT ?"
+        query += " ORDER BY created_at DESC LIMIT ?"
         params.append(filtros.get("limit", 100))
 
         with _get_audit_db_connection() as conn:
             cursor = conn.cursor()
-            
-            # Verificar si la tabla existe primero para evitar errores
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='auditoria'")
-            if not cursor.fetchone():
-                return []
-                
             cursor.execute(query, params)
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-    except sqlite3.Error as e:
-        print(f"Error de base de datos al obtener auditoría: {e}")
-        return []
     except Exception as e:
-        print(f"Error inesperado al obtener auditoría: {e}")
+        print(f"Error al obtener auditoría: {e}")
         return []
 
 def log_login(usuario_id: int, ip: str, resultado: str) -> bool:
@@ -148,7 +83,8 @@ def log_login(usuario_id: int, ip: str, resultado: str) -> bool:
         return registrar_auditoria(
             usuario_id=usuario_id,
             accion="LOGIN",
-            detalles=detalles
+            detalles=detalles,
+            ip_address=ip
         )
     except Exception as e:
         print(f"Error en log_login: {e}")
