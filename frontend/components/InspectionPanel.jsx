@@ -318,6 +318,13 @@ export default function InspectionPanel({ equipoId }) {
         data = { detail: rawText || `Error HTTP ${res.status}: ${res.statusText}` };
       }
       if (!res.ok) {
+        if (res.status === 401) {
+          alert("Tu sesión ha expirado o se ha reiniciado el servidor. Por favor, vuelve a iniciar sesión.");
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_info');
+          window.location.reload();
+          return;
+        }
         alert("Error del servidor: " + (data.detail || JSON.stringify(data)));
         setIsAnalyzing(false);
         return;
