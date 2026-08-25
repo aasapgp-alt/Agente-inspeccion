@@ -42,13 +42,22 @@ app = FastAPI(
 from app.core.auth_middleware import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 
-# Configurar CORS para permitir localhost y cualquier IP de red local (ej. celulares 192.168.x.x)
+# Configurar CORS para permitir localhost, IPs locales y dominios de Vercel
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "https://agente-inspeccion.vercel.app",
+        "https://agente-inspector.vercel.app",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 from app.core.config import settings

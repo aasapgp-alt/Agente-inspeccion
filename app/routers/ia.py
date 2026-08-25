@@ -109,6 +109,7 @@ class ChatEquipoRequest(BaseModel):
     modo: Optional[str] = "desktop"  # "desktop" o "mobile"
 
 @router.post("/analizar", response_model=Dict[str, Any])
+@router.post("/analizar/", response_model=Dict[str, Any])
 def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     user_key = f"user_{current_user.get('id', 'anon')}"
     ia_analizar_rate_limiter.check(user_key)
