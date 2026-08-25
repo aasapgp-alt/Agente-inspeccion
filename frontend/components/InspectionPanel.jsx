@@ -310,7 +310,13 @@ export default function InspectionPanel({ equipoId }) {
           anotaciones: annotationsMap
         })
       });
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        const rawText = await res.text().catch(() => '');
+        data = { detail: rawText || `Error HTTP ${res.status}: ${res.statusText}` };
+      }
       if (!res.ok) {
         alert("Error del servidor: " + (data.detail || JSON.stringify(data)));
         setIsAnalyzing(false);
@@ -321,7 +327,7 @@ export default function InspectionPanel({ equipoId }) {
       setHistorial2024(data.historial_2024);
     } catch (e) {
       console.error(e);
-      alert("Error al analizar");
+      alert("Error al analizar: " + (e.message || 'Error de conexión'));
     }
     setIsAnalyzing(false);
   };

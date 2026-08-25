@@ -238,7 +238,7 @@ RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impe
                 detail="La clave de la API de Gemini (google_api_key en base de datos o GEMINI_API_KEY en Render) no está configurada en el servidor. Por favor agréguela en Configuración."
             )
 
-        raw_model = get_config_value_db("gemini_model") or os.getenv("GEMINI_MODEL") or "gemini-1.5-flash"
+        raw_model = get_config_value_db("gemini_model") or os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
         db_model = sanitizar_nombre_modelo_gemini(raw_model)
         db_system_instruction = get_config_value_db("system_instruction")
         db_temperature = get_config_value_db("temperature", 0.2)

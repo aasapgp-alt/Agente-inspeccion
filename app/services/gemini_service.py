@@ -20,16 +20,16 @@ _modelo_cache: dict = {}
 def sanitizar_nombre_modelo_gemini(modelo_solicitado: Optional[str]) -> str:
     """
     Normaliza y asegura un nombre de modelo válido para la API de Google Gemini.
-    Corrige automáticamente nombres erróneos o inexistentes (ej. 'gemini-3.5-flash').
+    Si se solicita un modelo deprecado (ej. 'gemini-1.5-flash'), actualiza a 'gemini-2.5-flash'.
     """
     if not modelo_solicitado or not str(modelo_solicitado).strip():
-        return "gemini-1.5-flash"
+        return "gemini-2.5-flash"
     
     clean_model = str(modelo_solicitado).strip()
     clean_lower = clean_model.lower()
-    if "3.5" in clean_lower or "3.0" in clean_lower or "gemini-3" in clean_lower:
-        logger.warning(f"Modelo '{modelo_solicitado}' no es válido en Google AI. Normalizando a 'gemini-1.5-flash'.")
-        return "gemini-1.5-flash"
+    if clean_lower in ("gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"):
+        logger.warning(f"Modelo deprecado '{modelo_solicitado}' en Google AI. Normalizando a 'gemini-2.5-flash'.")
+        return "gemini-2.5-flash"
     
     return clean_model
 
@@ -39,7 +39,7 @@ def inicializar_gemini() -> GenerativeModel:
     from app.services.db_service import get_config_value_db
     try:
         api_key = get_config_value_db("google_api_key") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        raw_modelo = get_config_value_db("gemini_model") or os.getenv("GEMINI_MODEL") or "gemini-1.5-flash"
+        raw_modelo = get_config_value_db("gemini_model") or os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
         nombre_modelo = sanitizar_nombre_modelo_gemini(raw_modelo)
 
         if not api_key:
