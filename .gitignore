@@ -34,9 +34,11 @@ venv.bak/
 .streamlit/secrets.toml
 .streamlit/
 
-# Databases
+# Databases and Office
 *.sqlite
 *.db
+*.xlsx
+*.xls
 !app/assets/seed_inspecciones.db
 
 # Environments

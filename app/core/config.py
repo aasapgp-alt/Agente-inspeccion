@@ -47,7 +47,7 @@ class Settings:
             return ""
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        if "sslmode=" not in url and ("neon.tech" in url or "amazonaws.com" in url or "render.com" in url):
+        if "sslmode=" not in url and ("neon.tech" in url or "amazonaws.com" in url or "render.com" in url or "supabase.co" in url or "supabase.com" in url):
             sep = "&" if "?" in url else "?"
             url = f"{url}{sep}sslmode=require"
         return url

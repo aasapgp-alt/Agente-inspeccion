@@ -13,9 +13,11 @@ from scripts.init_db import init_db
 
 
 def _apuntar_a(monkeypatch, ruta):
-    """Redirige ambas referencias a DB_PATH hacia la BD temporal."""
+    """Redirige ambas referencias a DB_PATH hacia la BD temporal y desactiva Postgres en tests."""
     monkeypatch.setattr(db_service, "DB_PATH", str(ruta))
     monkeypatch.setattr(settings, "DB_PATH", str(ruta))
+    monkeypatch.setattr(settings, "DATABASE_URL_RAW", "")
+    monkeypatch.setenv("DATABASE_URL", "")
 
 
 @pytest.fixture

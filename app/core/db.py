@@ -192,17 +192,42 @@ class PostgresConnectionWrapper:
 
 
 def get_raw_pg_connection():
-    """Obtiene una conexión directa desde el pool o abre una nueva si el pool no está disponible."""
+    """Obtiene una conexión directa desde el pool o abre una nueva si el pool no está disponible, validando que esté viva."""
     global _pg_pool
     import psycopg2
     from psycopg2.extras import DictCursor
 
-    if _pg_pool is None:
+    if _pg_pool is None or _pg_pool.closed:
         init_pg_pool()
 
     if _pg_pool:
-        raw_conn = _pg_pool.getconn()
-        return PostgresConnectionWrapper(raw_conn, pool=_pg_pool)
+        for _ in range(3):
+            raw_conn = None
+            try:
+                raw_conn = _pg_pool.getconn()
+                if raw_conn.closed != 0:
+                    try:
+                        _pg_pool.putconn(raw_conn, close=True)
+                    except Exception:
+                        pass
+                    continue
+                with raw_conn.cursor() as test_cur:
+                    test_cur.execute("SELECT 1")
+                return PostgresConnectionWrapper(raw_conn, pool=_pg_pool)
+            except (psycopg2.OperationalError, psycopg2.InterfaceError, Exception) as conn_err:
+                logger.warning(f"Conexión de PostgreSQL reciclada por inactividad: {conn_err}")
+                if raw_conn:
+                    try:
+                        _pg_pool.putconn(raw_conn, close=True)
+                    except Exception:
+                        pass
+        # Fallback a conexión directa si el pool está agotado o con errores
+        try:
+            raw_conn = psycopg2.connect(settings.DATABASE_URL, cursor_factory=DictCursor)
+            return PostgresConnectionWrapper(raw_conn, pool=None)
+        except Exception as direct_err:
+            logger.error(f"Error abriendo conexión directa PostgreSQL: {direct_err}")
+            raise
     else:
         raw_conn = psycopg2.connect(settings.DATABASE_URL, cursor_factory=DictCursor)
         return PostgresConnectionWrapper(raw_conn, pool=None)
