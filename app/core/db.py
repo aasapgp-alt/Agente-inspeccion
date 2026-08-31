@@ -81,6 +81,32 @@ def adapt_sql_for_pg(sql: str) -> str:
     # Adaptar GLOB '[0-9]*' -> ~ '^[0-9]'
     adapted = re.sub(r"GLOB\s*'\[0-9\]\*'", r"~ '^[0-9]'", adapted, flags=re.IGNORECASE)
 
+    # Adaptar INSERT OR REPLACE INTO anotaciones_imagenes
+    if re.search(r'INSERT\s+OR\s+REPLACE\s+INTO\s+anotaciones_imagenes', adapted, flags=re.IGNORECASE):
+        adapted = re.sub(
+            r'INSERT\s+OR\s+REPLACE\s+INTO\s+anotaciones_imagenes\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)',
+            r'INSERT INTO anotaciones_imagenes (\1) VALUES (\2) ON CONFLICT (equipo_id, image_id) DO UPDATE SET annotations = EXCLUDED.annotations, comentario = EXCLUDED.comentario, updated_at = EXCLUDED.updated_at',
+            adapted,
+            flags=re.IGNORECASE
+        )
+
+    # Adaptar INSERT OR REPLACE INTO drive_folders_cache
+    if re.search(r'INSERT\s+OR\s+REPLACE\s+INTO\s+drive_folders_cache', adapted, flags=re.IGNORECASE):
+        adapted = re.sub(
+            r'INSERT\s+OR\s+REPLACE\s+INTO\s+drive_folders_cache\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)',
+            r'INSERT INTO drive_folders_cache (\1) VALUES (\2) ON CONFLICT (drive_id) DO UPDATE SET nombre = EXCLUDED.nombre, parent_id = EXCLUDED.parent_id, updated_at = EXCLUDED.updated_at',
+            adapted,
+            flags=re.IGNORECASE
+        )
+
+    # Adaptar INSERT OR IGNORE INTO
+    adapted = re.sub(
+        r'INSERT\s+OR\s+IGNORE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)',
+        r'INSERT INTO \1 (\2) VALUES (\3) ON CONFLICT DO NOTHING',
+        adapted,
+        flags=re.IGNORECASE
+    )
+
     return adapted
 
 
