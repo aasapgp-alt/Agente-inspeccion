@@ -330,6 +330,11 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
             campania_activa
         ))
         reporte_id = cursor.lastrowid
+        if not reporte_id:
+            cursor.execute("SELECT id FROM reportes WHERE equipo_id = ? AND campania = ? ORDER BY id DESC LIMIT 1", (equipo_id, campania_activa))
+            f_row = cursor.fetchone()
+            if f_row:
+                reporte_id = f_row['id'] if isinstance(f_row, (dict, object)) and hasattr(f_row, '__getitem__') else f_row[0]
         next_version = 1
         
     # Guardar en versiones_reportes

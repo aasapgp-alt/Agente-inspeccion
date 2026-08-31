@@ -41,6 +41,7 @@ TABLES_ORDER = [
     "auditoria",
     "inspecciones",
     "libros",
+    "reportes",
     "versiones_reportes",
     "anotaciones_imagenes",
     "configuracion",

@@ -202,6 +202,29 @@ def init_db():
         );
         """)
 
+        # Crear tabla reportes (reportes individuales)
+        print("Creando tabla reportes...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reportes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipo_id INTEGER NOT NULL,
+            nombre_equipo TEXT NOT NULL,
+            codigo_equipo TEXT,
+            fecha_inspeccion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            fecha_generacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            estado_general TEXT, -- 'BUENO', 'REGULAR', 'CRITICO', 'FUERA DE RUTA'
+            ruta_pdf_local TEXT,
+            ruta_pdf_drive TEXT,
+            tamanio_pdf INTEGER,
+            usuario_id INTEGER,
+            resumen_diagnostico TEXT,
+            numero_acta TEXT,
+            campania TEXT DEFAULT 'PGP 2026',
+            FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+        );
+        """)
+
         # Crear tabla versiones_reportes
         print("Creando tabla versiones_reportes...")
         cursor.execute("""
@@ -216,6 +239,45 @@ def init_db():
             fecha_generacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             usuario_id INTEGER,
             notas TEXT,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+        );
+        """)
+
+        # Crear tabla reportes_versiones (legacy)
+        print("Creando tabla reportes_versiones...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reportes_versiones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspeccion_id INTEGER NOT NULL,
+            version INTEGER NOT NULL,
+            ruta_pdf_local TEXT,
+            ruta_pdf_drive TEXT,
+            drive_file_id TEXT,
+            fecha_generacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            usuario_id INTEGER,
+            notas TEXT,
+            FOREIGN KEY (inspeccion_id) REFERENCES inspecciones(id) ON DELETE CASCADE,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+        );
+        """)
+
+        # Crear tabla libros_completos
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS libros_completos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campania TEXT,
+            fecha_generacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            usuario_id INTEGER,
+            estado TEXT,
+            progreso INTEGER DEFAULT 0,
+            ruta_pdf_local TEXT,
+            ruta_pdf_drive TEXT,
+            drive_file_id TEXT,
+            tamanio_pdf INTEGER,
+            numero_equipos INTEGER,
+            resumen_estados TEXT,
+            filtros_aplicados TEXT,
+            error_mensaje TEXT,
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
         );
         """)
@@ -235,12 +297,30 @@ def init_db():
         );
         """)
 
-        # Verificar si la columna comentario existe en anotaciones_imagenes, y si no, agregarla
+        # Verificar columnas adicionales
         cursor.execute("PRAGMA table_info(anotaciones_imagenes)")
         columns = {row[1] for row in cursor.fetchall()}
         if "comentario" not in columns:
             print("Agregando columna 'comentario' a la tabla anotaciones_imagenes...")
             cursor.execute("ALTER TABLE anotaciones_imagenes ADD COLUMN comentario TEXT")
+
+        cursor.execute("PRAGMA table_info(inspecciones)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "error_generacion" not in columns:
+            print("Agregando columna 'error_generacion' a la tabla inspecciones...")
+            cursor.execute("ALTER TABLE inspecciones ADD COLUMN error_generacion TEXT")
+
+        cursor.execute("PRAGMA table_info(equipos)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "drive_folder_id" not in columns:
+            print("Agregando columna 'drive_folder_id' a la tabla equipos...")
+            cursor.execute("ALTER TABLE equipos ADD COLUMN drive_folder_id TEXT")
+
+        cursor.execute("PRAGMA table_info(ubicaciones)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "created_at" not in columns:
+            print("Agregando columna 'created_at' a la tabla ubicaciones...")
+            cursor.execute("ALTER TABLE ubicaciones ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP")
 
         # Crear tabla configuracion con soporte para migración desde esquema viejo
         print("Verificando tabla configuracion...")

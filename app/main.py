@@ -70,6 +70,8 @@ async def startup_event():
         if settings.IS_POSTGRES:
             logger.info("Modo Neon PostgreSQL detectado. Inicializando pool de conexiones...")
             init_pg_pool()
+            from app.core.db import init_pg_schema
+            init_pg_schema()
             logger.info("Conexión con Neon PostgreSQL establecida exitosamente.")
         else:
             init_db()

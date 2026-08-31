@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS equipos (
     fecha_instalacion DATE,
     fabricante VARCHAR(255),
     modelo VARCHAR(255),
+    drive_folder_id VARCHAR(255),
     CONSTRAINT fk_equipos_ubicacion FOREIGN KEY (ubicacion_id) REFERENCES ubicaciones(id) ON DELETE CASCADE,
     CONSTRAINT uq_ubicacion_codigo UNIQUE (ubicacion_id, codigo)
 );
@@ -130,6 +131,7 @@ CREATE TABLE IF NOT EXISTS inspecciones (
     tipo_reporte VARCHAR(100),
     numero_acta VARCHAR(100),
     estado_generacion VARCHAR(50),
+    error_generacion TEXT,
     metadata_historica JSONB,
     CONSTRAINT fk_inspecciones_equipo FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE
 );
@@ -160,7 +162,30 @@ CREATE TABLE IF NOT EXISTS libros (
 CREATE INDEX IF NOT EXISTS idx_libros_ubicacion ON libros(ubicacion_id);
 CREATE INDEX IF NOT EXISTS idx_libros_campania ON libros(campania);
 
--- 10. Tabla: versiones_reportes
+-- 10. Tabla: reportes (Reportes individuales)
+CREATE TABLE IF NOT EXISTS reportes (
+    id SERIAL PRIMARY KEY,
+    equipo_id INTEGER NOT NULL,
+    nombre_equipo VARCHAR(255) NOT NULL,
+    codigo_equipo VARCHAR(100),
+    fecha_inspeccion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    fecha_generacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    estado_general VARCHAR(50),
+    ruta_pdf_local TEXT,
+    ruta_pdf_drive TEXT,
+    tamanio_pdf BIGINT,
+    usuario_id INTEGER,
+    resumen_diagnostico TEXT,
+    numero_acta VARCHAR(255),
+    campania VARCHAR(100) DEFAULT 'PGP 2026',
+    CONSTRAINT fk_reportes_equipo FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reportes_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reportes_equipo ON reportes(equipo_id);
+CREATE INDEX IF NOT EXISTS idx_reportes_campania ON reportes(campania);
+CREATE INDEX IF NOT EXISTS idx_reportes_fecha ON reportes(fecha_generacion);
+
+-- 11. Tabla: versiones_reportes
 CREATE TABLE IF NOT EXISTS versiones_reportes (
     id SERIAL PRIMARY KEY,
     tipo VARCHAR(50) NOT NULL, -- 'individual' o 'libro'
@@ -175,6 +200,22 @@ CREATE TABLE IF NOT EXISTS versiones_reportes (
     CONSTRAINT fk_versiones_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_versiones_reporte ON versiones_reportes(tipo, reporte_id);
+
+-- 12. Tabla: reportes_versiones (legacy)
+CREATE TABLE IF NOT EXISTS reportes_versiones (
+    id SERIAL PRIMARY KEY,
+    inspeccion_id INTEGER NOT NULL,
+    version INTEGER NOT NULL,
+    ruta_pdf_local TEXT,
+    ruta_pdf_drive TEXT,
+    drive_file_id VARCHAR(255),
+    fecha_generacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    usuario_id INTEGER,
+    notas TEXT,
+    CONSTRAINT fk_repvers_inspeccion FOREIGN KEY (inspeccion_id) REFERENCES inspecciones(id) ON DELETE CASCADE,
+    CONSTRAINT fk_repvers_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_repvers_inspeccion ON reportes_versiones(inspeccion_id);
 
 -- 11. Tabla: anotaciones_imagenes
 CREATE TABLE IF NOT EXISTS anotaciones_imagenes (
