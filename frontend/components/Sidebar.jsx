@@ -5,18 +5,24 @@ import { useAuth } from './AuthProvider';
 import LibroValidationModal from './LibroValidationModal';
 import DriveFolderSelector from './DriveFolderSelector';
 
-export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, onChangeTab, selectedUbicacionId, onSelectUbicacion }) {
+export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEmpresa, empresaSeleccionada: propEmpresaId, activeTab, onChangeTab, selectedUbicacionId, onSelectUbicacion }) {
   const { user, token } = useAuth();
   const [empresas, setEmpresas] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   
-  const [empresaSeleccionada, setEmpresaSeleccionada] = useState('');
+  const [empresaSeleccionada, setEmpresaSeleccionada] = useState(propEmpresaId ? propEmpresaId.toString() : '');
   const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState('');
 
   const [equipos, setEquipos] = useState([]);
   const [filtro, setFiltro] = useState('TODOS');
   
   const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    if (propEmpresaId !== undefined && propEmpresaId !== null && propEmpresaId !== '') {
+      setEmpresaSeleccionada(propEmpresaId.toString());
+    }
+  }, [propEmpresaId]);
 
   useEffect(() => {
     if (selectedUbicacionId !== undefined && selectedUbicacionId !== null) {
@@ -186,8 +192,9 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
   // 1. Cargar Empresas al inicio
   const fetchEmpresas = useCallback(() => {
-    if (!token) return;
-    fetch(`${API_BASE_URL}/empresas`, { headers: { 'Authorization': `Bearer ${token}` } })
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
+    if (!activeToken) return;
+    fetch(`${API_BASE_URL}/empresas`, { headers: { 'Authorization': `Bearer ${activeToken}` } })
       .then(res => {
         if (!res.ok) throw new Error("Error fetching empresas");
         return res.json();
@@ -196,8 +203,8 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         if (Array.isArray(data)) {
           setEmpresas(data);
           if (data.length > 0 && !empresaSeleccionada) {
-            setEmpresaSeleccionada(data[0].id); // Seleccionar Arauco por defecto
-            if (onSelectEmpresa) onSelectEmpresa(data[0].id);
+            setEmpresaSeleccionada(data[0].id.toString());
+            if (onSelectEmpresa) onSelectEmpresa(data[0].id.toString());
           }
         } else {
           setEmpresas([]);
@@ -207,8 +214,7 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         console.error("Error fetching empresas:", err);
         setEmpresas([]);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, empresaSeleccionada, onSelectEmpresa]);
 
   useEffect(() => {
     fetchEmpresas();
@@ -216,8 +222,9 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
   // 2. Cargar Ubicaciones cuando cambia la empresa
   const fetchUbicaciones = useCallback(() => {
-    if (empresaSeleccionada && token) {
-      fetch(`${API_BASE_URL}/ubicaciones?empresa_id=${empresaSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
+    if (empresaSeleccionada && activeToken) {
+      fetch(`${API_BASE_URL}/ubicaciones?empresa_id=${empresaSeleccionada}`, { headers: { 'Authorization': `Bearer ${activeToken}` } })
         .then(res => {
           if (!res.ok) throw new Error("Error fetching ubicaciones");
           return res.json();
@@ -225,7 +232,17 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
         .then(data => {
           if (Array.isArray(data)) {
             setUbicaciones(data);
-            if (data.length > 0) setUbicacionSeleccionada(data[0].id);
+            if (data.length > 0) {
+              setUbicacionSeleccionada(prev => {
+                const exists = data.some(u => u.id.toString() === prev?.toString());
+                const nextVal = exists ? prev : data[0].id.toString();
+                if (onSelectUbicacion && nextVal !== prev) onSelectUbicacion(nextVal);
+                return nextVal;
+              });
+            } else {
+              setUbicacionSeleccionada('');
+              if (onSelectUbicacion) onSelectUbicacion('');
+            }
           } else {
             setUbicaciones([]);
           }
@@ -235,12 +252,11 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
           setUbicaciones([]);
         });
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUbicaciones([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUbicacionSeleccionada('');
+      if (onSelectUbicacion) onSelectUbicacion('');
     }
-  }, [empresaSeleccionada, token]);
+  }, [empresaSeleccionada, token, onSelectUbicacion]);
 
   useEffect(() => {
     fetchUbicaciones();
@@ -248,17 +264,24 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
 
   // 3. Cargar Equipos cuando cambia la ubicación
   const fetchEquipos = useCallback(() => {
-    if (ubicacionSeleccionada && token) {
-      fetch(`${API_BASE_URL}/equipos?ubicacion_id=${ubicacionSeleccionada}`, { headers: { 'Authorization': `Bearer ${token}` } })
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
+    if (ubicacionSeleccionada && activeToken) {
+      fetch(`${API_BASE_URL}/equipos?ubicacion_id=${ubicacionSeleccionada}`, { headers: { 'Authorization': `Bearer ${activeToken}` } })
         .then(res => res.json())
         .then(data => {
           if (data && data.equipos) {
             setEquipos(data.equipos);
+          } else if (Array.isArray(data)) {
+            setEquipos(data);
+          } else {
+            setEquipos([]);
           }
         })
-        .catch(err => console.error("Error fetching equipos:", err));
+        .catch(err => {
+          console.error("Error fetching equipos:", err);
+          setEquipos([]);
+        });
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEquipos([]);
     }
   }, [ubicacionSeleccionada, token]);
@@ -634,7 +657,10 @@ export default function Sidebar({ onSelectEquipo, onSelectEmpresa, activeTab, on
               <button onClick={handleOpenAddEquipoModal} style={{ background: 'transparent', color: 'var(--accent-primary)', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>+</button>
             )}
           </div>
-          <select onChange={(e) => onSelectEquipo(e.target.value)}>
+          <select 
+            value={equipoSeleccionado || ''} 
+            onChange={(e) => onSelectEquipo(e.target.value)}
+          >
             <option value="">-- Seleccionar --</option>
             {equiposFiltrados.map(e => (
               <option key={e.id} value={e.id}>{e.nombre} ({e.codigo})</option>

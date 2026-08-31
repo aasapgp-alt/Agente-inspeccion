@@ -17,7 +17,7 @@ const renderVal = (val) => {
   return String(val);
 };
 
-export default function ManualPanel({ equipoId }) {
+export default function ManualPanel({ equipoId, onChangeTab }) {
   const { token } = useAuth();
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
   const [equipo, setEquipo] = useState(null);
@@ -311,15 +311,38 @@ export default function ManualPanel({ equipoId }) {
   return (
     <div className="glass-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
       
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
-        <h2 style={{ margin: 0 }}>{equipo?.nombre}</h2>
-        <p style={{ margin: 0, color: 'var(--text-muted)' }}>{equipo?.area} - Número/Código: {equipo?.numero}</p>
-        <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          {equipo?.material && <span><strong>Material:</strong> {equipo.material}</span>}
-          {equipo?.fluido && <span><strong>Fluido:</strong> {equipo.fluido}</span>}
-          {equipo?.presion_diseno && <span><strong>Presión:</strong> {equipo.presion_diseno}</span>}
-          {equipo?.temperatura_diseno && <span><strong>Temp:</strong> {equipo.temperatura_diseno}</span>}
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>{equipo?.nombre}</h2>
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>{equipo?.area} - Número/Código: {equipo?.numero}</p>
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            {equipo?.material && <span><strong>Material:</strong> {equipo.material}</span>}
+            {equipo?.fluido && <span><strong>Fluido:</strong> {equipo.fluido}</span>}
+            {equipo?.presion_diseno && <span><strong>Presión:</strong> {equipo.presion_diseno}</span>}
+            {equipo?.temperatura_diseno && <span><strong>Temp:</strong> {equipo.temperatura_diseno}</span>}
+          </div>
         </div>
+        {onChangeTab && (
+          <button
+            type="button"
+            onClick={() => onChangeTab('FACTORY')}
+            className="btn btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '0.45rem 0.9rem',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              boxShadow: '0 0 12px rgba(14, 165, 233, 0.3)'
+            }}
+            title="Cambiar a análisis de inspección con IA"
+          >
+            <span>✨ Inspección con IA</span>
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', flex: 1 }}>

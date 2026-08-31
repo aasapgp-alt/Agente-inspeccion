@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: inspector-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: inspector
+      POSTGRES_PASSWORD: inspector_secret_pass_2026
+      POSTGRES_DB: agente_inspector
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inspector -d agente_inspector"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inspector-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://inspector:inspector_secret_pass_2026@postgres:5432/agente_inspector}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-supersecretkey_cambiar_en_produccion}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - PORT=8000
+    volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+      - app_data:/app/data
+      - app_reports:/app/Informes_Generados
+      - app_media:/app/extracted_media
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: inspector-caddy
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  pgdata:
+  app_data:
+  app_reports:
+  app_media:
+  caddy_data:
+  caddy_config:

@@ -18,11 +18,13 @@ class UbicacionCreate(BaseModel):
     drive_folder_id: Optional[str] = None
 
 @router.get("/empresas", response_model=List[Dict[str, Any]])
+@router.get("/empresas/", response_model=List[Dict[str, Any]])
 def get_empresas(db: sqlite3.Connection = Depends(get_db)):
     cursor = db.execute("SELECT * FROM empresas")
     return [dict(row) for row in cursor.fetchall()]
 
 @router.post("/empresas", response_model=Dict[str, Any])
+@router.post("/empresas/", response_model=Dict[str, Any])
 def create_empresa(empresa: EmpresaCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:
         cursor = db.execute("INSERT INTO empresas (nombre, descripcion) VALUES (?, ?)", (empresa.nombre, empresa.descripcion))
@@ -32,6 +34,7 @@ def create_empresa(empresa: EmpresaCreate, db: sqlite3.Connection = Depends(get_
         raise HTTPException(status_code=400, detail="La empresa ya existe")
 
 @router.get("/ubicaciones", response_model=List[Dict[str, Any]])
+@router.get("/ubicaciones/", response_model=List[Dict[str, Any]])
 def get_ubicaciones(empresa_id: Optional[int] = None, db: sqlite3.Connection = Depends(get_db)):
     query = "SELECT * FROM ubicaciones"
     params = []
@@ -42,6 +45,7 @@ def get_ubicaciones(empresa_id: Optional[int] = None, db: sqlite3.Connection = D
     return [dict(row) for row in cursor.fetchall()]
 
 @router.post("/ubicaciones", response_model=Dict[str, Any])
+@router.post("/ubicaciones/", response_model=Dict[str, Any])
 def create_ubicacion(ubicacion: UbicacionCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:
         # 1. Determinar el código en orden secuencial si no se proveyó

@@ -24,7 +24,7 @@ const renderVal = (val) => {
   return String(val);
 };
 
-export default function InspectionPanel({ equipoId }) {
+export default function InspectionPanel({ equipoId, onChangeTab }) {
   const { token } = useAuth();
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
   const [equipo, setEquipo] = useState(null);
@@ -175,54 +175,94 @@ export default function InspectionPanel({ equipoId }) {
   }, [reportState?.estado_generacion, inspeccionId, token]);
 
   const fetchContents = (folderId) => {
+    // Get Folders
     authFetch(`${API_BASE_URL}/drive/carpetas?parent_id=${folderId}`)
       .then(r => r.json())
       .then(data => {
-        setItems(prev => ({ ...prev, folders: data.carpetas }));
-      });
+        setItems(prev => ({ ...prev, folders: data.carpetas || {} }));
+      })
+      .catch(err => console.error("Error fetching folders:", err));
     // Get Images
     authFetch(`${API_BASE_URL}/drive/imagenes?folder_id=${folderId}`)
       .then(r => r.json())
       .then(data => {
-        setItems(prev => ({ ...prev, images: data.imagenes }));
-      });
+        setItems(prev => ({ ...prev, images: data.imagenes || [] }));
+      })
+      .catch(err => console.error("Error fetching images:", err));
   };
 
   useEffect(() => {
     if (!equipoId) return;
 
+    let isMounted = true;
     const initializeFolder = async () => {
       setLoading(true);
       try {
-        // 1. Fetch equipo
-        const eqRes = await authFetch(`${API_BASE_URL}/equipos`);
-        const eqData = await eqRes.json();
-        const eq = eqData.equipos.find(e => e.id.toString() === equipoId.toString());
-        setEquipo(eq);
-        setLoading(false);
+        // 1. Fetch equipo directamente por ID
+        let eq = null;
+        try {
+          const eqRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}`);
+          if (eqRes.ok) {
+            eq = await eqRes.json();
+          }
+        } catch (e) {
+          console.error("Error fetching single equipo:", e);
+        }
+
+        // Fallback a listado general si no se obtuvo por ID
+        if (!eq) {
+          try {
+            const allRes = await authFetch(`${API_BASE_URL}/equipos`);
+            if (allRes.ok) {
+              const allData = await allRes.json();
+              eq = allData?.equipos?.find(e => e.id.toString() === equipoId.toString()) || null;
+            }
+          } catch (e) {
+            console.error("Error fetching all equipos fallback:", e);
+          }
+        }
+
+        if (isMounted && eq) {
+          setEquipo(eq);
+        }
 
         // 2. Fetch root ID if not loaded
         let currentRootId = rootFolderId;
         if (!currentRootId) {
-          const rootRes = await authFetch(`${API_BASE_URL}/drive/root`);
-          const rootData = await rootRes.json();
-          currentRootId = rootData.root_id;
-          setRootFolderId(currentRootId);
+          try {
+            const rootRes = await authFetch(`${API_BASE_URL}/drive/root`);
+            if (rootRes.ok) {
+              const rootData = await rootRes.json();
+              currentRootId = rootData?.root_id;
+              if (isMounted) setRootFolderId(currentRootId);
+            }
+          } catch (e) {
+            console.error("Error fetching root folder:", e);
+          }
         }
 
         // 3. Fetch suggestions
-        const sugRes = await authFetch(`${API_BASE_URL}/drive/sugerir_carpetas?equipo_id=${equipoId}`);
-        const sugData = await sugRes.json();
+        let sugData = null;
+        try {
+          const sugRes = await authFetch(`${API_BASE_URL}/drive/sugerir_carpetas?equipo_id=${equipoId}`);
+          if (sugRes.ok) {
+            sugData = await sugRes.json();
+          }
+        } catch (e) {
+          console.error("Error fetching folder suggestions:", e);
+        }
 
-        setSelectedImages([]);
-        setAnalisis(null);
-        setHistorial2024(null);
-        setIndicacionesPrevias("");
+        if (isMounted) {
+          setSelectedImages([]);
+          setAnalisis(null);
+          setHistorial2024(null);
+          setIndicacionesPrevias("");
+        }
 
         // Fetch PGP 2024 history for display in the panel
         try {
           const histRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2024`);
-          if (histRes.ok) {
+          if (histRes.ok && isMounted) {
             const histData = await histRes.json();
             setHistorial2024(histData);
           }
@@ -230,32 +270,39 @@ export default function InspectionPanel({ equipoId }) {
           console.error("Error fetching PGP 2024 history:", histErr);
         }
 
-        if (sugData.sugerencias && sugData.sugerencias.length > 0) {
-          setSugerencias(sugData.sugerencias);
+        if (sugData?.sugerencias && sugData.sugerencias.length > 0) {
+          if (isMounted) setSugerencias(sugData.sugerencias);
           const best = sugData.sugerencias[0];
           if (best.score >= 100) {
-            setCurrentFolderId(best.id);
-            setFolderHistory([{ id: currentRootId || 'root', name: 'Root' }, { id: best.id, name: best.name }]);
-            fetchContents(best.id);
-            setAutoDetected(best);
+            if (isMounted) {
+              setCurrentFolderId(best.id);
+              setFolderHistory([{ id: currentRootId || 'root', name: 'Root' }, { id: best.id, name: best.name }]);
+              fetchContents(best.id);
+              setAutoDetected(best);
+            }
             return;
           }
         }
 
-        setSugerencias(sugData.sugerencias || []);
-        setAutoDetected(null);
-        
-        // Fallback to the PGP directory folder if no highly relevant suggestion is found
-        const fallbackId = DRIVE_FALLBACK_FOLDER_ID;
-        setCurrentFolderId(fallbackId);
-        setFolderHistory([{ id: fallbackId, name: 'Inicio PGP' }]);
-        fetchContents(fallbackId);
+        if (isMounted) {
+          setSugerencias(sugData?.sugerencias || []);
+          setAutoDetected(null);
+          
+          // Fallback to the PGP directory folder if no highly relevant suggestion is found
+          const fallbackId = DRIVE_FALLBACK_FOLDER_ID;
+          setCurrentFolderId(fallbackId);
+          setFolderHistory([{ id: fallbackId, name: 'Inicio PGP' }]);
+          fetchContents(fallbackId);
+        }
       } catch (err) {
         console.error("Error initializing folder for equipo:", err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
     initializeFolder();
+    return () => { isMounted = false; };
   }, [equipoId]);
 
   const navigateToFolder = (id, name) => {
@@ -544,30 +591,52 @@ export default function InspectionPanel({ equipoId }) {
             {equipo?.area} - Número: {equipo?.numero} {equipo?.material ? `| Material: ${equipo.material}` : ''}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCopilot(true)}
-          className="btn"
-          style={{
-            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)',
-            border: '1px solid rgba(59, 130, 246, 0.5)',
-            color: '#93c5fd',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '0.45rem 0.9rem',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            borderRadius: '8px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)',
-            transition: 'all 0.2s ease'
-          }}
-          title="Abrir Copiloto Técnico Gemini para este equipo"
-        >
-          <Sparkles size={16} color="#60a5fa" />
-          <span>Copiloto IA</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+          {onChangeTab && (
+            <button
+              type="button"
+              onClick={() => onChangeTab('MANUAL')}
+              className="btn btn-secondary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0.45rem 0.9rem',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+              title="Cambiar a modo de carga manual"
+            >
+              <span>✏️ Carga Manual</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowCopilot(true)}
+            className="btn"
+            style={{
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)',
+              border: '1px solid rgba(59, 130, 246, 0.5)',
+              color: '#93c5fd',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '0.45rem 0.9rem',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)',
+              transition: 'all 0.2s ease'
+            }}
+            title="Abrir Copiloto Técnico Gemini para este equipo"
+          >
+            <Sparkles size={16} color="#60a5fa" />
+            <span>Copiloto IA</span>
+          </button>
+        </div>
       </div>
 
       <div style={{

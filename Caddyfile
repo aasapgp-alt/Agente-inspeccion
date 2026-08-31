@@ -1,0 +1,18 @@
+{
+    email cristaldoiq@gmail.com
+}
+
+# Dominio sslip.io con SSL/HTTPS automático gratuito (Let's Encrypt)
+157.151.18.150.sslip.io, 157-151-18-150.sslip.io {
+    reverse_proxy backend:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Fallback HTTP directo por IP
+:80 {
+    reverse_proxy backend:8000
+}

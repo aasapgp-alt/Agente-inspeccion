@@ -25,6 +25,7 @@ class EquipoCreate(BaseModel):
     subcarpetas: Optional[List[str]] = ["Succion", "Impulsión"]
 
 
+@router.get("", response_model=Dict[str, Any])
 @router.get("/", response_model=Dict[str, Any])
 def list_equipos(
     empresa: Optional[str] = None,
@@ -44,6 +45,7 @@ def list_equipos(
     equipos = db_service.obtener_lista_equipos_db(empresa=empresa, area=area, anio=anio, estado=estado, q=q)
     return {"equipos": equipos}
 
+@router.post("", response_model=Dict[str, Any])
 @router.post("/", response_model=Dict[str, Any])
 def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(require_role("admin"))):
     try:

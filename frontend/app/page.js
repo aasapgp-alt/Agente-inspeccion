@@ -130,7 +130,9 @@ function DashboardContent() {
           setEquipoSeleccionado(id);
           if (id) setActiveTab('FACTORY');
         }}
+        equipoSeleccionado={equipoSeleccionado}
         onSelectEmpresa={setEmpresaSeleccionada}
+        empresaSeleccionada={empresaSeleccionada}
         selectedUbicacionId={ubicacionSeleccionada}
         onSelectUbicacion={setUbicacionSeleccionada}
         activeTab={activeTab}
@@ -203,8 +205,7 @@ function DashboardContent() {
                 alt="Sulvy Logo" 
                 style={{ 
                   width: '100%', 
-                  height: 'auto',
-                  // Adaptive brightness filter based on modern UI aesthetics
+                  height: 'auto', 
                   filter: 'brightness(0.95)'
                 }} 
               />
@@ -248,7 +249,10 @@ function DashboardContent() {
               <div style={{ height: '100%' }}>
                 <h2 className="panel-heading panel-heading--accent">Carga manual</h2>
                 <p className="panel-sub">Activo · ID {equipoSeleccionado} · sin IA</p>
-                <ManualPanel equipoId={equipoSeleccionado} />
+                <ManualPanel 
+                  equipoId={equipoSeleccionado} 
+                  onChangeTab={setActiveTab}
+                />
               </div>
             ) : (
               <GlobalDashboard 
@@ -266,7 +270,10 @@ function DashboardContent() {
               <div style={{ height: '100%' }}>
                 <h2 className="panel-heading panel-heading--accent">Panel de inspección · IA</h2>
                 <p className="panel-sub">Activo · ID {equipoSeleccionado}</p>
-                <InspectionPanel equipoId={equipoSeleccionado} />
+                <InspectionPanel 
+                  equipoId={equipoSeleccionado} 
+                  onChangeTab={setActiveTab}
+                />
               </div>
             ) : (
               <div className="empty-state">
