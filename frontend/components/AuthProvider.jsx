@@ -5,27 +5,60 @@ import { API_BASE_URL } from '../services/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUser = localStorage.getItem('auth_user');
+        return storedUser ? JSON.parse(storedUser) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [token, setToken] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('auth_token') || null;
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const storedToken = localStorage.getItem('auth_token');
+      const storedUser = localStorage.getItem('auth_user');
+      // Si ya hay token y usuario guardados, no bloquear la pantalla con spinner
+      return !(storedToken && storedUser);
+    }
+    return true;
+  });
 
   useEffect(() => {
     let isMounted = true;
     const storedToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const storedUser = typeof window !== 'undefined' ? localStorage.getItem('auth_user') : null;
 
     if (!storedToken) {
-      setLoading(false);
+      if (isMounted) setLoading(false);
       return;
     }
 
-    setToken(storedToken);
+    if (storedUser && !user) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        if (parsed && isMounted) setUser(parsed);
+      } catch (e) {
+        console.warn('Error restaurando auth_user de localStorage:', e);
+      }
+    }
 
-    // AbortController para timeout máximo de 3 segundos al validar token
+    // Validar token en segundo plano con el backend
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
       if (isMounted) setLoading(false);
-    }, 3000);
+    }, 8000);
 
     fetch(`${API_BASE_URL}/auth/me`, {
       headers: {
@@ -34,23 +67,30 @@ export function AuthProvider({ children }) {
       signal: controller.signal
     })
       .then(res => {
-        if (res.ok) return res.json();
-        localStorage.removeItem('auth_token');
-        if (isMounted) {
-          setToken(null);
-          setUser(null);
+        if (res.status === 401) {
+          // Solo si el backend indica explícitamente token inválido o revocado
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+          if (isMounted) {
+            setToken(null);
+            setUser(null);
+          }
+          return null;
         }
+        if (res.ok) return res.json();
         return null;
       })
       .then(data => {
-        if (data && isMounted) setUser(data);
+        if (data && isMounted) {
+          setUser(data);
+          localStorage.setItem('auth_user', JSON.stringify(data));
+        }
       })
       .catch(err => {
-        console.warn("Advertencia validando sesión:", err.message);
-        localStorage.removeItem('auth_token');
-        if (isMounted) {
-          setToken(null);
-          setUser(null);
+        if (err.name === 'AbortError') {
+          console.warn("Validación de sesión demoró más de 8s (manteniendo sesión local).");
+        } else {
+          console.warn("Validación de sesión offline / error de red (manteniendo sesión local):", err.message);
         }
       })
       .finally(() => {
@@ -79,6 +119,9 @@ export function AuthProvider({ children }) {
     }
     
     localStorage.setItem('auth_token', data.access_token);
+    if (data.user) {
+      localStorage.setItem('auth_user', JSON.stringify(data.user));
+    }
     setToken(data.access_token);
     setUser(data.user);
     return data.user;
@@ -98,6 +141,7 @@ export function AuthProvider({ children }) {
       }
     }
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
     setToken(null);
     setUser(null);
   };

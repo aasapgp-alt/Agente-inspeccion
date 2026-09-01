@@ -27,13 +27,71 @@ export default function Home() {
 
 function DashboardContent() {
   const { user, token, loading, logout } = useAuth();
-  const [equipoSeleccionado, setEquipoSeleccionado] = useState(null);
-  const [empresaSeleccionada, setEmpresaSeleccionada] = useState(null);
+  
+  const [equipoSeleccionado, setEquipoSeleccionado] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dashboard_equipo_id');
+      return saved ? parseInt(saved, 10) || null : null;
+    }
+    return null;
+  });
+
+  const [empresaSeleccionada, setEmpresaSeleccionada] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_empresa_id') || null;
+    }
+    return null;
+  });
+
   const [empresas, setEmpresas] = useState([]);
-  const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState('');
-  const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL, FACTORY, HISTORY, REPORTS, SETTINGS, MINUTA
+
+  const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_ubicacion_id') || '';
+    }
+    return '';
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dashboard_active_tab') || 'MANUAL';
+    }
+    return 'MANUAL';
+  });
+
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  const handleSelectTab = (tabId) => {
+    setActiveTab(tabId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard_active_tab', tabId);
+    }
+  };
+
+  const handleSelectEquipo = (id) => {
+    setEquipoSeleccionado(id);
+    if (typeof window !== 'undefined') {
+      if (id) localStorage.setItem('dashboard_equipo_id', id.toString());
+      else localStorage.removeItem('dashboard_equipo_id');
+    }
+  };
+
+  const handleSelectEmpresa = (empId) => {
+    setEmpresaSeleccionada(empId);
+    if (typeof window !== 'undefined') {
+      if (empId) localStorage.setItem('dashboard_empresa_id', empId.toString());
+      else localStorage.removeItem('dashboard_empresa_id');
+    }
+  };
+
+  const handleSelectUbicacion = (ubiId) => {
+    setUbicacionSeleccionada(ubiId);
+    if (typeof window !== 'undefined') {
+      if (ubiId) localStorage.setItem('dashboard_ubicacion_id', ubiId.toString());
+      else localStorage.removeItem('dashboard_ubicacion_id');
+    }
+  };
 
   // Cargar lista de empresas para resolver el nombre completo
   useEffect(() => {
@@ -48,7 +106,12 @@ function DashboardContent() {
           const list = await res.json();
           setEmpresas(list);
           if (Array.isArray(list) && list.length > 0) {
-            setEmpresaSeleccionada(prev => prev || list[0].id);
+            setEmpresaSeleccionada(prev => {
+              if (prev) return prev;
+              const defaultId = list[0].id;
+              if (typeof window !== 'undefined') localStorage.setItem('dashboard_empresa_id', defaultId.toString());
+              return defaultId;
+            });
           }
         }
       } catch (err) {
@@ -127,16 +190,16 @@ function DashboardContent() {
       <OfflineBanner />
       <Sidebar
         onSelectEquipo={(id) => {
-          setEquipoSeleccionado(id);
-          if (id) setActiveTab('FACTORY');
+          handleSelectEquipo(id);
+          if (id) handleSelectTab('FACTORY');
         }}
         equipoSeleccionado={equipoSeleccionado}
-        onSelectEmpresa={setEmpresaSeleccionada}
+        onSelectEmpresa={handleSelectEmpresa}
         empresaSeleccionada={empresaSeleccionada}
         selectedUbicacionId={ubicacionSeleccionada}
-        onSelectUbicacion={setUbicacionSeleccionada}
+        onSelectUbicacion={handleSelectUbicacion}
         activeTab={activeTab}
-        onChangeTab={setActiveTab}
+        onChangeTab={handleSelectTab}
       />
 
       <div className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -150,7 +213,7 @@ function DashboardContent() {
                 <button
                   key={tab.id}
                   className={`tab${activeTab === tab.id ? ' active' : ''}`}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleSelectTab(tab.id)}
                 >
                   {tab.label}
                 </button>
