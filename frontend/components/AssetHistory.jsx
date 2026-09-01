@@ -35,7 +35,7 @@ export default function AssetHistory({ empresaId }) {
   const [editFluido, setEditFluido] = useState('');
   const [editPresion, setEditPresion] = useState(0);
   const [editTemperatura, setEditTemperatura] = useState(0);
-  const [editEstado, setEditEstado] = useState('Bueno');
+  const [editEstado, setEditEstado] = useState('BUENO');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRevertModal, setShowRevertModal] = useState(false);
   const [revertReason, setRevertReason] = useState('');
@@ -207,18 +207,41 @@ export default function AssetHistory({ empresaId }) {
     }
   };
 
+  const normalizarEstado = (val) => {
+    if (!val) return '';
+    return String(val)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .trim();
+  };
+
   // Filtered Assets
   const filteredAssets = assets.filter(asset => {
+    const searchLower = (search || '').toLowerCase().trim();
     const matchesSearch = 
-      asset.tag_codigo.toLowerCase().includes(search.toLowerCase()) ||
-      asset.descripcion.toLowerCase().includes(search.toLowerCase()) ||
-      asset.area_nombre.toLowerCase().includes(search.toLowerCase());
+      !searchLower ||
+      (asset.tag_codigo || '').toLowerCase().includes(searchLower) ||
+      (asset.descripcion || '').toLowerCase().includes(searchLower) ||
+      (asset.area_nombre || '').toLowerCase().includes(searchLower);
 
-    const matchesStatus = 
-      statusFilter === 'ALL' || 
-      asset.estado_actual.toUpperCase() === statusFilter.toUpperCase() ||
-      (statusFilter === 'CRITICO' && (asset.estado_actual.toUpperCase() === 'CRÍTICO' || asset.estado_actual.toUpperCase() === 'ROTO')) ||
-      (statusFilter === 'REGULAR' && asset.estado_actual.toUpperCase() === 'ALERTA');
+    const estadoActivo = normalizarEstado(asset.estado_actual);
+    const filtroEstado = normalizarEstado(statusFilter);
+
+    let matchesStatus = true;
+    if (statusFilter && statusFilter !== 'ALL') {
+      if (filtroEstado === 'CRITICO') {
+        matchesStatus = estadoActivo.includes('CRITICO') || estadoActivo.includes('ROTO') || estadoActivo === 'DANGER';
+      } else if (filtroEstado === 'REGULAR' || filtroEstado === 'ALERTA') {
+        matchesStatus = estadoActivo.includes('REGULAR') || estadoActivo.includes('ALERTA') || estadoActivo === 'WARNING';
+      } else if (filtroEstado === 'BUENO') {
+        matchesStatus = estadoActivo.includes('BUENO') || estadoActivo === 'GOOD';
+      } else if (filtroEstado.includes('FUERA') || filtroEstado.includes('RUTA')) {
+        matchesStatus = estadoActivo.includes('FUERA') || estadoActivo.includes('RUTA');
+      } else {
+        matchesStatus = estadoActivo === filtroEstado;
+      }
+    }
 
     const matchesMaterial =
       materialFilter === 'ALL' ||
@@ -232,7 +255,7 @@ export default function AssetHistory({ empresaId }) {
   });
 
   const getStatusBadge = (status) => {
-    const st = status ? status.toUpperCase() : '';
+    const st = normalizarEstado(status);
     let bgColor = 'rgba(100, 116, 139, 0.2)';
     let textColor = 'var(--text-secondary)';
     let border = '1px solid rgba(100, 116, 139, 0.4)';
@@ -245,7 +268,7 @@ export default function AssetHistory({ empresaId }) {
       bgColor = 'rgba(245, 158, 11, 0.15)';
       textColor = '#f59e0b';
       border = '1px solid rgba(245, 158, 11, 0.4)';
-    } else if (st.includes('ROTO') || st.includes('CRÍTICO') || st === 'CRITICO' || st === 'DANGER') {
+    } else if (st.includes('ROTO') || st.includes('CRITICO') || st === 'DANGER') {
       bgColor = 'rgba(239, 68, 68, 0.15)';
       textColor = '#ef4444';
       border = '1px solid rgba(239, 68, 68, 0.4)';
@@ -338,8 +361,8 @@ export default function AssetHistory({ empresaId }) {
             >
               <option value="ALL">TODOS LOS ESTADOS</option>
               <option value="BUENO">BUENO</option>
-              <option value="ALERTA">ALERTA / REGULAR</option>
-              <option value="CRÍTICO">CRÍTICO / ROTO</option>
+              <option value="REGULAR">REGULAR</option>
+              <option value="CRITICO">CRÍTICO</option>
               <option value="FUERA DE RUTA">FUERA DE RUTA</option>
             </select>
           </div>
