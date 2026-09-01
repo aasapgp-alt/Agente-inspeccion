@@ -217,7 +217,7 @@ def generar_imagen_mock(file_id: str = "mock_img") -> bytes:
         # Minimal 1x1 valid JPEG fallback
         return b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' \",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9'
 
-def descargar_imagen(file_id: str) -> bytes:
+def descargar_imagen(file_id: str, max_dim: Optional[int] = 1280, calidad: int = 80) -> bytes:
     if file_id.startswith("mock_"):
         return generar_imagen_mock(file_id)
 
@@ -230,22 +230,12 @@ def descargar_imagen(file_id: str) -> bytes:
         file = drive.CreateFile({'id': file_id})
         file.GetContentFile(tmp_name)
         
-        from PIL import Image, ImageOps
+        from app.utils.image_utils import optimizar_imagen_bytes
         
         with open(tmp_name, "rb") as f:
             raw_bytes = f.read()
             
-        try:
-            with Image.open(io.BytesIO(raw_bytes)) as img:
-                img = ImageOps.exif_transpose(img)
-                out_buffer = io.BytesIO()
-                img.save(out_buffer, format=img.format or "JPEG")
-                content = out_buffer.getvalue()
-        except Exception as img_err:
-            logger.warning(f"No se pudo rotar la imagen {file_id}, usando bytes originales: {img_err}")
-            content = raw_bytes
-                
-        return content
+        return optimizar_imagen_bytes(raw_bytes, max_dimension=max_dim, calidad=calidad)
     except Exception as e:
         logger.error(f"Error descargando imagen {file_id}: {e}")
         return generar_imagen_mock(file_id)

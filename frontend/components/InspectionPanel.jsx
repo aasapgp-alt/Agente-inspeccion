@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
 import { useAuth } from './AuthProvider';
 import { apiService, API_BASE_URL } from '../services/api';
 import VersionHistoryModal from './VersionHistoryModal';
@@ -77,8 +78,22 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    let fileToUpload = file;
+    try {
+      const options = {
+        maxSizeMB: 0.8,
+        maxWidthOrHeight: 1600,
+        useWebWorker: true,
+        initialQuality: 0.75,
+        fileType: 'image/jpeg'
+      };
+      fileToUpload = await imageCompression(file, options);
+    } catch (compErr) {
+      console.warn('Compresión en cliente omitida o fallida, subiendo original:', compErr);
+    }
+
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', fileToUpload, file.name || 'foto_inspeccion.jpg');
     if (currentFolderId && currentFolderId !== 'root') {
       formData.append('carpeta_id', currentFolderId);
     }
@@ -96,16 +111,18 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
       if (res.ok && data.id) {
         setItems(prev => ({
           ...prev,
-          images: [{ id: data.id, name: data.title || file.name, size: file.size }, ...prev.images]
+          images: [{ id: data.id, name: data.title || file.name, size: fileToUpload.size || file.size }, ...prev.images]
         }));
         setSelectedImages(prev => [...prev, data.id]);
-        alert('📸 Foto subida exitosamente a Google Drive y seleccionada para análisis.');
+        alert('📸 Foto optimizada y subida exitosamente a Google Drive.');
       } else {
         alert('⚠️ Error al subir la foto a Google Drive: ' + (data.detail || 'Error desconocido'));
       }
     } catch (err) {
       console.error('Error subiendo foto:', err);
       alert('Error de red al subir la foto a Google Drive.');
+    } finally {
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 

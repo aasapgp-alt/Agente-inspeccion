@@ -297,6 +297,23 @@ async def upload_file_to_drive(
         with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
             shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
+
+        # Optimizar imagen antes de subir a Google Drive si corresponde
+        es_imagen = (
+            (file.content_type and file.content_type.startswith("image/")) or
+            any((file.filename or "").lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.webp', '.bmp'))
+        )
+        if es_imagen:
+            try:
+                from app.utils.image_utils import optimizar_imagen_bytes
+                with open(tmp_path, "rb") as f_in:
+                    raw_in = f_in.read()
+                opt_bytes = optimizar_imagen_bytes(raw_in, max_dimension=1600, calidad=80)
+                if opt_bytes:
+                    with open(tmp_path, "wb") as f_out:
+                        f_out.write(opt_bytes)
+            except Exception as opt_err:
+                logger.warning(f"No se pudo optimizar la imagen antes de subir a Drive ({opt_err}). Continuando con original.")
             
         try:
             res = subir_archivo(tmp_path, file.filename, target_folder_id)
