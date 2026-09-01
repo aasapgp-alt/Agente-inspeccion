@@ -6,6 +6,18 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
   const [annotations, setAnnotations] = useState([]);
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  // Atajo de teclado para cerrar con Escape
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   // Cargar anotaciones y comentarios desde localStorage y el backend
   useEffect(() => {
@@ -112,49 +124,122 @@ export default function AnnotationModal({ image, token, equipoId, onClose, onSav
     <div style={{
       position: 'fixed',
       inset: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      backdropFilter: 'blur(8px)',
+      backgroundColor: 'rgba(0, 0, 0, 0.85)',
+      backdropFilter: 'blur(10px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1100
+      zIndex: 1100,
+      padding: isMaximized ? '0' : '1rem'
     }}>
       <div className="glass-panel" style={{
-        width: '95%',
-        maxWidth: '1100px',
-        maxHeight: '90vh',
+        width: isMaximized ? '100vw' : '95%',
+        maxWidth: isMaximized ? '100vw' : '1240px',
+        height: isMaximized ? '100vh' : '92vh',
+        maxHeight: isMaximized ? '100vh' : '92vh',
+        borderRadius: isMaximized ? '0px' : '12px',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
-        padding: '1.5rem',
+        padding: isMaximized ? '0.75rem 1rem' : '1.25rem',
         backgroundColor: 'rgba(15, 23, 42, 0.98)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.5)',
-        overflow: 'hidden'
+        border: isMaximized ? 'none' : '1px solid rgba(255, 255, 255, 0.15)',
+        boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.7)',
+        overflow: 'hidden',
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
       }}>
-        {/* Botón de cierre */}
-        <button 
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            right: '1rem',
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-secondary)',
-            fontSize: '1.5rem',
-            cursor: 'pointer',
-            zIndex: 1200
-          }}
-        >
-          &times;
-        </button>
+        {/* Cabecera con controles */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '0.75rem',
+          paddingBottom: '0.5rem',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              🎨 Anotación de Imagen: <span style={{ color: 'var(--accent-primary)', fontSize: '1.05rem', fontWeight: '500' }}>{image?.name}</span>
+            </h3>
+            <span style={{
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              color: '#38bdf8',
+              padding: '3px 9px',
+              borderRadius: '12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }} title="Esta capa contiene las marcas espaciales que guían a Gemini para enfocar su análisis técnico">
+              🤖 Capa de Guía para Gemini IA
+            </span>
+          </div>
 
-        {/* Cabecera */}
-        <div style={{ marginBottom: '1rem', paddingRight: '2rem' }}>
-          <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            🎨 Anotación de Imagen: <span style={{ color: 'var(--accent-primary)', fontSize: '1.1rem', fontWeight: 'normal' }}>{image?.name}</span>
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {/* Botón Maximizar / Restaurar */}
+            <button
+              type="button"
+              onClick={() => setIsMaximized(!isMaximized)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '6px',
+                color: 'white',
+                cursor: 'pointer',
+                padding: '5px 10px',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.2)';
+                e.currentTarget.style.borderColor = '#38bdf8';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+              }}
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar a pantalla completa"}
+            >
+              {isMaximized ? '🗗 Restaurar' : '🗖 Maximizar'}
+            </button>
+
+            {/* Botón Cerrar */}
+            <button 
+              type="button"
+              onClick={onClose}
+              style={{
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '6px',
+                color: 'var(--text-secondary)',
+                fontSize: '1.2rem',
+                cursor: 'pointer',
+                padding: '2px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.borderColor = '#ef4444';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+              }}
+              title="Cerrar ventana (Esc)"
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
         {loading ? (

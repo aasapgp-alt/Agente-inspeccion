@@ -363,19 +363,19 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
 
   // Definición de las herramientas de dibujo
   const tools = {
-    rect: { type: 'RECTANGLE', label: 'Rectángulo', icon: '▭', desc: 'Resaltar un área' },
-    circle: { type: 'CIRCLE', label: 'Círculo', icon: '◯', desc: 'Resaltar un punto' },
-    line: { type: 'LINE', label: 'Línea', icon: '╱', desc: 'Dibujar línea recta' },
-    arrow: { type: 'ARROW', label: 'Flecha', icon: '↗', desc: 'Señalar dirección' },
-    text: { type: 'TEXT', label: 'Texto', icon: 'T', desc: 'Agregar nota de texto' },
-    freehand: { type: 'FREEHAND', label: 'Lápiz', icon: '✎', desc: 'Dibujo libre' }
+    rect: { type: 'RECTANGLE', label: 'Encuadre', icon: '🔲', desc: 'Encuadrar elemento, cañería o componente' },
+    circle: { type: 'CIRCLE', label: 'Punto / Foco', icon: '⭕', desc: 'Marcar punto de fuga, poro o fisura' },
+    arrow: { type: 'ARROW', label: 'Flecha', icon: '↗️', desc: 'Señalar defecto o detalle crítico' },
+    freehand: { type: 'FREEHAND', label: 'Lápiz', icon: '✏️', desc: 'Delineado libre de forma irregular' },
+    text: { type: 'TEXT', label: 'Texto', icon: '🔤', desc: 'Etiqueta o nombre directo' },
+    line: { type: 'LINE', label: 'Línea', icon: '📏', desc: 'Tramo recto o cota' }
   };
 
   const colors = [
-    { value: '#ef4444', name: 'Rojo' },
-    { value: '#10b981', name: 'Verde' },
-    { value: '#3b82f6', name: 'Azul' },
-    { value: '#eab308', name: 'Amarillo' },
+    { value: '#ef4444', name: 'Rojo (Crítico)' },
+    { value: '#10b981', name: 'Verde (Conforme)' },
+    { value: '#3b82f6', name: 'Azul (Referencia)' },
+    { value: '#eab308', name: 'Amarillo (Atención)' },
     { value: '#ec4899', name: 'Rosa' },
     { value: '#ffffff', name: 'Blanco' }
   ];
@@ -438,7 +438,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
   };
 
   const handleClearAll = () => {
-    if (window.confirm("¿Estás seguro de que deseas eliminar todas las anotaciones?")) {
+    if (window.confirm("¿Estás seguro de que deseas eliminar todas las anotaciones de esta foto?")) {
       setAnnotations([]);
     }
   };
@@ -451,7 +451,11 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
 
   // Zoom handlers
   const adjustZoom = (amount) => {
-    setZoom(prev => Math.max(1, Math.min(3, prev + amount)));
+    setZoom(prev => Math.max(1, Math.min(3, Math.round((prev + amount) * 10) / 10)));
+  };
+
+  const resetZoom = () => {
+    setZoom(1);
   };
 
   // Renderizador personalizado de las formas vectoriales en SVG
@@ -521,28 +525,19 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
         const y1 = geometry.y1 !== undefined ? geometry.y1 : (geometry.y !== undefined ? geometry.y : 0);
         const x2 = geometry.x2 !== undefined ? geometry.x2 : x1;
         const y2 = geometry.y2 !== undefined ? geometry.y2 : y1;
-        const color = geometry.color || '#ef4444';
-        const strokeWidth = (geometry.lineWidth || 2) / zoom;
-        const markerId = `arrowhead-${data?.id || 'active'}`;
+        const arrowId = `arrowhead-${data?.id || 'active'}-${color.replace('#', '')}`;
         return (
-          <svg
-            key={data?.id || 'active'}
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}
-          >
+          <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
             <defs>
               <marker
-                id={markerId}
-                viewBox="0 0 10 10"
-                refX="9"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
+                id={arrowId}
+                markerWidth="8"
+                markerHeight="8"
+                refX="7"
+                refY="4"
                 orient="auto"
-                markerUnits="strokeWidth"
               >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />
+                <polygon points="0 0, 8 4, 0 8" fill={color} />
               </marker>
             </defs>
             <line
@@ -551,51 +546,52 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
               x2={x2}
               y2={y2}
               stroke={color}
-              strokeWidth={strokeWidth}
+              strokeWidth={strokeWidth / zoom}
+              strokeDasharray={strokeDashArray}
+              markerEnd={`url(#${arrowId})`}
               vectorEffect="non-scaling-stroke"
-              markerEnd={`url(#${markerId})`}
             />
           </svg>
         );
       }
-      case 'TEXT':
+      case 'TEXT': {
         return (
-          <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
-            <foreignObject
-              x={geometry.x}
-              y={geometry.y}
-              width={geometry.width || 0}
-              height={geometry.height || 0}
-            >
-              <div style={{
-                width: '100%',
-                height: '100%',
-                color: color,
-                fontSize: `${12 / zoom}px`,
-                fontWeight: 'bold',
-                wordBreak: 'break-word',
-                padding: `${4 / zoom}px`,
-                border: `${1 / zoom}px dashed ${color}`,
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                borderRadius: `${4 / zoom}px`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                boxSizing: 'border-box'
-              }}>
-                {data && data.text ? data.text : 'Escribe...'}
-              </div>
-            </foreignObject>
-          </svg>
+          <div
+            key={data?.id || 'active'}
+            style={{
+              position: 'absolute',
+              left: `${geometry.x}%`,
+              top: `${geometry.y}%`,
+              width: `${geometry.width}%`,
+              height: `${geometry.height}%`,
+              border: active ? `1px dashed ${color}` : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              zIndex: 2
+            }}
+          >
+            <span style={{
+              color: color,
+              backgroundColor: 'rgba(0,0,0,0.75)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontSize: `${Math.max(10, (geometry.fontSize || 13) / zoom)}px`,
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap',
+              border: `1px solid ${color}`,
+              boxShadow: '0 2px 4px rgba(0,0,0,0.5)'
+            }}>
+              {data?.text || 'Texto'}
+            </span>
+          </div>
         );
+      }
       case 'FREEHAND': {
         const points = geometry.points || [];
-        if (points.length === 0) return null;
-        const pathData = points.reduce((acc, [px, py], idx) => {
-          return acc + (idx === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
-        }, '');
-
+        if (points.length < 2) return null;
+        const pathData = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
         return (
           <svg key={data?.id || 'active'} viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
             <path
@@ -616,31 +612,36 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
     }
   };
 
-  // Editor flotante personalizado
+  // Editor flotante interactivo con sugerencias rápidas de inspección
+  const quickIndustrialTags = ['Cañería', 'Brida / Bulón', 'Fisura / Daño', 'Soporte / Base', 'Válvula', 'Corrosión', 'Fuga / Goteo'];
+
   const renderEditor = ({ annotation: activeAnn, onChange: onActChange, onSubmit: onActSubmit }) => {
     const { geometry } = activeAnn;
     if (!geometry) return null;
 
     return (
       <div style={{
-        background: 'rgba(15, 23, 42, 0.96)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        borderRadius: '6px',
-        padding: '8px',
-        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+        background: 'rgba(15, 23, 42, 0.98)',
+        border: '1px solid rgba(56, 189, 248, 0.4)',
+        borderRadius: '8px',
+        padding: '10px',
+        boxShadow: '0 12px 25px -4px rgba(0, 0, 0, 0.7)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '6px',
-        minWidth: '180px',
-        fontFamily: 'inherit'
+        gap: '8px',
+        minWidth: '220px',
+        maxWidth: '260px',
+        fontFamily: 'inherit',
+        zIndex: 99
       }}>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-          {geometry.type === 'TEXT' ? '📝 Texto a mostrar:' : '✏️ Nota de anotación:'}
+        <div style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {geometry.type === 'TEXT' ? '🔤 Texto de la Etiqueta:' : '🎯 ¿Qué elemento es?'}
         </div>
+
         <input
           type="text"
           value={(activeAnn.data && activeAnn.data.text) || ''}
-          placeholder={geometry.type === 'TEXT' ? 'Ej. Brida 2' : 'Ej. Óxido leve'}
+          placeholder="Escribe o selecciona abajo..."
           onChange={e => onActChange({
             ...activeAnn,
             data: {
@@ -655,32 +656,73 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
           }}
           autoFocus
           style={{
-            background: 'rgba(0, 0, 0, 0.3)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '4px',
+            background: 'rgba(0, 0, 0, 0.4)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '6px',
             color: 'white',
-            padding: '4px 6px',
-            fontSize: '0.8rem',
+            padding: '6px 8px',
+            fontSize: '0.85rem',
             outline: 'none',
             width: '100%',
             boxSizing: 'border-box'
           }}
         />
-        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+
+        {/* Accesos rápidos de 1 clic */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {quickIndustrialTags.map(tag => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => {
+                onActChange({
+                  ...activeAnn,
+                  data: {
+                    ...activeAnn.data,
+                    text: tag
+                  }
+                });
+              }}
+              style={{
+                fontSize: '0.68rem',
+                padding: '2px 6px',
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                borderRadius: '4px',
+                color: '#93c5fd',
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)';
+                e.currentTarget.style.color = '#93c5fd';
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
           <button
             onClick={onActSubmit}
             style={{
-              padding: '3px 8px',
+              padding: '5px 12px',
               background: 'var(--accent-primary)',
               color: '#000',
               border: 'none',
-              borderRadius: '4px',
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              cursor: 'pointer'
+              borderRadius: '5px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0, 200, 215, 0.3)'
             }}
           >
-            Aceptar
+            ✓ Aceptar
           </button>
         </div>
       </div>
@@ -689,10 +731,10 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
 
   return (
     <div className={styles.annotatorContainer}>
-      {/* Barra de herramientas lateral */}
+      {/* Barra de herramientas lateral izquierda */}
       <div className={styles.toolbar}>
         <div className={styles.toolSection}>
-          <div className={styles.sectionTitle}>Formas</div>
+          <div className={styles.sectionTitle}>Herramientas de Guía</div>
           <div className={styles.toolGrid}>
             {Object.entries(tools).map(([key, t]) => (
               <button
@@ -712,7 +754,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
 
         {/* Paleta de colores */}
         <div className={styles.toolSection}>
-          <div className={styles.sectionTitle}>Color</div>
+          <div className={styles.sectionTitle}>Color de Marca</div>
           <div className={styles.colorPalette}>
             {colors.map(c => (
               <button
@@ -723,7 +765,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
                 title={c.name}
               />
             ))}
-            <div className={styles.customColorContainer} title="Personalizado">
+            <div className={styles.customColorContainer} title="Color personalizado">
               <input
                 type="color"
                 value={customColor}
@@ -758,9 +800,20 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
 
         {/* Zoom */}
         <div className={styles.toolSection}>
-          <div className={styles.sectionTitle}>Zoom ({Math.round(zoom * 100)}%)</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className={styles.sectionTitle}>Zoom ({Math.round(zoom * 100)}%)</div>
+            {zoom !== 1 && (
+              <button 
+                onClick={resetZoom} 
+                style={{ background: 'none', border: 'none', color: '#38bdf8', fontSize: '0.68rem', cursor: 'pointer', padding: 0 }}
+                title="Restablecer al 100%"
+              >
+                Reset
+              </button>
+            )}
+          </div>
           <div className={styles.zoomControls}>
-            <button onClick={() => adjustZoom(-0.1)} disabled={zoom <= 1} className={styles.zoomBtn}>➖</button>
+            <button onClick={() => adjustZoom(-0.2)} disabled={zoom <= 1} className={styles.zoomBtn} title="Alejar">➖</button>
             <input
               type="range"
               min="1"
@@ -770,7 +823,7 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
               onChange={e => setZoom(parseFloat(e.target.value))}
               className={styles.zoomSlider}
             />
-            <button onClick={() => adjustZoom(0.1)} disabled={zoom >= 3} className={styles.zoomBtn}>➕</button>
+            <button onClick={() => adjustZoom(0.2)} disabled={zoom >= 3} className={styles.zoomBtn} title="Acercar">➕</button>
           </div>
         </div>
 
@@ -779,10 +832,10 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
         {/* Acciones rápidas */}
         <div className={styles.actionsRow}>
           <button onClick={handleUndo} disabled={annotations.length === 0} className={styles.actionBtn} title="Deshacer último trazo">
-            Deshacer
+            ↩ Deshacer
           </button>
-          <button onClick={handleClearAll} disabled={annotations.length === 0} className={`${styles.actionBtn} ${styles.dangerBtn}`} title="Limpiar todo">
-            Limpiar
+          <button onClick={handleClearAll} disabled={annotations.length === 0} className={`${styles.actionBtn} ${styles.dangerBtn}`} title="Eliminar todas las marcas">
+            🗑 Limpiar
           </button>
         </div>
       </div>
@@ -829,13 +882,22 @@ export default function ImageAnnotator({ imageUrl, initialAnnotations, initialCo
 
       {/* Barra lateral de anotaciones y guardado */}
       <div className={styles.sidebar}>
-        <div style={{ padding: '0.8rem', backgroundColor: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '6px', fontSize: '0.75rem', color: '#93c5fd', lineHeight: '1.4' }}>
-          <strong>Guía de Dibujo:</strong>
-          <ul style={{ margin: '0.3rem 0 0 1rem', padding: 0 }}>
-            <li>Elige una herramienta y haz clic/arrastra sobre la imagen.</li>
-            <li>Escribe una nota opcional en el globo emergente y presiona Enter.</li>
-            <li>Para texto, arrastra un cuadro y escribe el texto obligatorio.</li>
-          </ul>
+        {/* Banner explicativo del Enfoque IA */}
+        <div style={{
+          padding: '0.8rem',
+          backgroundColor: 'rgba(56, 189, 248, 0.08)',
+          border: '1px solid rgba(56, 189, 248, 0.25)',
+          borderRadius: '8px',
+          fontSize: '0.75rem',
+          color: '#bae6fd',
+          lineHeight: '1.4'
+        }}>
+          <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', color: '#38bdf8' }}>
+            <span>🎯</span> Capa de Enfoque IA
+          </div>
+          <div>
+            Las marcas delimitan las cañerías, bridas o zonas específicas que Gemini evaluará con prioridad en el diagnóstico.
+          </div>
         </div>
 
         {/* Sección de Comentario de la Imagen */}
