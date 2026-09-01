@@ -93,3 +93,8 @@ mycreds.txt
 *.key
 *.pem
 
+# Archivos de empaquetado y backups
+*.tar.gz
+*.zip
+*.bak
+
