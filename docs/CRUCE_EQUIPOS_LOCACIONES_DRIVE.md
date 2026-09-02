@@ -108,7 +108,7 @@ Las relaciones no encontradas en el cruce automático quedan marcadas con **`?`*
 | `290` | `188` | Cañerías de Alimentación y Retorno Reactores de Clorato (KYNAR/FRP) | MIXTO. ACR/ PFA. KYNAR / FRP y FRP/CPVC | `53- Líneas aliment. y retorno licor de clorato Kynar- FRP` | `1OACKKHdrHyjigjdfJ_iq6qcWuj3YTZYB` | ✅ Vinculado |
 | `291` | `189` | Cañería de salida Scrubber Hidrógeno hacia Pote de Sello | FRP | `44-Cañerías asociadas Saltcake Slurry 621-083 Salida de gases.` | `1PikOdBoaWJHCZTSMR2g-206Fr_RsTfi0` | ✅ Vinculado |
 | `292` | `190` | Cañería de salida gases Pote de Sello hidrógeno 611-857 hacia chimenea impulsión V611-503 | FRP | `55- Línea salida gases pote de sello hidrogeno hacia chimenea V611-503` | `1O6_WcD7--8PsoWkDlvB71c57GOcyc1_y` | ✅ Vinculado |
-| `293` | `191` | Línea de venteo V611-503 | PVC/FRP | `55- Línea salida gases pote de sello hidrogeno hacia chimenea V611-503` | `1O6_WcD7--8PsoWkDlvB71c57GOcyc1_y` | ✅ Vinculado |
+| `293` | `191` | Línea de venteo V611-503 | PVC/FRP | `56- Línea de venteo V 611-503` | `1Ohw7mHy3kC_0hT0xb8FCsPhK2H9udQv9` | ✅ Vinculado |
 | `294` | `192` | Pote de Sello hidrógeno | PVC/FRP | `57- Pote se sello hidrogeno` | `1OalJul-Pzi3LgYw2dxZvXdFr9q5itYe-` | ✅ Vinculado |
 | `295` | `193` | Pta. Ionizadora. Incluyen el manifold y las asociadas a este. | MIXTA PP/PVC - FRP/PVC | `58- Planta ionizadora. Incluye manifold y las lineas asociadas a este` | `1OTU-t7d8gckNmBOuSFqE79Or73DgYdix` | ✅ Vinculado |
 | `296` | `194` | Impulsión Bba 611-472 a Tk 804 | FRP | `59- Línea impulsión Bba. 611-472 a TK 804` | `1PAQsf2wH2T4AcVWbcmS-qMUY5GN8o4qS` | ✅ Vinculado |
