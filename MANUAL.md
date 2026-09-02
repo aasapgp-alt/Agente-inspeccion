@@ -137,18 +137,80 @@ El sistema cuenta con un control de accesos estricto basado en roles para asegur
 
 ---
 
-## 📱 3. Guía Operativa: Aplicación Móvil PWA (Modo Campo)
+---
 
-Diseñada para uso rudo en planta: alto contraste para visión bajo sol, elementos de 68px aptos para guantes y 100% operativa sin conectividad.
+## 🤝 3. Procedimiento Operativo Estándar: Mesa Técnica de Puesta en Común y Validación de Activos
 
-### 3.1 Acceso e Instalación
-1. Abra el navegador en el dispositivo móvil e ingrese a:
-   `http://<IP_SERVIDOR>:3000/campo`
-2. Presione el botón superior **📲 INSTALAR APP DE CAMPO** para instalar la PWA en la pantalla de inicio del dispositivo.
+Este procedimiento establece la dinámica estandarizada para llevar a cabo la sesión de revisión técnica, consenso de criticidades y validación final de los activos entre el equipo de inspección de **Sulvy** y los líderes de mantenimiento/operaciones del cliente (**Arauco** / **Minera del Altiplano**).
+
+### 3.1 Roles y Responsabilidades
+* **Facilitador / Especialista Sulvy (al mando de la Consola):** Proyecta la pantalla, guía el recorrido secuencial por los activos, exhibe las fotografías de Drive con zoom/pantalla completa y edita en caliente los diagnósticos consensuados.
+* **Líder de Mantenimiento / Confiabilidad del Cliente:** Valida la severidad de las patologías encontradas, aprueba los diagnósticos y define las acciones/fechas de intervención en planta.
+* **Inspector de Terreno (opcional):** Aporta contexto sobre condiciones particulares de accesibilidad o comportamiento observadas en campo.
 
 ---
 
-### 3.2 Flujo de Trabajo en Planta
+### 3.2 Dinámica de la Sesión en 5 Pasos
+
+```
+[1. Proyección Minuta] ➔ [2. Triaje de Prioridades] ➔ [3. Evidencias & Debate] ➔ [4. Edición en Caliente] ➔ [5. Emisión de Libro]
+```
+
+#### Paso 1: Apertura y Visión Global (Minuta Resumen)
+1. Conectar la computadora al proyector de sala o compartir pantalla en Teams/Google Meet.
+2. En la consola web, ingresar a la pestaña **`📝 Minuta Resumen PGP`**.
+3. Seleccionar la **Empresa Activa** (*Arauco* o *Minera del Altiplano S.A.*).
+4. **Presentar los KPIs ejecutivos:**
+   - Total de equipos relevados en campaña vs. planificados.
+   - Porcentaje de avance de la campaña.
+   - Cantidad de activos en **Estado Crítico / Nivel 1** y en **Servicio Condicional**.
+
+#### Paso 2: Triaje y Priorización por Criticidad
+Para optimizar el tiempo de los ingenieros de planta:
+1. En el filtro de criticidad de la Minuta, seleccionar primero **`CRÍTICO`**.
+2. Revisar uno a uno los equipos con anomalías severas (fugas activas, fisuras estructurales, pernos cortados, corrosión profunda).
+3. Luego, cambiar el filtro a **`REGULAR`** para analizar desgastes moderados o recomendaciones de seguimiento preventivo.
+4. Los equipos en estado **`BUENO`** se validan en bloque al final de la sesión para agilizar la reunión.
+
+#### Paso 3: Análisis del Activo y Evidencia Fotográfica
+1. Al hacer clic sobre cualquier equipo en la tabla de la Minuta, el sistema redirige automáticamente a la ficha del activo en **`Carga Manual`** o **`Inspección IA`**.
+2. **Revisión de Evidencias:**
+   - Explorar las fotografías de alta resolución alojadas en Google Drive.
+   - **Atajo visual:** Hacer *doble clic* sobre cualquier imagen para proyectarla en pantalla completa con zoom y contrastar el detalle de la anomalía.
+3. **Contraste con Histórico 2024:**
+   - Verificar la evolución del activo contra la campaña anterior (si la anomalía es progresiva o estable).
+   - *Uso de Copiloto IA:* Si surgen dudas normativas o de compatibilidad de materiales (FRP, PP, Acero), presione el botón flotante **`🤖 Copiloto IA`** para consultar especificaciones técnicas en el momento.
+
+#### Paso 4: Ajuste y Edición en Caliente (Consenso en Base de Datos)
+1. **Consenso:** El especialista de Sulvy y el cliente acuerdan la redacción final de:
+   - **Estado Definitivo:** `BUENO`, `REGULAR`, `CRITICO` o `FUERA DE RUTA`.
+   - **Diagnóstico Técnico:** Condición física y estructural del equipo.
+   - **Acciones PGP Acordadas:** Acciones inmediatas o programadas (ej. *"Programar recambio de bridas en parada de planta de Noviembre 2026"*).
+   - **Recomendaciones Normativas:** Tareas estructuradas en las 7 categorías normativas.
+2. **Edición:** Modificar los textos directamente en los campos del formulario.
+3. **Persistencia:** Presionar **`💾 Guardar Inspección`**.
+   - El equipo queda formalmente **auditado, validado y guardado en la Base de Datos central**.
+
+#### Paso 5: Cierre de Sesión y Emisión Oficial
+1. Regresar a la pestaña **`Minuta Resumen`** y verificar que la matriz no tenga equipos pendientes.
+2. Ingresar a la pestaña **`📄 Reportes`**.
+3. Seleccionar **Generar Libro Completo / Dossier**:
+   - El sistema compilará automáticamente todas las fichas aprobadas, fotografías etiquetadas, matriz de criticidad, portada institucional de Sulvy y firmas autorizadas en un único archivo Word y PDF listo para entrega formal.
+
+---
+
+## 📱 4. Guía Operativa: Aplicación Móvil PWA (Modo Campo)
+
+Diseñada para uso rudo en planta: alto contraste para visión bajo sol, elementos de 68px aptos para guantes y 100% operativa sin conectividad.
+
+### 4.1 Acceso e Instalación
+1. Abra el navegador en el dispositivo móvil e ingrese a:
+   `https://<DOMINIO>/campo` (o `/login`).
+2. Presione **"Instalar aplicación"** o **"Agregar a la pantalla principal"** para instalar la PWA como app nativa.
+
+---
+
+### 4.2 Flujo de Trabajo en Planta
 
 1. **Selección de Tarea:**
    - Al iniciar sesión, la pantalla inicial mostrará la sección **Mi Itinerario de Hoy** con los equipos asignados ordenados por prioridad de recorrido.
@@ -168,14 +230,14 @@ Diseñada para uso rudo en planta: alto contraste para visión bajo sol, element
 
 ---
 
-### 3.3 Sincronización y Recuperación de Red
+### 4.3 Sincronización y Recuperación de Red
 - **Sincronización Automática:** Cuando el dispositivo detecte conexión WiFi o datos celulares, la barra de estado superior indicará `En Línea` y comenzará la subida en lote (`POST /api/inspecciones/batch`).
 - **Idempotencia Garantizada:** Cada inspección utiliza un `client_uuid` criptográfico único, asegurando que ante reconexiones intermitentes ninguna inspección se duplique ni se pierda.
 - **Sincronización Forzada:** Si desea subir los cambios de inmediato, presione el botón **🔄 Sincronizar Ahora** en el panel de estado.
 
 ---
 
-## 🔧 4. Resolución de Problemas Frecuentes
+## 🔧 5. Resolución de Problemas Frecuentes
 
 | Síntoma | Causa Probable | Solución |
 |---|---|---|
@@ -186,6 +248,7 @@ Diseñada para uso rudo en planta: alto contraste para visión bajo sol, element
 
 ---
 
-## 📞 5. Soporte y Contacto Técnico
+## 📞 6. Soporte y Contacto Técnico
 
-Para soporte técnico, reporte de fallas o solicitud de nuevas funcionalidades, contacte al equipo de soporte de ingeniería técnica o al administrador del sistema.
+Para soporte técnico, reporte de fallas o solicitud de nuevas funcionalidades, contacte al equipo de soporte de ingeniería técnica de Sulvy o al administrador del sistema.
+
