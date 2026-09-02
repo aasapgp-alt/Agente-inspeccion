@@ -15,6 +15,7 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
 
   const [equipos, setEquipos] = useState([]);
   const [filtro, setFiltro] = useState('TODOS');
+  const [busquedaEquipo, setBusquedaEquipo] = useState('');
   
   const [theme, setTheme] = useState('dark');
 
@@ -88,6 +89,8 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
     setLibroResult(null);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGenerandoLibro(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBusquedaEquipo('');
   }, [ubicacionSeleccionada]);
 
   const handleCancelarLibro = async () => {
@@ -468,11 +471,24 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
     const estadoNorm = normalizeText(e.estado_actual);
     const isPending = estadoNorm === '' || estadoNorm === 'SIN DATOS' || estadoNorm === 'PENDIENTE';
     
-    if (filtro === 'TODOS') return true;
-    if (filtro === 'PENDIENTE') return isPending;
+    // 1. Filtro por Estado
+    let coincideEstado = true;
+    if (filtro === 'PENDIENTE') coincideEstado = isPending;
+    else if (filtro !== 'TODOS') coincideEstado = (estadoNorm === normalizeText(filtro));
     
-    // Comparar otros estados (Bueno, Regular, Critico) con normalización
-    return estadoNorm === normalizeText(filtro);
+    if (!coincideEstado) return false;
+
+    // 2. Filtro por Búsqueda de Texto (Nombre, Código, Tag, Material)
+    if (busquedaEquipo.trim()) {
+      const q = normalizeText(busquedaEquipo);
+      const nombre = normalizeText(e.nombre);
+      const codigo = normalizeText(e.codigo);
+      const tag = normalizeText(e.tag);
+      const material = normalizeText(e.material);
+      return nombre.includes(q) || codigo.includes(q) || tag.includes(q) || material.includes(q);
+    }
+
+    return true;
   });
 
   return (
@@ -650,6 +666,66 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
           </select>
         </div>
 
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>🔍 Buscar equipo:</label>
+            {busquedaEquipo.trim() && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                {equiposFiltrados.length} {equiposFiltrados.length === 1 ? 'resultado' : 'resultados'}
+              </span>
+            )}
+          </div>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <span style={{ position: 'absolute', left: '10px', color: 'var(--text-secondary)', fontSize: '0.8rem', pointerEvents: 'none', opacity: 0.7 }}>
+              🔎
+            </span>
+            <input 
+              type="text"
+              placeholder="Ej: TK-611, 184..."
+              value={busquedaEquipo}
+              onChange={(e) => setBusquedaEquipo(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setBusquedaEquipo('');
+              }}
+              style={{
+                width: '100%',
+                paddingLeft: '32px',
+                paddingRight: busquedaEquipo ? '30px' : '10px',
+                paddingTop: '8px',
+                paddingBottom: '8px',
+                fontSize: '0.85rem',
+                borderRadius: '6px'
+              }}
+            />
+            {busquedaEquipo && (
+              <button
+                type="button"
+                onClick={() => setBusquedaEquipo('')}
+                title="Limpiar búsqueda"
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  fontSize: '0.7rem',
+                  lineHeight: 1,
+                  padding: 0
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
         <div style={{ marginBottom: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Equipo a inspeccionar:</label>
@@ -662,6 +738,9 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
             onChange={(e) => onSelectEquipo(e.target.value)}
           >
             <option value="">-- Seleccionar --</option>
+            {equiposFiltrados.length === 0 && busquedaEquipo.trim() && (
+              <option value="" disabled>-- Sin resultados coincidentes --</option>
+            )}
             {equiposFiltrados.map(e => (
               <option key={e.id} value={e.id}>{e.nombre} ({e.codigo})</option>
             ))}
