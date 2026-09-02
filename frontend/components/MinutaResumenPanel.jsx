@@ -50,6 +50,8 @@ export default function MinutaResumenPanel({ empresaIdInicial = null, onSelectEq
   useEffect(() => {
     if (empresaIdInicial !== undefined && empresaIdInicial !== null && empresaIdInicial !== '') {
       setEmpresaId(empresaIdInicial);
+      setAreaFiltro('');
+      setCampania('');
     }
   }, [empresaIdInicial]);
 
@@ -316,7 +318,11 @@ export default function MinutaResumenPanel({ empresaIdInicial = null, onSelectEq
           <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Empresa</label>
           <select
             value={empresaId}
-            onChange={(e) => setEmpresaId(e.target.value)}
+            onChange={(e) => {
+              setEmpresaId(e.target.value);
+              setAreaFiltro('');
+              setCampania('');
+            }}
             style={{
               backgroundColor: 'rgba(0,0,0,0.3)',
               border: '1px solid var(--border-color)',

@@ -193,8 +193,8 @@ def get_minuta_resumen(
         WHERE (e.activo = 1 OR e.activo IS NULL)
     """
     if empresa_id:
-        query += " AND (u.empresa_id = ? OR emp.id = ? OR emp.nombre = ?)"
-        params.extend([empresa_id, empresa_id, 'Arauco'])
+        query += " AND (u.empresa_id = ? OR emp.id = ?)"
+        params.extend([empresa_id, empresa_id])
 
     if ubicacion_id:
         query += " AND u.id = ?"
