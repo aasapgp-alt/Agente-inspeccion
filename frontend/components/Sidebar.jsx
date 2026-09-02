@@ -467,29 +467,58 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
   };
 
-  const equiposFiltrados = equipos.filter(e => {
-    const estadoNorm = normalizeText(e.estado_actual);
-    const isPending = estadoNorm === '' || estadoNorm === 'SIN DATOS' || estadoNorm === 'PENDIENTE';
-    
-    // 1. Filtro por Estado
-    let coincideEstado = true;
-    if (filtro === 'PENDIENTE') coincideEstado = isPending;
-    else if (filtro !== 'TODOS') coincideEstado = (estadoNorm === normalizeText(filtro));
-    
-    if (!coincideEstado) return false;
-
-    // 2. Filtro por Búsqueda de Texto (Nombre, Código, Tag, Material)
-    if (busquedaEquipo.trim()) {
-      const q = normalizeText(busquedaEquipo);
-      const nombre = normalizeText(e.nombre);
-      const codigo = normalizeText(e.codigo);
-      const tag = normalizeText(e.tag);
-      const material = normalizeText(e.material);
-      return nombre.includes(q) || codigo.includes(q) || tag.includes(q) || material.includes(q);
+  const getDriveFolderInfo = (equipo) => {
+    if (!equipo) return { order: 999999, prefix: '' };
+    if (equipo.drive_folder_nombre) {
+      const match = equipo.drive_folder_nombre.match(/^(\d+[a-zA-Z]*)[-\s]/);
+      if (match) {
+        const numPart = parseInt(match[1], 10);
+        return {
+          order: isNaN(numPart) ? 999999 : numPart,
+          prefix: `[${match[1]}] `
+        };
+      }
     }
+    const codeNum = parseInt(equipo.codigo, 10);
+    return {
+      order: isNaN(codeNum) ? 999999 : codeNum,
+      prefix: ''
+    };
+  };
 
-    return true;
-  });
+  const equiposFiltrados = equipos
+    .filter(e => {
+      const estadoNorm = normalizeText(e.estado_actual);
+      const isPending = estadoNorm === '' || estadoNorm === 'SIN DATOS' || estadoNorm === 'PENDIENTE';
+      
+      // 1. Filtro por Estado
+      let coincideEstado = true;
+      if (filtro === 'PENDIENTE') coincideEstado = isPending;
+      else if (filtro !== 'TODOS') coincideEstado = (estadoNorm === normalizeText(filtro));
+      
+      if (!coincideEstado) return false;
+
+      // 2. Filtro por Búsqueda de Texto (Nombre, Código, Tag, Material, Carpeta Drive)
+      if (busquedaEquipo.trim()) {
+        const q = normalizeText(busquedaEquipo);
+        const nombre = normalizeText(e.nombre);
+        const codigo = normalizeText(e.codigo);
+        const tag = normalizeText(e.tag);
+        const material = normalizeText(e.material);
+        const driveFolder = normalizeText(e.drive_folder_nombre);
+        return nombre.includes(q) || codigo.includes(q) || tag.includes(q) || material.includes(q) || driveFolder.includes(q);
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const infoA = getDriveFolderInfo(a);
+      const infoB = getDriveFolderInfo(b);
+      if (infoA.order !== infoB.order) {
+        return infoA.order - infoB.order;
+      }
+      return (a.nombre || '').localeCompare(b.nombre || '');
+    });
 
   return (
     <div className="sidebar glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -741,9 +770,14 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
             {equiposFiltrados.length === 0 && busquedaEquipo.trim() && (
               <option value="" disabled>-- Sin resultados coincidentes --</option>
             )}
-            {equiposFiltrados.map(e => (
-              <option key={e.id} value={e.id}>{e.nombre} ({e.codigo})</option>
-            ))}
+            {equiposFiltrados.map(e => {
+              const { prefix } = getDriveFolderInfo(e);
+              return (
+                <option key={e.id} value={e.id}>
+                  {prefix}{e.nombre} ({e.codigo})
+                </option>
+              );
+            })}
           </select>
         </div>
 

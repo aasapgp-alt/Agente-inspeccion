@@ -21,10 +21,11 @@ def obtener_lista_equipos_db(empresa: str = None, area: str = None, anio: int = 
     try:
         with get_db_connection() as conn:
             query = """
-            SELECT e.*, u.nombre as area, emp.nombre as empresa, e.codigo as numero 
+            SELECT e.*, u.nombre as area, emp.nombre as empresa, e.codigo as numero, dfc.nombre as drive_folder_nombre 
             FROM equipos e
             LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
             LEFT JOIN empresas emp ON u.empresa_id = emp.id
+            LEFT JOIN drive_folders_cache dfc ON e.drive_folder_id = dfc.drive_id
             WHERE 1=1
             """
             params = []

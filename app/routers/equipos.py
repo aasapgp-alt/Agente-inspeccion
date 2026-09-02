@@ -37,7 +37,12 @@ def list_equipos(
     db: sqlite3.Connection = Depends(get_db)
 ):
     if ubicacion_id:
-        cursor = db.execute("SELECT * FROM equipos WHERE activo = 1 AND ubicacion_id = ?", (ubicacion_id,))
+        cursor = db.execute("""
+            SELECT e.*, dfc.nombre as drive_folder_nombre 
+            FROM equipos e 
+            LEFT JOIN drive_folders_cache dfc ON e.drive_folder_id = dfc.drive_id 
+            WHERE e.activo = 1 AND e.ubicacion_id = ?
+        """, (ubicacion_id,))
         equipos = [dict(row) for row in cursor.fetchall()]
         return {"equipos": equipos}
     
