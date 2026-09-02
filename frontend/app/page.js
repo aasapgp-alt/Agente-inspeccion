@@ -61,6 +61,7 @@ function DashboardContent() {
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const handleSelectTab = (tabId) => {
     setActiveTab(tabId);
@@ -192,6 +193,7 @@ function DashboardContent() {
         onSelectEquipo={(id) => {
           handleSelectEquipo(id);
           if (id) handleSelectTab('FACTORY');
+          setIsMobileSidebarOpen(false);
         }}
         equipoSeleccionado={equipoSeleccionado}
         onSelectEmpresa={handleSelectEmpresa}
@@ -199,26 +201,48 @@ function DashboardContent() {
         selectedUbicacionId={ubicacionSeleccionada}
         onSelectUbicacion={handleSelectUbicacion}
         activeTab={activeTab}
-        onChangeTab={handleSelectTab}
+        onChangeTab={(tab) => {
+          handleSelectTab(tab);
+          setIsMobileSidebarOpen(false);
+        }}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
+
+      {isMobileSidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
 
       <div className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
 
         {/* Cabecera global: campaña, pestañas, empresa seleccionada y perfil */}
         <header className="app-header">
-          <div>
-            <div className="eyebrow">Campaña PGP 2026 · En curso</div>
-            <nav className="tab-nav">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`tab${activeTab === tab.id ? ' active' : ''}`}
-                  onClick={() => handleSelectTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="mobile-sidebar-toggle-btn"
+              onClick={() => setIsMobileSidebarOpen(prev => !prev)}
+              title="Abrir menú de activos y empresa"
+            >
+              ☰ <span>Activos</span>
+            </button>
+            <div>
+              <div className="eyebrow">Campaña PGP 2026 · En curso</div>
+              <nav className="tab-nav">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`tab${activeTab === tab.id ? ' active' : ''}`}
+                    onClick={() => handleSelectTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
           </div>
 
           {/* Componente de Avance de Ruta en Vivo */}
@@ -378,7 +402,12 @@ function DashboardContent() {
         </div>
       </div>
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-      <MobileNav activeTab={activeTab} onChangeTab={setActiveTab} />
+      <MobileNav
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
+        isSidebarOpen={isMobileSidebarOpen}
+      />
     </main>
   );
 }

@@ -345,7 +345,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', flex: 1 }}>
+      <div className="responsive-two-column-grid">
         
         {/* Left Side: Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

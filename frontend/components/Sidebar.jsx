@@ -5,7 +5,18 @@ import { useAuth } from './AuthProvider';
 import LibroValidationModal from './LibroValidationModal';
 import DriveFolderSelector from './DriveFolderSelector';
 
-export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEmpresa, empresaSeleccionada: propEmpresaId, activeTab, onChangeTab, selectedUbicacionId, onSelectUbicacion }) {
+export default function Sidebar({
+  onSelectEquipo,
+  equipoSeleccionado,
+  onSelectEmpresa,
+  empresaSeleccionada: propEmpresaId,
+  activeTab,
+  onChangeTab,
+  selectedUbicacionId,
+  onSelectUbicacion,
+  isOpenMobile = false,
+  onCloseMobile
+}) {
   const { user, token } = useAuth();
   const [empresas, setEmpresas] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
@@ -521,7 +532,17 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
     });
 
   return (
-    <div className="sidebar glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+    <aside className={`sidebar glass-panel ${isOpenMobile ? 'mobile-open' : ''}`} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
+      {onCloseMobile && (
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          className="sidebar-close-mobile-btn"
+          title="Cerrar panel lateral"
+        >
+          ✕
+        </button>
+      )}
       <div>
         <div style={{ textAlign: 'center', marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
           <a 
@@ -1262,6 +1283,6 @@ export default function Sidebar({ onSelectEquipo, equipoSeleccionado, onSelectEm
           </div>
         </div>
       )}
-    </div>
+    </aside>
   );
 }

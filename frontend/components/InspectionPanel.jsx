@@ -656,12 +656,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
         </div>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: maximizedPanel ? '1fr' : '1fr 1fr',
-        gap: '1rem',
-        flex: 1
-      }}>
+      <div className={`responsive-two-column-grid ${maximizedPanel ? 'maximized' : ''}`}>
         
         {/* Drive Browser */}
         {maximizedPanel !== 'ia' && (
