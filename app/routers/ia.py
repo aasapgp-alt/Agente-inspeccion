@@ -545,8 +545,12 @@ def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3
                 comentario_val = existing[1] if existing else ""
                 
             cursor.execute("""
-                INSERT OR REPLACE INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
+                INSERT INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (equipo_id, image_id) DO UPDATE SET
+                    annotations = EXCLUDED.annotations,
+                    comentario  = EXCLUDED.comentario,
+                    updated_at  = CURRENT_TIMESTAMP
             """, (data.equipo_id, img_id, anns_json, comentario_val))
                 
         # Guardar en memoria de imagenes seleccionadas

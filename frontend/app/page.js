@@ -1,5 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import ModernInspectorLayout from '../components/ModernInspectorLayout';
 import Sidebar from '../components/Sidebar';
 import InspectionPanel from '../components/InspectionPanel';
 import ManualPanel from '../components/ManualPanel';
@@ -27,6 +29,11 @@ export default function Home() {
 
 function DashboardContent() {
   const { user, token, loading, logout } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const [equipoSeleccionado, setEquipoSeleccionado] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -57,6 +64,14 @@ function DashboardContent() {
       return localStorage.getItem('dashboard_active_tab') || 'MANUAL';
     }
     return 'MANUAL';
+  });
+
+  const [useModernLayout, setUseModernLayout] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pref_modern_layout');
+      return saved !== 'false';
+    }
+    return true;
   });
 
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -166,7 +181,7 @@ function DashboardContent() {
     }).format(new Date())
   );
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="session-loader">
         <div className="spinner" />
@@ -177,6 +192,20 @@ function DashboardContent() {
 
   if (!user) {
     return <Login />;
+  }
+
+  if (useModernLayout) {
+    return (
+      <main className="app-container" style={{ position: 'relative' }}>
+        <OfflineBanner />
+        <ModernInspectorLayout
+          onToggleLegacyView={() => {
+            setUseModernLayout(false);
+            if (typeof window !== 'undefined') localStorage.setItem('pref_modern_layout', 'false');
+          }}
+        />
+      </main>
+    );
   }
 
   const tabs = [
@@ -241,6 +270,24 @@ function DashboardContent() {
                     {tab.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseModernLayout(true);
+                    if (typeof window !== 'undefined') localStorage.setItem('pref_modern_layout', 'true');
+                  }}
+                  className="tab"
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7, #6366f1)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    boxShadow: '0 0 12px rgba(99, 102, 241, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                  }}
+                  title="Cambiar a la nueva vista del boceto"
+                >
+                  ✨ Nueva Disposición
+                </button>
               </nav>
             </div>
           </div>

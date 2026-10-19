@@ -60,16 +60,17 @@ def autenticar_drive() -> Optional[GoogleAuth]:
             logger.warning(f"Error al autenticar Cuenta de Servicio desde variable de entorno: {env_sa_err}")
 
     # 3. Si existe archivo físico de Service Account, usarlo
+    custom_sa_path = os.getenv("SERVICE_ACCOUNT_FILE") or os.getenv("SERVICE_ACCOUNT_PATH")
     service_paths = [
+        custom_sa_path,
         "service_account.json",
-        "c:\\Agente-Inspector\\service_account.json",
+        os.path.join(os.getcwd(), "service_account.json"),
         "agente-inspector-propietario-71d32fd94d89.json",
-        "c:\\Agente-Inspector\\agente-inspector-propietario-71d32fd94d89.json",
         "praxis-effort-464216-u5-b302073b59eb.json",
-        "c:\\Agente-Inspector\\praxis-effort-464216-u5-b302073b59eb.json"
+        "c:\\Agente-Inspector\\service_account.json"
     ]
     for sp in service_paths:
-        if os.path.exists(sp):
+        if sp and os.path.exists(sp):
             try:
                 from oauth2client.service_account import ServiceAccountCredentials
                 scope = ["https://www.googleapis.com/auth/drive"]
@@ -288,8 +289,12 @@ def obtener_o_crear_carpeta_drive(nombre: str, parent_id: str = "root") -> str:
             from app.services.db_service import get_db_connection
             with get_db_connection() as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                    INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (drive_id) DO UPDATE SET
+                        nombre = EXCLUDED.nombre,
+                        parent_id = EXCLUDED.parent_id,
+                        updated_at = CURRENT_TIMESTAMP
                 """, (folder_id, nombre, parent_id))
                 conn.commit()
         except Exception as cache_err:
@@ -313,8 +318,12 @@ def obtener_o_crear_carpeta_drive(nombre: str, parent_id: str = "root") -> str:
             from app.services.db_service import get_db_connection
             with get_db_connection() as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                    INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (drive_id) DO UPDATE SET
+                        nombre = EXCLUDED.nombre,
+                        parent_id = EXCLUDED.parent_id,
+                        updated_at = CURRENT_TIMESTAMP
                 """, (folder_id, nombre, parent_id))
                 conn.commit()
         except Exception as cache_err:
@@ -374,8 +383,12 @@ def indexar_todas_las_carpetas_drive(db_conn, task_id: str = None, progress_stor
             parent_id = f['parents'][0]['id'] if f.get('parents') else None
             
             cursor.execute("""
-                INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (drive_id) DO UPDATE SET
+                    nombre = EXCLUDED.nombre,
+                    parent_id = EXCLUDED.parent_id,
+                    updated_at = CURRENT_TIMESTAMP
             """, (drive_id, title, parent_id))
             
             # Actualizar progreso cada 100 carpetas
@@ -744,8 +757,12 @@ def crear_estructura_equipo(parent_id: str, nombre_equipo: str, campanias: List[
             with get_db_connection() as conn:
                 for d_id, name, p_id in created_folders:
                     conn.execute("""
-                        INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                        INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT (drive_id) DO UPDATE SET
+                            nombre = EXCLUDED.nombre,
+                            parent_id = EXCLUDED.parent_id,
+                            updated_at = CURRENT_TIMESTAMP
                     """, (d_id, name, p_id))
                 conn.commit()
         except Exception as cache_err:
@@ -919,8 +936,12 @@ def crear_campania_en_equipos_de_empresa(empresa_id: int, campania_nombre: str, 
                     with get_db_connection() as conn:
                         for d_id, name, p_id in created_folders_batch:
                             conn.execute("""
-                                INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                                INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                                ON CONFLICT (drive_id) DO UPDATE SET
+                                    nombre = EXCLUDED.nombre,
+                                    parent_id = EXCLUDED.parent_id,
+                                    updated_at = CURRENT_TIMESTAMP
                             """, (d_id, name, p_id))
                         conn.commit()
                 except Exception as cache_err:

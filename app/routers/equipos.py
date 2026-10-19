@@ -117,8 +117,12 @@ def create_equipo(equipo: EquipoCreate, db: sqlite3.Connection = Depends(get_db)
         if eq_drive_folder_id:
             try:
                 db.execute("""
-                    INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                    INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (drive_id) DO UPDATE SET
+                        nombre = EXCLUDED.nombre,
+                        parent_id = EXCLUDED.parent_id,
+                        updated_at = CURRENT_TIMESTAMP
                 """, (eq_drive_folder_id, folder_title, parent_id))
                 db.commit()
             except Exception as cache_err:

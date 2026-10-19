@@ -1,5 +1,4 @@
 import './globals.css';
-import { ServiceWorkerCleaner } from '../components/ServiceWorkerCleaner';
 
 export const metadata = {
   title: 'Inspector PGP - Modo Campo',
@@ -29,7 +28,6 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-sky-500 selection:text-white">
-        <ServiceWorkerCleaner />
         {children}
       </body>
     </html>

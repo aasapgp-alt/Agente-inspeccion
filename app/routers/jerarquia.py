@@ -80,8 +80,12 @@ def create_ubicacion(ubicacion: UbicacionCreate, db: sqlite3.Connection = Depend
         if df_id:
             try:
                 db.execute("""
-                    INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                    INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (drive_id) DO UPDATE SET
+                        nombre = EXCLUDED.nombre,
+                        parent_id = EXCLUDED.parent_id,
+                        updated_at = CURRENT_TIMESTAMP
                 """, (df_id, folder_title, None))
                 db.commit()
             except Exception as cache_err:

@@ -143,6 +143,24 @@ class PostgresCursorWrapper:
     def fetchmany(self, size=None):
         return self._cursor.fetchmany(size) if size else self._cursor.fetchmany()
 
+    def execute_returning_id(self, query: str, vars: Any = None):
+        """Ejecuta una inserción agregando RETURNING id y devuelve el ID generado."""
+        pg_query = adapt_sql_for_pg(query)
+        if not re.search(r'\bRETURNING\b', pg_query, flags=re.IGNORECASE):
+            pg_query = pg_query.rstrip().rstrip(';') + " RETURNING id"
+        if vars is not None:
+            if isinstance(vars, list):
+                vars = tuple(vars)
+            elif not isinstance(vars, (tuple, dict)):
+                vars = (vars,)
+            self._cursor.execute(pg_query, vars)
+        else:
+            self._cursor.execute(pg_query)
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        return row["id"] if isinstance(row, dict) or hasattr(row, "__getitem__") else row[0]
+
     @property
     def rowcount(self):
         return self._cursor.rowcount
@@ -164,6 +182,7 @@ class PostgresCursorWrapper:
         except Exception:
             return None
 
+
     @property
     def description(self):
         return self._cursor.description
@@ -179,6 +198,30 @@ class PostgresCursorWrapper:
 
     def __iter__(self):
         return iter(self._cursor)
+
+
+def execute_insert_returning_id(cursor: Any, query: str, vars: Any = None) -> Any:
+    """
+    Ejecuta un INSERT y retorna el ID generado de forma transparente
+    tanto en PostgreSQL (PostgresCursorWrapper) como en SQLite (sqlite3.Cursor).
+    """
+    if hasattr(cursor, 'execute_returning_id'):
+        return cursor.execute_returning_id(query, vars)
+
+    # Rama SQLite / cursor estándar
+    try:
+        # SQLite 3.35+ soporta cláusula RETURNING id
+        q_returning = query.rstrip().rstrip(';') + " RETURNING id"
+        cursor.execute(q_returning, vars or ())
+        row = cursor.fetchone()
+        if row is not None:
+            return row["id"] if isinstance(row, (sqlite3.Row, dict)) else row[0]
+    except Exception:
+        pass
+
+    # Fallback para SQLite < 3.35 o si falló RETURNING
+    cursor.execute(query, vars or ())
+    return getattr(cursor, "lastrowid", None)
 
 
 class PostgresConnectionWrapper:

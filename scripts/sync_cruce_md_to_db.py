@@ -61,8 +61,12 @@ def sync_md_to_db(db_path='data/inspecciones.db', md_path='docs/CRUCE_EQUIPOS_LO
                         # Actualizar/Insertar en drive_folders_cache
                         last_folder_name = u_ruta.split('/')[-1].strip()
                         cursor.execute("""
-                            INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                            INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                            ON CONFLICT (drive_id) DO UPDATE SET
+                                nombre = EXCLUDED.nombre,
+                                parent_id = EXCLUDED.parent_id,
+                                updated_at = CURRENT_TIMESTAMP
                         """, (u_drive_id, last_folder_name, None))
                         cache_entries += 1
                 except Exception as err:
@@ -100,8 +104,12 @@ def sync_md_to_db(db_path='data/inspecciones.db', md_path='docs/CRUCE_EQUIPOS_LO
                                     parent_drive_id = u_row['drive_folder_id']
 
                             cursor.execute("""
-                                INSERT OR REPLACE INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
+                                INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, updated_at)
                                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                                ON CONFLICT (drive_id) DO UPDATE SET
+                                    nombre = EXCLUDED.nombre,
+                                    parent_id = EXCLUDED.parent_id,
+                                    updated_at = CURRENT_TIMESTAMP
                             """, (eq_drive_id, eq_folder_title, parent_drive_id))
                             cache_entries += 1
                 except Exception as err:

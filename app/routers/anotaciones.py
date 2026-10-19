@@ -49,8 +49,12 @@ def save_anotaciones(data: AnotacionSaveRequest, db: sqlite3.Connection = Depend
         cursor = db.cursor()
         annotations_json = json.dumps(data.annotations)
         cursor.execute("""
-            INSERT OR REPLACE INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
+            INSERT INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT (equipo_id, image_id) DO UPDATE SET
+                annotations = EXCLUDED.annotations,
+                comentario  = EXCLUDED.comentario,
+                updated_at  = CURRENT_TIMESTAMP
         """, (data.equipo_id, data.image_id, annotations_json, data.comentario))
         db.commit()
         return {

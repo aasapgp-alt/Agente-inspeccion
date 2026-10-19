@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import sqlite3
 
+from app.core.db import execute_insert_returning_id
+
 logger = logging.getLogger(__name__)
 
 FOTOS_DIR = os.getenv("FOTOS_DIR", os.path.join("data", "fotos"))
@@ -71,11 +73,14 @@ def procesar_inspecciones_batch(
                     WHERE id = ?
                 """, (estado, notas, insp_id))
             else:
-                cursor.execute("""
+                insp_id = execute_insert_returning_id(
+                    cursor,
+                    """
                     INSERT INTO inspecciones (equipo_id, anio, estado, diagnostico, created_at, updated_at, reporte_generado)
                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                """, (equipo_id, anio, estado, notas))
-                insp_id = cursor.lastrowid
+                    """,
+                    (equipo_id, anio, estado, notas)
+                )
 
             # 2. Actualizar estado_actual en tabla `equipos`
             cursor.execute("""
@@ -108,6 +113,7 @@ def procesar_inspecciones_batch(
                 foto_ts = foto.get("timestamp") or int(datetime.now().timestamp())
                 foto_uuid = str(uuid.uuid4())[:8]
                 categoria = foto.get("categoria") or item.get("categoria_foto") or "General"
+                annotations_val = foto.get("annotations") or "[]"
                 filename = f"foto_{foto_ts}_{foto_uuid}.jpg"
                 filepath = os.path.join(equipo_foto_dir, filename)
 
@@ -118,9 +124,13 @@ def procesar_inspecciones_batch(
                 comentario_foto = f"[{categoria}] {notas}".strip() if notas else categoria
 
                 cursor.execute("""
-                    INSERT OR REPLACE INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
-                    VALUES (?, ?, '[]', ?, CURRENT_TIMESTAMP)
-                """, (equipo_id, image_id, comentario_foto))
+                    INSERT INTO anotaciones_imagenes (equipo_id, image_id, annotations, comentario, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (equipo_id, image_id) DO UPDATE SET
+                        annotations = EXCLUDED.annotations,
+                        comentario  = EXCLUDED.comentario,
+                        updated_at  = CURRENT_TIMESTAMP
+                """, (equipo_id, image_id, annotations_val, comentario_foto))
 
                 # Subida automática a Google Drive
                 drive_folder_id = item.get("drive_folder_id")

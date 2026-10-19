@@ -190,7 +190,7 @@ body:not(:has(.campo-wrapper)) textarea:focus {
   box-shadow: 0 0 0 2px rgba(0, 92, 167, 0.2);
 }
 
-body:not(:has(.campo-wrapper)) button {
+body:not(:has(.campo-wrapper)) button:not([class*="bg-"]):not([class*="btn-"]):not(.tab) {
   background: var(--accent-primary);
   color: white;
   border: none;
@@ -202,11 +202,11 @@ body:not(:has(.campo-wrapper)) button {
   font-family: var(--font-sans);
 }
 
-body:not(:has(.campo-wrapper)) button:hover {
+body:not(:has(.campo-wrapper)) button:not([class*="bg-"]):not([class*="btn-"]):not(.tab):hover {
   background: var(--accent-primary-hover);
 }
 
-body:not(:has(.campo-wrapper)) button:active {
+body:not(:has(.campo-wrapper)) button:not([class*="bg-"]):not([class*="btn-"]):not(.tab):active {
   transform: scale(0.98);
 }
 

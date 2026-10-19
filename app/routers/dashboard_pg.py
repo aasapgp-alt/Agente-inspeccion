@@ -128,7 +128,7 @@ def list_factories(empresa_id: Optional[int] = None, db: sqlite3.Connection = De
     if empresa_id:
         eq_query = """
             SELECT e.ubicacion_id,
-                   COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1), 'BUENO') as estado
+                   COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1), 'PENDIENTE') as estado
             FROM equipos e
             JOIN ubicaciones u ON e.ubicacion_id = u.id
             WHERE e.activo = 1 AND u.empresa_id = ?
@@ -137,7 +137,7 @@ def list_factories(empresa_id: Optional[int] = None, db: sqlite3.Connection = De
     else:
         eq_query = """
             SELECT e.ubicacion_id,
-                   COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1), 'BUENO') as estado
+                   COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1), 'PENDIENTE') as estado
             FROM equipos e
             WHERE e.activo = 1
         """

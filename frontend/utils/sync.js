@@ -56,7 +56,12 @@ export async function sincronizarColaPendientes() {
         for (const arch of archivos) {
           const b64 = await blobToBase64(arch.blob);
           if (arch.tipo === 'foto') {
-            fotos.push({ categoria: insp.categoria_foto || 'General', data: b64, timestamp: arch.timestamp });
+            fotos.push({
+              categoria: arch.categoria || insp.categoria_foto || 'General',
+              data: b64,
+              timestamp: arch.timestamp,
+              annotations: arch.annotations || null
+            });
           } else if (arch.tipo === 'audio') {
             audios.push({ data: b64, timestamp: arch.timestamp });
           }
@@ -78,7 +83,20 @@ export async function sincronizarColaPendientes() {
     );
 
     // Enviar lote al backend
-    await apiService.subirInspeccionesBatch(lotePayload);
+    const res = await apiService.subirInspeccionesBatch(lotePayload);
+    const fallos = (res && res.errores) || [];
+
+    if (fallos.length > 0) {
+      console.error('[sync.js] Fallos reportados por el servidor:', fallos);
+      // Si no se procesó ninguna inspección con éxito, NO borrar nada de IndexedDB y marcar con error para reintento
+      if (!res.procesados || res.procesados === 0) {
+        await db.inspecciones_pendientes
+          .where('id').anyOf(idsToSync)
+          .modify({ estado_sync: 'error' });
+        syncEnProgreso = false;
+        return { success: false, count: 0, errores: fallos };
+      }
+    }
 
     // Si tuvo éxito, borrar de IndexedDB
     await db.transaction('rw', db.inspecciones_pendientes, db.archivos_pendientes, async () => {
@@ -88,7 +106,7 @@ export async function sincronizarColaPendientes() {
 
     vibrarExito();
     syncEnProgreso = false;
-    return { success: true, count: lotePayload.length };
+    return { success: true, count: lotePayload.length, errores: fallos };
   } catch (error) {
     console.error('[sync.js] Error al sincronizar lote:', error);
 

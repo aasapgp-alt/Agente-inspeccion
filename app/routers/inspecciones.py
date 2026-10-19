@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Union
 import sqlite3
@@ -16,6 +16,7 @@ class FotoPayload(BaseModel):
     categoria: Optional[str] = "General"
     data: str
     timestamp: Optional[Union[int, float]] = None
+    annotations: Optional[str] = None
 
 
 class AudioPayload(BaseModel):
@@ -43,17 +44,29 @@ class BatchInspeccionesPayload(BaseModel):
 @router.post("/batch", response_model=Dict[str, Any])
 def subir_inspecciones_batch(
     payload: BatchInspeccionesPayload,
+    response: Response,
     db: sqlite3.Connection = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Recibe un lote (batch) de inspecciones capturadas desde la app de celular/PWA.
     Guarda las inspecciones, actualiza estados de equipos, guarda fotos/comentarios y auditoría.
+    Devuelve 207 Multi-Status ante fallos parciales o 500 si falló la totalidad.
     """
     try:
         user_id = current_user.get("id")
         inspecciones_dict = [insp.model_dump() for insp in payload.inspecciones]
         res = procesar_inspecciones_batch(db, inspecciones_dict, user_id=user_id)
+
+        # Si hubo errores en algún ítem del lote
+        if res.get("errores"):
+            if res.get("procesados", 0) == 0 and len(payload.inspecciones) > 0:
+                response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+                res["status"] = "error"
+            else:
+                response.status_code = status.HTTP_207_MULTI_STATUS
+                res["status"] = "partial_success"
+
         return res
     except Exception as e:
         logger.error(f"Error procesando lote de inspecciones: {e}", exc_info=True)
