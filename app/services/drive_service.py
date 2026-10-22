@@ -979,3 +979,360 @@ def crear_campania_en_equipos_de_empresa(empresa_id: int, campania_nombre: str, 
         if task_id and progress_store is not None:
             progress_store[task_id] = {"status": "failed", "progress": 100, "error": str(e), "mensaje": f"Error general: {str(e)}"}
 
+
+def _calcular_o_recuperar_path(folder_id: str, cursor) -> str:
+    """Obtiene el path_completo desde caché o lo calcula dinámicamente navegando ancestros."""
+    try:
+        cursor.execute("SELECT path_completo, nombre, parent_id FROM drive_folders_cache WHERE drive_id = ?", (folder_id,))
+        row = cursor.fetchone()
+        if row and row['path_completo']:
+            return row['path_completo']
+        
+        chain = []
+        curr = folder_id
+        visited = set()
+        while curr and curr not in visited:
+            visited.add(curr)
+            cursor.execute("SELECT drive_id, nombre, parent_id FROM drive_folders_cache WHERE drive_id = ?", (curr,))
+            r = cursor.fetchone()
+            if r:
+                chain.append((r['nombre'] or '').strip())
+                curr = r['parent_id']
+            else:
+                break
+        chain.reverse()
+        path = " / ".join(chain)
+        if path:
+            try:
+                cursor.execute("UPDATE drive_folders_cache SET path_completo = ? WHERE drive_id = ?", (path, folder_id))
+            except Exception:
+                pass
+        return path or "Ubicación Planta"
+    except Exception as e:
+        logger.warning(f"Error calculando path para {folder_id}: {e}")
+        return ""
+
+
+def _recorrer_archivos_recursivo(folder_id: str, current_path: str, nivel: int = 1, max_nivel: int = 3, sub_ubicacion: str = "") -> list:
+    """
+    Recorre recursivamente una carpeta en Drive para encontrar todos los archivos,
+    respetando sub-carpetas (ej: Succión 431-433, Impulsión 431-433, Tramo ACR, etc.).
+    Cada archivo se etiqueta con su sub_ubicacion, sub_folder_id y path_completo.
+    """
+    archivos_resultado = []
+    
+    # 1. Listar archivos directos
+    archivos_directos = listar_archivos(folder_id)
+    for f in archivos_directos:
+        archivos_resultado.append({
+            "id": f["id"],
+            "name": f["title"],
+            "size": f["fileSize"],
+            "thumbnail": f.get("thumbnailLink", ""),
+            "mimeType": f.get("mimeType", ""),
+            "sub_ubicacion": sub_ubicacion or current_path.split(" / ")[-1],
+            "sub_folder_id": folder_id,
+            "path_completo": current_path
+        })
+        
+    # 2. Si nivel < max_nivel, explorar subcarpetas
+    if nivel < max_nivel:
+        try:
+            subcarpetas = listar_carpetas(folder_id)
+            for sc in subcarpetas:
+                sc_id = sc["id"]
+                sc_title = sc["title"]
+                sc_path = f"{current_path} / {sc_title}" if current_path else sc_title
+                sc_sub = sub_ubicacion if sub_ubicacion else sc_title
+                archivos_hijos = _recorrer_archivos_recursivo(
+                    sc_id, sc_path, nivel=nivel + 1, max_nivel=max_nivel, sub_ubicacion=sc_sub
+                )
+                archivos_resultado.extend(archivos_hijos)
+        except Exception as e:
+            logger.warning(f"Error recorriendo subcarpeta {folder_id}: {e}")
+            
+    return archivos_resultado
+
+
+def obtener_evidencia_equipo(equipo_id: int, campania_activa: str = "PGP 2026") -> dict:
+    """
+    Obtiene y auto-clasifica en tiempo real toda la evidencia fotográfica, planos técnicos e histórico
+    asociado a un equipo específico desde Google Drive, mapeando todos los niveles jerárquicos
+    (Área -> Equipo -> Campaña -> Sub-tramo / Sub-componente) y concatenando cada lugar a su ubicación.
+    Auto-actualiza la caché de base de datos con cualquier archivo o carpeta nueva creada en Drive.
+    """
+    from app.core.db import get_db_connection
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, codigo, nombre, drive_folder_id, ubicacion_id FROM equipos WHERE id = ?", (equipo_id,))
+        eq_row = cursor.fetchone()
+        if not eq_row:
+            return {"error": "Equipo no encontrado"}
+            
+        eq = dict(eq_row)
+        folder_id = eq.get("drive_folder_id")
+        if not folder_id:
+            return {"error": "El equipo no tiene carpeta de Drive vinculada", "equipo": eq}
+
+        logger.info(f"Obteniendo evidencia multi-nivel para equipo {eq.get('codigo')} - {eq.get('nombre')} (Drive: {folder_id})")
+
+        # 0. Obtener o calcular el path_completo base del equipo
+        eq_path = _calcular_o_recuperar_path(folder_id, cursor)
+        eq["path_completo"] = eq_path
+
+        # 1. Obtener subcarpetas directas desde Google Drive
+        subcarpetas_drive = listar_carpetas(folder_id)
+        
+        # 2. Auto-Upsert en BD de las subcarpetas de primer nivel
+        for sc in subcarpetas_drive:
+            try:
+                sc_path = f"{eq_path} / {sc['title']}" if eq_path else sc['title']
+                cursor.execute("""
+                    INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, path_completo, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (drive_id) DO UPDATE SET
+                        nombre = EXCLUDED.nombre,
+                        path_completo = EXCLUDED.path_completo,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (sc["id"], sc["title"], folder_id, sc_path))
+            except Exception as up_err:
+                logger.warning(f"Error en auto-upsert de subcarpeta {sc['id']}: {up_err}")
+        conn.commit()
+
+        # 3. Clasificación de carpetas por campaña y función
+        id_campania_activa = None
+        nombre_campania_activa = None
+        carpetas_doc = []
+        carpetas_hist = []
+        carpetas_detectadas = []
+
+        campania_norm = campania_activa.lower().replace(" ", "").replace("-", "")
+
+        for sc in subcarpetas_drive:
+            nombre = sc["title"]
+            s_id = sc["id"]
+            nombre_norm = nombre.lower().replace(" ", "").replace("-", "")
+            
+            tipo = "otro"
+            if campania_norm in nombre_norm or "2026" in nombre_norm:
+                tipo = "campania_activa"
+                id_campania_activa = s_id
+                nombre_campania_activa = nombre
+            elif any(k in nombre_norm for k in ["doc", "plano", "tecnic", "codific"]):
+                tipo = "documentacion"
+                carpetas_doc.append({"id": s_id, "nombre": nombre})
+            elif any(k in nombre_norm for k in ["2024", "2023", "2022", "2025", "hist"]):
+                tipo = "historico"
+                carpetas_hist.append({"id": s_id, "nombre": nombre})
+
+            carpetas_detectadas.append({"id": s_id, "nombre": nombre, "tipo": tipo})
+
+        # 4. Explorar campaña activa a TODOS LOS NIVELES
+        fotos_campania = []
+        secciones_campania = []
+        seccion_recomendada = None
+        seccion_recomendada_id = None
+
+        if id_campania_activa:
+            camp_path = f"{eq_path} / {nombre_campania_activa}" if eq_path else nombre_campania_activa
+            subcarpetas_activa = listar_carpetas(id_campania_activa)
+            
+            # Upsert de sub-carpetas de campaña
+            for sc in subcarpetas_activa:
+                try:
+                    sc_path = f"{camp_path} / {sc['title']}"
+                    cursor.execute("""
+                        INSERT INTO drive_folders_cache (drive_id, nombre, parent_id, path_completo, updated_at)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT (drive_id) DO UPDATE SET
+                            nombre = EXCLUDED.nombre,
+                            path_completo = EXCLUDED.path_completo,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (sc["id"], sc["title"], id_campania_activa, sc_path))
+                except Exception:
+                    pass
+            conn.commit()
+
+            if subcarpetas_activa:
+                # Caso multi-nivel: La campaña contiene sub-secciones (ej: Succión 431-433, Impulsión 431-433, Tramo ACR)
+                for sc in subcarpetas_activa:
+                    sc_id = sc["id"]
+                    sc_title = sc["title"]
+                    sc_path = f"{camp_path} / {sc_title}"
+                    
+                    archivos_sub = _recorrer_archivos_recursivo(sc_id, sc_path, nivel=1, max_nivel=3, sub_ubicacion=sc_title)
+                    fotos_sub = [f for f in archivos_sub if f["mimeType"].startswith("image/")]
+                    
+                    for f in fotos_sub:
+                        f["tipo"] = "foto_campania"
+                    fotos_campania.extend(fotos_sub)
+                    
+                    secciones_campania.append({
+                        "id": sc_id,
+                        "nombre": sc_title,
+                        "path_completo": sc_path,
+                        "count": len(fotos_sub)
+                    })
+                
+                # Archivos sueltos en la raíz de la campaña activa si hubiesen
+                archivos_raiz_camp = listar_archivos(id_campania_activa)
+                fotos_raiz_camp = [
+                    {
+                        "id": f["id"],
+                        "name": f["title"],
+                        "size": f["fileSize"],
+                        "thumbnail": f.get("thumbnailLink", ""),
+                        "mimeType": f.get("mimeType", ""),
+                        "sub_ubicacion": "General",
+                        "sub_folder_id": id_campania_activa,
+                        "path_completo": camp_path,
+                        "tipo": "foto_campania"
+                    }
+                    for f in archivos_raiz_camp if f.get("mimeType", "").startswith("image/")
+                ]
+                if fotos_raiz_camp:
+                    fotos_campania.extend(fotos_raiz_camp)
+                    secciones_campania.append({
+                        "id": id_campania_activa,
+                        "nombre": "General",
+                        "path_completo": camp_path,
+                        "count": len(fotos_raiz_camp)
+                    })
+            else:
+                # Caso plano: Las fotos están directamente dentro de PGP 2026
+                archivos_activa = listar_archivos(id_campania_activa)
+                for f in archivos_activa:
+                    if f.get("mimeType", "").startswith("image/"):
+                        fotos_campania.append({
+                            "id": f["id"],
+                            "name": f["title"],
+                            "size": f["fileSize"],
+                            "thumbnail": f.get("thumbnailLink", ""),
+                            "mimeType": f["mimeType"],
+                            "sub_ubicacion": "General",
+                            "sub_folder_id": id_campania_activa,
+                            "path_completo": camp_path,
+                            "tipo": "foto_campania"
+                        })
+
+            # Heurística de recomendación de sub-sección según el equipo
+            if secciones_campania:
+                eq_nombre_norm = eq.get("nombre", "").lower().replace("ó", "o").replace("í", "i").replace("á", "a").replace("é", "e").replace("ú", "u")
+                eq_code = str(eq.get("codigo") or "")
+                
+                mejor_match = None
+                for sec in secciones_campania:
+                    sec_norm = sec["nombre"].lower().replace("ó", "o").replace("í", "i").replace("á", "a").replace("é", "e").replace("ú", "u")
+                    
+                    # Coincidencias específicas de bombas, ventiladores y tramos
+                    if "succion" in eq_nombre_norm and "succion" in sec_norm:
+                        mejor_match = sec
+                        break
+                    elif "impulsion" in eq_nombre_norm and "impulsion" in sec_norm:
+                        mejor_match = sec
+                        break
+                    elif "ventilador" in eq_nombre_norm and "ventilador" in sec_norm:
+                        mejor_match = sec
+                        break
+                    elif eq_code and eq_code in sec_norm:
+                        mejor_match = sec
+                        break
+                
+                if mejor_match:
+                    seccion_recomendada = mejor_match["nombre"]
+                    seccion_recomendada_id = mejor_match["id"]
+
+        # 5. Archivos sueltos en la raíz del equipo (fotos de emergencia o planos)
+        archivos_raiz = listar_archivos(folder_id)
+        documentacion_tecnica = []
+
+        for f in archivos_raiz:
+            mime = f.get("mimeType", "")
+            if mime.startswith("image/"):
+                fotos_campania.append({
+                    "id": f["id"],
+                    "name": f["title"],
+                    "size": f["fileSize"],
+                    "thumbnail": f.get("thumbnailLink", ""),
+                    "mimeType": mime,
+                    "sub_ubicacion": "Raíz Equipo",
+                    "sub_folder_id": folder_id,
+                    "path_completo": eq_path,
+                    "tipo": "foto_raiz_campania"
+                })
+            elif mime == "application/pdf" or any(f["title"].lower().endswith(ext) for ext in [".pdf", ".dwg", ".dxf"]):
+                documentacion_tecnica.append({
+                    "id": f["id"],
+                    "name": f["title"],
+                    "size": f["fileSize"],
+                    "thumbnail": f.get("thumbnailLink", ""),
+                    "mimeType": mime,
+                    "es_plano": True,
+                    "sub_ubicacion": "Raíz Equipo",
+                    "path_completo": eq_path,
+                    "tipo": "documento_tecnico"
+                })
+
+        # 6. Documentación técnica y planos (recorriendo todos los subniveles técnicos)
+        for doc in carpetas_doc:
+            doc_id = doc["id"]
+            doc_name = doc["nombre"]
+            doc_path = f"{eq_path} / {doc_name}" if eq_path else doc_name
+            archivos_doc = _recorrer_archivos_recursivo(doc_id, doc_path, nivel=1, max_nivel=3)
+            for f in archivos_doc:
+                documentacion_tecnica.append({
+                    "id": f["id"],
+                    "name": f["name"],
+                    "size": f["size"],
+                    "thumbnail": f.get("thumbnail", ""),
+                    "mimeType": f.get("mimeType", ""),
+                    "sub_ubicacion": f.get("sub_ubicacion", doc_name),
+                    "path_completo": f.get("path_completo", doc_path),
+                    "es_plano": any(k in f["name"].lower() for k in ["iso", "plano", "dwg", "esquema", "red", "spool", "pro-", "dxf"]),
+                    "tipo": "documento_tecnico"
+                })
+
+        # 7. Fotos históricas (recorriendo todos los subniveles por año)
+        fotos_historico = {}
+        for h in carpetas_hist:
+            h_id = h["id"]
+            h_name = h["nombre"]
+            h_path = f"{eq_path} / {h_name}" if eq_path else h_name
+            archivos_h = _recorrer_archivos_recursivo(h_id, h_path, nivel=1, max_nivel=3)
+            fotos_h = [
+                {
+                    "id": f["id"],
+                    "name": f["name"],
+                    "size": f["size"],
+                    "thumbnail": f.get("thumbnail", ""),
+                    "mimeType": f.get("mimeType", ""),
+                    "sub_ubicacion": f.get("sub_ubicacion", h_name),
+                    "path_completo": f.get("path_completo", h_path),
+                    "anio": h_name
+                }
+                for f in archivos_h if f.get("mimeType", "").startswith("image/")
+            ]
+            if fotos_h:
+                fotos_historico[h_name] = fotos_h
+
+        return {
+            "equipo": eq,
+            "path_completo": eq_path,
+            "campania_activa": campania_activa,
+            "secciones_campania": secciones_campania,
+            "seccion_recomendada": seccion_recomendada,
+            "seccion_recomendada_id": seccion_recomendada_id,
+            "resumen": {
+                "total_fotos_campania": len(fotos_campania),
+                "total_documentacion": len(documentacion_tecnica),
+                "total_historicos": sum(len(v) for v in fotos_historico.values()),
+                "total_secciones": len(secciones_campania)
+            },
+            "carpetas_detectadas": carpetas_detectadas,
+            "fotos_campania": fotos_campania,
+            "documentacion_tecnica": documentacion_tecnica,
+            "fotos_historico": fotos_historico
+        }
+
+

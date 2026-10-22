@@ -995,9 +995,9 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
             isLight ? 'bg-white border-slate-200/90' : 'bg-[#151922]/90 border-slate-800/80 backdrop-blur-xl'
           }`}>
             
-            {/* PESTAÑA 1: ESTADO */}
-            {activeTab === 'ESTADO' && (
-              equipoId ? (
+            {/* PESTAÑA 1: ESTADO (Persistente en memoria para no recargar fotos ni perder texto) */}
+            <div style={{ display: activeTab === 'ESTADO' ? 'block' : 'none' }}>
+              {equipoId ? (
                 <div>
                   <div className={`mb-3 pb-2.5 border-b flex items-center justify-between ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
                     <div>
@@ -1030,11 +1030,11 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
                   }}
                   onOpenHelp={() => setShowHelp(true)}
                 />
-              )
-            )}
+              )}
+            </div>
 
-            {/* PESTAÑA 2: HISTORIA */}
-            {activeTab === 'HISTORIA' && (
+            {/* PESTAÑA 2: HISTORIA (Persistente) */}
+            <div style={{ display: activeTab === 'HISTORIA' ? 'block' : 'none' }}>
               <div>
                 <div className={`mb-3 pb-2.5 border-b flex items-center justify-between ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
                   <div>
@@ -1046,12 +1046,12 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
                     </p>
                   </div>
                 </div>
-                <AssetHistory empresaId={empresaId} />
+                <AssetHistory empresaId={empresaId} selectedEquipoId={equipoId} />
               </div>
-            )}
+            </div>
 
-            {/* PESTAÑA 3: FOTOS */}
-            {activeTab === 'FOTOS' && (
+            {/* PESTAÑA 3: FOTOS (Persistente) */}
+            <div style={{ display: activeTab === 'FOTOS' ? 'block' : 'none' }}>
               <div>
                 <div className={`mb-3 pb-2.5 border-b flex items-center justify-between ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
                   <div>
@@ -1065,12 +1065,14 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
                 </div>
 
                 {equipoId ? (
-                  <div className={`p-3 rounded-xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#0f131a] border-slate-800'}`}>
-                    <ManualPanel
-                      equipoId={equipoId}
-                      onChangeTab={(t) => handleSelectTab(t)}
-                    />
-                  </div>
+                  <InspectionPanel
+                    equipoId={equipoId}
+                    onChangeTab={(t) => {
+                      if (t === 'MANUAL') handleSelectTab('ESTADO');
+                      else if (t === 'HISTORY') handleSelectTab('HISTORIA');
+                      else handleSelectTab(t);
+                    }}
+                  />
                 ) : (
                   <div className={`p-12 text-center ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
                     <Camera className="w-10 h-10 mx-auto mb-2 opacity-50" />
@@ -1079,11 +1081,11 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
-            {/* PESTAÑA 4: ANÁLISIS IA */}
-            {activeTab === 'ANALISIS_IA' && (
-              equipoId ? (
+            {/* PESTAÑA 4: ANÁLISIS IA (Persistente) */}
+            <div style={{ display: activeTab === 'ANALISIS_IA' ? 'block' : 'none' }}>
+              {equipoId ? (
                 <div>
                   <div className={`mb-3 pb-2.5 border-b flex items-center justify-between ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
                     <div>
@@ -1111,8 +1113,8 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
                   <h3 className={`font-bold text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>Inspección con IA</h3>
                   <p className="text-xs mt-1">Selecciona un activo en el panel lateral para iniciar el análisis multimodal.</p>
                 </div>
-              )
-            )}
+              )}
+            </div>
 
             {/* PESTAÑA 5: REPORTE */}
             {activeTab === 'REPORTE' && (

@@ -153,19 +153,19 @@ Las relaciones no encontradas en el cruce automático quedan marcadas con **`?`*
 |---|---|---|---|---|---|---|
 | `163` | `61` | STD PIPE 421-070 | FRP | `01- Stand pipe 421-070 y lineas asociadas` | `1BLoFwGU-NgHAvFEl8JiGOUbHDnce1IuI` | ✅ Vinculado |
 | `164` | `62` | LÍNEAS ASOCIADAS STD PIPE 421-070 | FRP | `01- Stand pipe 421-070 y lineas asociadas` | `1BLoFwGU-NgHAvFEl8JiGOUbHDnce1IuI` | ✅ Vinculado |
-| `165` | `63` | SUCCIÓN BOMBA 431-403 | MIXTA ACRBA/FRP | `2A - Líneas asociadas a bomba 431-403` | `1dOUlUpMxlJG2fZqHdlzLVcu8vQBhyvCF` | ✅ Vinculado |
-| `166` | `64` | IMPULSIÓN BOMBA 431- 403 | MIXTA ACR/FRP | `2A - Líneas asociadas a bomba 431-403` | `1dOUlUpMxlJG2fZqHdlzLVcu8vQBhyvCF` | ✅ Vinculado |
+| `165` | `63` | SUCCIÓN BOMBA 431-403 | MIXTA ACRBA/FRP | `02- 431-403` | `1BJLDvHhJBIEMgWEkToADe9MUZ-50-s7p` | ✅ Vinculado |
+| `166` | `64` | IMPULSIÓN BOMBA 431- 403 | MIXTA ACR/FRP | `02- 431-403` | `1BJLDvHhJBIEMgWEkToADe9MUZ-50-s7p` | ✅ Vinculado |
 | `167` | `65` | LÍNEAS ASOCIADAS BOMBA 431-403 | FRP | `2A - Líneas asociadas a bomba 431-403` | `1dOUlUpMxlJG2fZqHdlzLVcu8vQBhyvCF` | ✅ Vinculado |
-| `168` | `66` | IMPULSIÓN BOMBA 431- 402 | MIXTA FRP/ACR | `2A - Líneas asociadas a bomba 431-403` | `1dOUlUpMxlJG2fZqHdlzLVcu8vQBhyvCF` | ✅ Vinculado |
-| `169` | `67` | SUCCIÓN BOMBA 431- 402 | ACR | `2A - Líneas asociadas a bomba 431-403` | `1dOUlUpMxlJG2fZqHdlzLVcu8vQBhyvCF` | ✅ Vinculado |
+| `168` | `66` | IMPULSIÓN BOMBA 431- 402 | MIXTA FRP/ACR | `03- 431-402` | `1BZiZ0Z3I9zb1n8o5b5l5bECAC-XbXsun` | ✅ Vinculado |
+| `169` | `67` | SUCCIÓN BOMBA 431- 402 | ACR | `03- 431-402` | `1BZiZ0Z3I9zb1n8o5b5l5bECAC-XbXsun` | ✅ Vinculado |
 | `170` | `68` | IMPULSIÓN BOMBA 431- 401 | ACR/INOX. | `04- 431-401` | `1BxezrkpYAMLEbKqG_HLeWuN5UdRFRwIA` | ✅ Vinculado |
 | `171` | `69` | SUCCIÓN BOMBA 431-401 (SILO 431-859) | INOX./PRFV | `04- 431-401` | `1BxezrkpYAMLEbKqG_HLeWuN5UdRFRwIA` | ✅ Vinculado |
 | `172` | `70` | CAÑERIAS DILUCIÓN EN SUCCIÓN DE BOMBA 431- 401 | ACR | `04- 431-401` | `1BxezrkpYAMLEbKqG_HLeWuN5UdRFRwIA` | ✅ Vinculado |
 | `173` | `71` | CUADRO COLECTOR , DILUCIÓN FONDO SILO 421-859 | ACR | `04 B- Cuadro Colector Silo 421-859` | `1dKTUqP_JkvXDACac3px3CN22J0FRrfI5` | ✅ Vinculado |
 | `174` | `72` | IMPULSIÓN BOMBA 431- 400 | ACR/FRP | `05- 431-400` | `1BsZEHOe5wJidFtvusAqDFy2hFTNS9h53` | ✅ Vinculado |
 | `175` | `73` | SUCCIÓN BOMBA 431-400 | ACR | `05- 431-400` | `1BsZEHOe5wJidFtvusAqDFy2hFTNS9h53` | ✅ Vinculado |
-| `176` | `74` | IMPULSIÓN BOMBA 431- 433 | ACR | `6A- Línea  asociada 431-433 alimentación agua acida a regaderas -FIltrado de las piletas` | `1PEMbK_YSBWnR16TcAfBfWJzy_VzT09g-` | ✅ Vinculado |
-| `177` | `75` | SUCCIÓN BOMBA 431-433 | ACR | `6A- Línea  asociada 431-433 alimentación agua acida a regaderas -FIltrado de las piletas` | `1PEMbK_YSBWnR16TcAfBfWJzy_VzT09g-` | ✅ Vinculado |
+| `176` | `74` | IMPULSIÓN BOMBA 431- 433 | ACR | `06-431-433` | `1Bkq6N5R7-kaS7USN1mnPfWRN5bliVVUe` | ✅ Vinculado |
+| `177` | `75` | SUCCIÓN BOMBA 431-433 | ACR | `06-431-433` | `1Bkq6N5R7-kaS7USN1mnPfWRN5bliVVUe` | ✅ Vinculado |
 | `178` | `76` | Línea asociada 431-433 alimentación agua acida a regaderas -FIltrado de las piletas D2 = 431-809 - filtros431-023 y 018 | ACR | `6A- Línea  asociada 431-433 alimentación agua acida a regaderas -FIltrado de las piletas` | `1PEMbK_YSBWnR16TcAfBfWJzy_VzT09g-` | ✅ Vinculado |
 | `179` | `77` | REBALSES PILETAS BLANQUEO 431-807 – ETAPA D1 | ACR | `6A- Línea  asociada 431-433 alimentación agua acida a regaderas -FIltrado de las piletas` | `1PEMbK_YSBWnR16TcAfBfWJzy_VzT09g-` | ✅ Vinculado |
 | `180` | `78` | CAÑERÍA CLO2. ALIMENTACIÓN MIXER (ALCANZA DESDE Te REDUCCIÓN 6x4" HASTA INGRESO A RESPECTIVOS MIXER 431-021/431-027/ 431-004.) | MIXTA ACR/FRP | `12- Mixer 431-004` | `1CFjer-LXxQD5eAcnnpd2VEOM-l4SEUa6` | ✅ Vinculado |

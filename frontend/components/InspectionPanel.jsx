@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { useAuth } from './AuthProvider';
-import { apiService, API_BASE_URL } from '../services/api';
+import { apiService, API_BASE_URL, getCachedEvidencia, setCachedEvidencia } from '../services/api';
 import VersionHistoryModal from './VersionHistoryModal';
 import AnnotationModal from './AnnotationModal';
 import ImageViewerModal from './ImageViewerModal';
@@ -48,6 +48,11 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   const [selectedImages, setSelectedImages] = useState([]);
   const [rootFolderId, setRootFolderId] = useState(null);
 
+  // Evidencia Clasificada Directa por UT (Cero Navegación de Carpetas)
+  const [evidenciaData, setEvidenciaData] = useState(null);
+  const [activeEvidenceChip, setActiveEvidenceChip] = useState('CAMPANIA'); // 'CAMPANIA', 'PLANOS', 'HISTORICO', 'EXPLORADOR'
+  const [isRefreshingEvidence, setIsRefreshingEvidence] = useState(false);
+
   // IA State
   const [analisis, setAnalisis] = useState(null);
   const [historial2024, setHistorial2024] = useState(null);
@@ -55,6 +60,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   const [chatMessage, setChatMessage] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
 
   // States for IA proposed values editable by user
   const [editedEstado, setEditedEstado] = useState("");
@@ -208,6 +214,58 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
       .catch(err => console.error("Error fetching images:", err));
   };
 
+  const fetchEvidencia = async (eqId = equipoId, showRefreshNotice = false) => {
+    if (!eqId) return;
+
+    // 1. Usar memoria caché inmediata (0ms) si no es actualización manual forzada
+    if (!showRefreshNotice) {
+      const cached = getCachedEvidencia(eqId);
+      if (cached) {
+        setEvidenciaData(cached);
+        if (cached.fotos_campania && cached.fotos_campania.length > 0) {
+          setItems(prev => ({ ...prev, images: cached.fotos_campania }));
+        } else if (cached.fotos_historico) {
+          const todasHist = Object.values(cached.fotos_historico).flat();
+          if (todasHist.length > 0) {
+            setItems(prev => ({
+              ...prev,
+              images: (prev.images && prev.images.length > 0) ? prev.images : todasHist
+            }));
+          }
+        }
+        return;
+      }
+    }
+
+    if (showRefreshNotice) setIsRefreshingEvidence(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/drive/equipo/${eqId}/evidencia?campania=PGP%202026`);
+      if (res.ok) {
+        const data = await res.json();
+        setEvidenciaData(data);
+        setCachedEvidencia(eqId, data);
+        if (data.fotos_campania && data.fotos_campania.length > 0) {
+          setItems(prev => ({
+            ...prev,
+            images: data.fotos_campania
+          }));
+        } else if (data.fotos_historico) {
+          const todasHist = Object.values(data.fotos_historico).flat();
+          if (todasHist.length > 0) {
+            setItems(prev => ({
+              ...prev,
+              images: (prev.images && prev.images.length > 0) ? prev.images : todasHist
+            }));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error al obtener evidencia del equipo:", err);
+    } finally {
+      if (showRefreshNotice) setIsRefreshingEvidence(false);
+    }
+  };
+
   useEffect(() => {
     if (!equipoId) return;
 
@@ -215,6 +273,9 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
     const initializeFolder = async () => {
       setLoading(true);
       try {
+        // Cargar evidencia clasificada directa por UT
+        fetchEvidencia(equipoId);
+
         // 1. Fetch equipo directamente por ID
         let eq = null;
         try {
@@ -742,137 +803,425 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
             {/* Scrollable content container */}
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
 
-              {/* Breadcrumbs for Drive Browser */}
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '0.75rem',
-            color: 'var(--text-secondary)',
-            marginBottom: '0.75rem',
-            backgroundColor: 'rgba(255,255,255,0.02)',
-            padding: '4px 8px',
-            borderRadius: '4px'
-          }}>
-            {folderHistory.map((folder, idx) => (
-              <span key={folder.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {idx > 0 && <span>&gt;</span>}
-                <span style={{
-                  color: idx === folderHistory.length - 1 ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                  fontWeight: idx === folderHistory.length - 1 ? '600' : 'normal'
-                }}>
-                  {folder.name}
-                </span>
-              </span>
-            ))}
-          </div>
-
-          {sugerencias.length > 0 && (
-            <div style={{ marginBottom: '1rem', padding: '0.8rem', backgroundColor: 'rgba(14, 165, 233, 0.1)', border: '1px solid rgba(14, 165, 233, 0.3)', borderRadius: '6px' }}>
-              <h5 style={{ margin: '0 0 0.4rem 0', color: 'var(--accent-primary)', fontSize: '0.85rem' }}>
-                🔍 Carpetas sugeridas para este equipo:
-              </h5>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                {sugerencias.map((sug) => (
-                  <div 
-                    key={sug.id} 
-                    onClick={() => {
-                      setCurrentFolderId(sug.id);
-                      setFolderHistory([{ id: 'root', name: 'Root' }, { id: sug.id, name: sug.name }]);
-                      fetchContents(sug.id);
-                      setAutoDetected(sug);
-                    }}
-                    style={{ 
-                      fontSize: '0.8rem', 
-                      cursor: 'pointer', 
-                      padding: '0.3rem 0.5rem', 
-                      borderRadius: '4px',
-                      backgroundColor: autoDetected?.id === sug.id ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255,255,255,0.03)',
-                      border: autoDetected?.id === sug.id ? '1px solid var(--accent-primary)' : '1px solid transparent',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      transition: 'background 0.2s',
-                      color: 'white'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(14, 165, 233, 0.15)'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = autoDetected?.id === sug.id ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255,255,255,0.03)'}
-                  >
-                    <span>📁 {sug.name}</span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                      {autoDetected?.id === sug.id ? 'Seleccionada' : 'Relevancia: Alta'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!autoDetected && (
-            <div style={{
-              marginBottom: '1rem',
-              padding: '0.8rem',
-              backgroundColor: 'rgba(234, 179, 8, 0.1)',
-              border: '1px solid rgba(234, 179, 8, 0.3)',
-              borderRadius: '6px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.5rem'
-            }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>⚠️</span>
-                <span>No se encontró una carpeta de Drive para este equipo.</span>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                Navegue en el explorador inferior al área correspondiente y presione el botón para crear la carpeta.
-              </div>
-              <button
-                type="button"
-                onClick={handleCrearCarpetaEquipo}
-                disabled={isCreatingFolder}
-                style={{
-                  alignSelf: 'flex-start',
-                  backgroundColor: 'var(--accent-primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                {isCreatingFolder ? 'Creando...' : `📁 Crear carpeta '${equipo?.nombre || 'equipo'}' en '${folderHistory[folderHistory.length - 1]?.name || 'Inicio PGP'}'`}
-              </button>
-            </div>
-          )}
-          
-          <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            {items.folders && Object.entries(items.folders).map(([name, id]) => (
-              <li 
-                key={id} 
-                onClick={() => navigateToFolder(id, name)} 
-                style={{ 
-                  padding: '0.8rem', 
-                  cursor: 'pointer', 
-                  borderBottom: '1px solid rgba(255,255,255,0.05)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '1rem',
+              {/* RUTA JERÁRQUICA CONCATENADA (BREADCRUMB MULTI-NIVEL) */}
+              {evidenciaData?.path_completo && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 10px',
                   borderRadius: '6px',
-                  transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                <span style={{ fontSize: '1.4rem' }}>📁</span>
-                <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>{name}</span>
-              </li>
-            ))}
-            {items.images && items.images.map((img) => (
+                  backgroundColor: 'rgba(2, 132, 199, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                  fontSize: '0.73rem',
+                  color: '#94a3b8',
+                  marginBottom: '0.65rem',
+                  overflowX: 'auto',
+                  whiteSpace: 'nowrap'
+                }}>
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>📍 Ubicación:</span>
+                  <span style={{ color: '#f1f5f9', fontFamily: 'monospace' }}>
+                    {evidenciaData.path_completo}
+                  </span>
+                </div>
+              )}
+
+              {/* BARRA DE CHIPS DE ACCESO DIRECTO POR UT */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                flexWrap: 'wrap', 
+                marginBottom: '0.85rem',
+                padding: '6px 8px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(255,255,255,0.06)'
+              }}>
+                {/* 1. Fotos Campaña Activa */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveEvidenceChip('CAMPANIA');
+                    if (evidenciaData?.fotos_campania && evidenciaData.fotos_campania.length > 0) {
+                      setItems(prev => ({ ...prev, images: evidenciaData.fotos_campania }));
+                    }
+                  }}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    backgroundColor: activeEvidenceChip === 'CAMPANIA' ? '#0284c7' : 'rgba(255,255,255,0.04)',
+                    color: activeEvidenceChip === 'CAMPANIA' ? '#ffffff' : 'var(--text-secondary)',
+                    border: activeEvidenceChip === 'CAMPANIA' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span>📸 Fotos PGP 2026</span>
+                  <span style={{ 
+                    fontSize: '0.7rem', 
+                    padding: '1px 6px', 
+                    borderRadius: '10px', 
+                    backgroundColor: activeEvidenceChip === 'CAMPANIA' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.1)',
+                    color: activeEvidenceChip === 'CAMPANIA' ? '#e0f2fe' : 'inherit'
+                  }}>
+                    {evidenciaData?.resumen?.total_fotos_campania ?? (items.images?.length || 0)}
+                  </span>
+                </button>
+
+                {/* 2. Planos y Documentación Técnica */}
+                <button
+                  type="button"
+                  onClick={() => setActiveEvidenceChip('PLANOS')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    backgroundColor: activeEvidenceChip === 'PLANOS' ? '#0891b2' : 'rgba(255,255,255,0.04)',
+                    color: activeEvidenceChip === 'PLANOS' ? '#ffffff' : 'var(--text-secondary)',
+                    border: activeEvidenceChip === 'PLANOS' ? '1px solid #22d3ee' : '1px solid rgba(255,255,255,0.08)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span>📐 Planos & Doc. Técnica</span>
+                  <span style={{ 
+                    fontSize: '0.7rem', 
+                    padding: '1px 6px', 
+                    borderRadius: '10px', 
+                    backgroundColor: activeEvidenceChip === 'PLANOS' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.1)',
+                    color: activeEvidenceChip === 'PLANOS' ? '#cffafe' : 'inherit'
+                  }}>
+                    {evidenciaData?.resumen?.total_documentacion ?? 0}
+                  </span>
+                </button>
+
+                {/* 3. Histórico de Campañas Anteriores */}
+                <button
+                  type="button"
+                  onClick={() => setActiveEvidenceChip('HISTORICO')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    backgroundColor: activeEvidenceChip === 'HISTORICO' ? '#7e22ce' : 'rgba(255,255,255,0.04)',
+                    color: activeEvidenceChip === 'HISTORICO' ? '#ffffff' : 'var(--text-secondary)',
+                    border: activeEvidenceChip === 'HISTORICO' ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.08)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span>⏪ Histórico Referencia</span>
+                  <span style={{ 
+                    fontSize: '0.7rem', 
+                    padding: '1px 6px', 
+                    borderRadius: '10px', 
+                    backgroundColor: activeEvidenceChip === 'HISTORICO' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.1)',
+                    color: activeEvidenceChip === 'HISTORICO' ? '#f3e8ff' : 'inherit'
+                  }}>
+                    {evidenciaData?.resumen?.total_historicos ?? 0}
+                  </span>
+                </button>
+
+                {/* 4. Explorador Libre (Opcional) */}
+                <button
+                  type="button"
+                  onClick={() => setActiveEvidenceChip('EXPLORADOR')}
+                  style={{
+                    padding: '5px 9px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    backgroundColor: activeEvidenceChip === 'EXPLORADOR' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: activeEvidenceChip === 'EXPLORADOR' ? '#ffffff' : 'var(--text-secondary)',
+                    border: '1px solid rgba(255,255,255,0.08)'
+                  }}
+                  title="Ver árbol tradicional de carpetas"
+                >
+                  <span>📁 Explorador</span>
+                </button>
+
+                {/* 5. Refresco en tiempo real (Sellado del Algoritmo) */}
+                <button
+                  type="button"
+                  onClick={() => fetchEvidencia(equipoId, true)}
+                  disabled={isRefreshingEvidence}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    color: isRefreshingEvidence ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    marginLeft: 'auto'
+                  }}
+                  title="Detecta fotos o archivos recién subidos a Google Drive"
+                >
+                  <span>{isRefreshingEvidence ? '⏳' : '🔄'}</span>
+                  <span>{isRefreshingEvidence ? 'Actualizando...' : 'Actualizar'}</span>
+                </button>
+              </div>
+
+              {/* VISTA 1: PLANOS Y DOCUMENTACIÓN TÉCNICA */}
+              {activeEvidenceChip === 'PLANOS' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {evidenciaData?.documentacion_tecnica?.length > 0 ? (
+                    evidenciaData.documentacion_tecnica.map((doc) => (
+                      <div 
+                        key={doc.id} 
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.08)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                          <span style={{ fontSize: '1.5rem' }}>{doc.es_plano ? '📐' : '📄'}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {doc.name}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                              {doc.es_plano ? 'Plano / Diagrama Isométrico' : 'Especificación Técnica'} · {(doc.size / 1024).toFixed(1)} KB
+                            </div>
+                          </div>
+                        </div>
+                        <a
+                          href={`https://drive.google.com/file/d/${doc.id}/view`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '5px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            textDecoration: 'none',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Abrir Plano ↗
+                        </a>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                      <span style={{ fontSize: '2rem', display: 'block', marginBottom: '8px' }}>📐</span>
+                      No se registran planos cargados en la carpeta técnica de esta UT.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VISTA 2: HISTÓRICO DE REFERENCIA */}
+              {activeEvidenceChip === 'HISTORICO' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {evidenciaData?.fotos_historico && Object.keys(evidenciaData.fotos_historico).length > 0 ? (
+                    Object.entries(evidenciaData.fotos_historico).map(([campaniaNombre, fotos]) => (
+                      <div key={campaniaNombre} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c084fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>📅 {campaniaNombre}</span>
+                          <span style={{ fontSize: '0.72rem', opacity: 0.7 }}>({fotos.length} fotos)</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
+                          {fotos.map(f => (
+                            <div
+                              key={f.id}
+                              onClick={() => setPreviewImage(f)}
+                              style={{
+                                height: '95px',
+                                borderRadius: '6px',
+                                overflow: 'hidden',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                position: 'relative',
+                                cursor: 'pointer',
+                                backgroundColor: 'rgba(0,0,0,0.3)'
+                              }}
+                              title={f.name}
+                            >
+                              <img
+                                src={f.thumbnail || `${API_BASE_URL}/drive/imagen/${f.id}?token=${activeToken}`}
+                                alt={f.name}
+                                loading="lazy"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                      <span style={{ fontSize: '2rem', display: 'block', marginBottom: '8px' }}>⏪</span>
+                      No se registran fotos históricas de años anteriores para esta UT.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VISTA 3: EXPLORADOR TRADICIONAL DE CARPETAS */}
+              {activeEvidenceChip === 'EXPLORADOR' && (
+                <>
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '0.75rem',
+                    color: 'var(--text-secondary)',
+                    marginBottom: '0.75rem',
+                    backgroundColor: 'rgba(255,255,255,0.02)',
+                    padding: '4px 8px',
+                    borderRadius: '4px'
+                  }}>
+                    {folderHistory.map((folder, idx) => (
+                      <span key={`${folder.id || 'folder'}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {idx > 0 && <span>&gt;</span>}
+                        <span style={{
+                          color: idx === folderHistory.length - 1 ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                          fontWeight: idx === folderHistory.length - 1 ? '600' : 'normal'
+                        }}>
+                          {folder.name}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {sugerencias.length > 0 && (
+                    <div style={{ marginBottom: '1rem', padding: '0.8rem', backgroundColor: 'rgba(14, 165, 233, 0.1)', border: '1px solid rgba(14, 165, 233, 0.3)', borderRadius: '6px' }}>
+                      <h5 style={{ margin: '0 0 0.4rem 0', color: 'var(--accent-primary)', fontSize: '0.85rem' }}>
+                        🔍 Carpetas sugeridas para este equipo:
+                      </h5>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                        {sugerencias.map((sug, sIdx) => (
+                          <div 
+                            key={`${sug.id || 'sug'}-${sIdx}`} 
+                            onClick={() => {
+                              setCurrentFolderId(sug.id);
+                              setFolderHistory([{ id: 'root', name: 'Root' }, { id: sug.id, name: sug.name }]);
+                              fetchContents(sug.id);
+                              setAutoDetected(sug);
+                            }}
+                            style={{ 
+                              fontSize: '0.8rem', 
+                              cursor: 'pointer', 
+                              padding: '0.3rem 0.5rem', 
+                              borderRadius: '4px',
+                              backgroundColor: autoDetected?.id === sug.id ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255,255,255,0.03)',
+                              border: autoDetected?.id === sug.id ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              color: 'white'
+                            }}
+                          >
+                            <span>📁 {sug.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                              {autoDetected?.id === sug.id ? 'Seleccionada' : 'Relevancia: Alta'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
+                    {items.folders && Object.entries(items.folders).map(([name, id], fIdx) => (
+                      <li 
+                        key={`${id}-${name}-${fIdx}`} 
+                        onClick={() => navigateToFolder(id, name)} 
+                        style={{ 
+                          padding: '0.6rem 0.8rem', 
+                          cursor: 'pointer', 
+                          borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '0.8rem',
+                          borderRadius: '6px'
+                        }}
+                      >
+                        <span style={{ fontSize: '1.2rem' }}>📁</span>
+                        <span style={{ fontWeight: 500, fontSize: '0.85rem' }}>{name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* VISTA 4: FOTOS DE CAMPAÑA (POR DEFECTO) */}
+              {(activeEvidenceChip === 'CAMPANIA' || activeEvidenceChip === 'EXPLORADOR') && (
+                <>
+                  {activeEvidenceChip === 'CAMPANIA' && (!items.images || items.images.length === 0) && (
+                    <div style={{
+                      padding: '1.5rem',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                      border: '1px dashed rgba(14, 165, 233, 0.25)',
+                      textAlign: 'center',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.82rem',
+                      marginBottom: '1rem'
+                    }}>
+                      <span style={{ fontSize: '1.8rem', display: 'block', marginBottom: '6px' }}>📷</span>
+                      <span>Aún no hay fotos registradas en <strong>PGP 2026</strong> para esta UT.</span>
+                      <div style={{ marginTop: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => cameraInputRef.current?.click()}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--accent-primary)',
+                            color: '#000',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Tomar o subir foto ahora
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    {items.images && items.images.map((img, imgIdx) => (
+
               <li 
-                key={img.id} 
+                key={`${img.id}-${imgIdx}`} 
                 style={{ 
                   padding: '0.8rem', 
                   borderBottom: '1px solid rgba(255,255,255,0.05)', 
@@ -1066,6 +1415,8 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
               </li>
             ))}
           </ul>
+                </>
+              )}
             </div>
           </div>
         )}

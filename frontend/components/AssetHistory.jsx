@@ -15,7 +15,7 @@ const renderVal = (val) => {
   return String(val);
 };
 
-export default function AssetHistory({ empresaId }) {
+export default function AssetHistory({ empresaId, selectedEquipoId }) {
   const { user, token } = useAuth();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +24,7 @@ export default function AssetHistory({ empresaId }) {
   const [materialFilter, setMaterialFilter] = useState('ALL');
   const [areaFilter, setAreaFilter] = useState('ALL');
   const [selectedAsset, setSelectedAsset] = useState(null);
+
   const [assetInspections, setAssetInspections] = useState([]);
   const [loadingInspections, setLoadingInspections] = useState(false);
   const [loadingReportPdf, setLoadingReportPdf] = useState(false);
@@ -181,13 +182,25 @@ export default function AssetHistory({ empresaId }) {
       .then(res => res.json())
       .then(data => {
         setAssets(data);
+        if (selectedEquipoId && Array.isArray(data)) {
+          const match = data.find(a => a.id?.toString() === selectedEquipoId.toString());
+          if (match) setSelectedAsset(match);
+        }
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
         setLoading(false);
       });
-  }, [empresaId]);
+  }, [empresaId, selectedEquipoId]);
+
+  useEffect(() => {
+    if (selectedEquipoId && assets.length > 0) {
+      const match = assets.find(a => a.id?.toString() === selectedEquipoId.toString());
+      if (match) setSelectedAsset(match);
+    }
+  }, [selectedEquipoId, assets]);
+
 
   // Derive unique materials & areas for the filter dropdowns
   const uniqueMaterials = Array.from(new Set(assets.map(a => a.material).filter(m => m && m.trim() !== ''))).sort();

@@ -339,3 +339,27 @@ async def upload_file_to_drive(
     except Exception as e:
         logger.error(f"Error en /api/drive/subir: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error al subir a Google Drive: {str(e)}")
+
+
+@router.get("/equipo/{equipo_id}/evidencia", response_model=Dict[str, Any])
+def get_equipo_evidencia(
+    equipo_id: int, 
+    campania: Optional[str] = Query("PGP 2026"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Obtiene la evidencia fotográfica, planos técnicos e histórico de una UT clasificados automáticamente.
+    Sincroniza al vuelo en base de datos cualquier subcarpeta o archivo creado recientemente en Drive.
+    """
+    try:
+        from app.services.drive_service import obtener_evidencia_equipo
+        resultado = obtener_evidencia_equipo(equipo_id, campania_activa=campania or "PGP 2026")
+        if "error" in resultado and not resultado.get("equipo"):
+            raise HTTPException(status_code=404, detail=resultado["error"])
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo evidencia para equipo {equipo_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al obtener evidencia del equipo: {str(e)}")
+

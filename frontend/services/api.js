@@ -511,3 +511,21 @@ export const apiService = {
     }
   }
 };
+
+// CACHÉ EN MEMORIA PARA EVIDENCIA Y FOTOS DE UTs (Persistencia entre pestañas sin re-descargas)
+const evidenciaCache = new Map();
+
+export const getCachedEvidencia = (equipoId) => {
+  if (!equipoId) return null;
+  return evidenciaCache.get(String(equipoId)) || null;
+};
+
+export const setCachedEvidencia = (equipoId, data) => {
+  if (!equipoId || !data) return;
+  evidenciaCache.set(String(equipoId), data);
+};
+
+export const clearCachedEvidencia = (equipoId = null) => {
+  if (equipoId) evidenciaCache.delete(String(equipoId));
+  else evidenciaCache.clear();
+};
