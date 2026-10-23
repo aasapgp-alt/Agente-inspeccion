@@ -1216,32 +1216,66 @@ def obtener_evidencia_equipo(equipo_id: int, campania_activa: str = "PGP 2026") 
                             "tipo": "foto_campania"
                         })
 
-            # Heurística de recomendación de sub-sección según el equipo
+            # Heurística de recomendación de sub-sección según el equipo con ponderación inteligente por fotos
             if secciones_campania:
                 eq_nombre_norm = eq.get("nombre", "").lower().replace("ó", "o").replace("í", "i").replace("á", "a").replace("é", "e").replace("ú", "u")
-                eq_code = str(eq.get("codigo") or "")
+                eq_code = str(eq.get("codigo") or "").strip().lower()
                 
-                mejor_match = None
+                # Palabras clave del equipo
+                palabras_eq = [p for p in re.findall(r'[a-z0-9]+', eq_nombre_norm) if len(p) >= 3]
+                
+                scored_sections = []
                 for sec in secciones_campania:
                     sec_norm = sec["nombre"].lower().replace("ó", "o").replace("í", "i").replace("á", "a").replace("é", "e").replace("ú", "u")
+                    palabras_sec = [p for p in re.findall(r'[a-z0-9]+', sec_norm) if len(p) >= 3]
                     
-                    # Coincidencias específicas de bombas, ventiladores y tramos
-                    if "succion" in eq_nombre_norm and "succion" in sec_norm:
-                        mejor_match = sec
-                        break
+                    score = 0
+                    
+                    # 1. Coincidencia exacta de nombre o token clave (ej: "succion" o "impulsion")
+                    if sec_norm == eq_nombre_norm:
+                        score += 100
+                    elif "succion" in eq_nombre_norm and sec_norm == "succion":
+                        score += 90
+                    elif "impulsion" in eq_nombre_norm and sec_norm == "impulsion":
+                        score += 90
+                    elif "succion" in eq_nombre_norm and "succion" in sec_norm:
+                        score += 40
+                        # Penalizar si es un accesorio secundario como 'carretel' cuando el equipo no lo menciona
+                        if "carretel" in sec_norm and "carretel" not in eq_nombre_norm:
+                            score -= 30
                     elif "impulsion" in eq_nombre_norm and "impulsion" in sec_norm:
-                        mejor_match = sec
-                        break
+                        score += 40
+                        if "carretel" in sec_norm and "carretel" not in eq_nombre_norm:
+                            score -= 30
                     elif "ventilador" in eq_nombre_norm and "ventilador" in sec_norm:
-                        mejor_match = sec
-                        break
+                        score += 50
                     elif eq_code and eq_code in sec_norm:
-                        mejor_match = sec
-                        break
+                        score += 60
+                    
+                    # Coincidencia de palabras clave generales
+                    interseccion = set(palabras_eq).intersection(set(palabras_sec))
+                    score += len(interseccion) * 10
+                    
+                    # 2. Ponderación por presencia de fotos: NUNCA recomendar una carpeta vacía sobre una con fotos
+                    count_fotos = sec.get("count", 0)
+                    if count_fotos > 0:
+                        score += 50 + min(count_fotos, 50)  # Bonificación por tener fotos reales
+                    else:
+                        score -= 60  # Penalización fuerte si tiene 0 fotos
+                        
+                    scored_sections.append((score, sec))
                 
-                if mejor_match:
-                    seccion_recomendada = mejor_match["nombre"]
-                    seccion_recomendada_id = mejor_match["id"]
+                # Ordenar por score descendente
+                scored_sections.sort(key=lambda x: x[0], reverse=True)
+                
+                # Solo aceptar si el mejor score es positivo y tiene fotos (o si todas tienen 0 fotos)
+                if scored_sections and scored_sections[0][0] > 0:
+                    mejor_sec = scored_sections[0][1]
+                    seccion_recomendada = mejor_sec["nombre"]
+                    seccion_recomendada_id = mejor_sec["id"]
+                else:
+                    seccion_recomendada = None
+                    seccion_recomendada_id = id_campania_activa
 
         # 5. Archivos sueltos en la raíz del equipo (fotos de emergencia o planos)
         archivos_raiz = listar_archivos(folder_id)

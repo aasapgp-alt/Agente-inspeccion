@@ -255,7 +255,12 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     if (!selectedSubSeccion || selectedSubSeccion === 'todas') {
       return evidenciaData.fotos_campania;
     }
-    return evidenciaData.fotos_campania.filter(f => f.sub_ubicacion === selectedSubSeccion);
+    const filtradas = evidenciaData.fotos_campania.filter(f => f.sub_ubicacion === selectedSubSeccion);
+    // Si la subsección elegida está vacía pero hay fotos en la campaña, mostrar todas para no dejar la vista vacía
+    if (filtradas.length === 0 && evidenciaData.fotos_campania.length > 0) {
+      return evidenciaData.fotos_campania;
+    }
+    return filtradas;
   }, [evidenciaData, selectedSubSeccion]);
 
   const currentConcatenatedPath = useMemo(() => {

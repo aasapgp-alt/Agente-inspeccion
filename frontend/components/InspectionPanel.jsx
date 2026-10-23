@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { useAuth } from './AuthProvider';
@@ -51,7 +51,20 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   // Evidencia Clasificada Directa por UT (Cero Navegación de Carpetas)
   const [evidenciaData, setEvidenciaData] = useState(null);
   const [activeEvidenceChip, setActiveEvidenceChip] = useState('CAMPANIA'); // 'CAMPANIA', 'PLANOS', 'HISTORICO', 'EXPLORADOR'
+  const [selectedSubSeccion, setSelectedSubSeccion] = useState('todas');
   const [isRefreshingEvidence, setIsRefreshingEvidence] = useState(false);
+
+  const fotosCampaniaFiltradas = useMemo(() => {
+    if (!evidenciaData?.fotos_campania) return items.images || [];
+    if (!selectedSubSeccion || selectedSubSeccion === 'todas') {
+      return evidenciaData.fotos_campania;
+    }
+    const filtradas = evidenciaData.fotos_campania.filter(f => f.sub_ubicacion === selectedSubSeccion);
+    if (filtradas.length === 0 && evidenciaData.fotos_campania.length > 0) {
+      return evidenciaData.fotos_campania;
+    }
+    return filtradas;
+  }, [evidenciaData, selectedSubSeccion, items.images]);
 
   // IA State
   const [analisis, setAnalisis] = useState(null);
@@ -77,8 +90,6 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   const [previewImage, setPreviewImage] = useState(null);
   const [annotationsRefreshKey, setAnnotationsRefreshKey] = useState(0);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // 'drive', 'ia', or null
-
-  const cameraInputRef = useRef(null);
 
   const handleCameraCapture = async (e) => {
     const file = e.target.files?.[0];
@@ -215,13 +226,16 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   };
 
   const fetchEvidencia = async (eqId = equipoId, showRefreshNotice = false) => {
-    if (!eqId) return;
+    if (!eqId) return null;
 
     // 1. Usar memoria caché inmediata (0ms) si no es actualización manual forzada
     if (!showRefreshNotice) {
       const cached = getCachedEvidencia(eqId);
       if (cached) {
         setEvidenciaData(cached);
+        if (cached.seccion_recomendada) {
+          setSelectedSubSeccion(cached.seccion_recomendada);
+        }
         if (cached.fotos_campania && cached.fotos_campania.length > 0) {
           setItems(prev => ({ ...prev, images: cached.fotos_campania }));
         } else if (cached.fotos_historico) {
@@ -233,7 +247,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
             }));
           }
         }
-        return;
+        return cached;
       }
     }
 
@@ -244,6 +258,9 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
         const data = await res.json();
         setEvidenciaData(data);
         setCachedEvidencia(eqId, data);
+        if (data.seccion_recomendada) {
+          setSelectedSubSeccion(data.seccion_recomendada);
+        }
         if (data.fotos_campania && data.fotos_campania.length > 0) {
           setItems(prev => ({
             ...prev,
@@ -258,12 +275,14 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
             }));
           }
         }
+        return data;
       }
     } catch (err) {
       console.error("Error al obtener evidencia del equipo:", err);
     } finally {
       if (showRefreshNotice) setIsRefreshingEvidence(false);
     }
+    return null;
   };
 
   useEffect(() => {
@@ -273,9 +292,6 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
     const initializeFolder = async () => {
       setLoading(true);
       try {
-        // Cargar evidencia clasificada directa por UT
-        fetchEvidencia(equipoId);
-
         // 1. Fetch equipo directamente por ID
         let eq = null;
         try {
@@ -346,6 +362,30 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
           }
         } catch (histErr) {
           console.error("Error fetching PGP 2024 history:", histErr);
+        }
+
+        // Cargar evidencia jerárquica clasificada y auto-posicionar en la subcarpeta del equipo con fotos
+        let evData = null;
+        try {
+          evData = await fetchEvidencia(equipoId, false);
+          if (evData && isMounted) {
+            if (evData.fotos_campania?.length > 0) {
+              setItems(prev => ({ ...prev, images: evData.fotos_campania }));
+            }
+            if (evData.seccion_recomendada_id) {
+              const targetFolderId = evData.seccion_recomendada_id;
+              setCurrentFolderId(targetFolderId);
+              setFolderHistory([
+                { id: currentRootId || 'root', name: 'Root' },
+                { id: eq?.drive_folder_id || 'parent', name: eq?.nombre || 'Equipo' },
+                { id: targetFolderId, name: evData.seccion_recomendada || 'Campaña' }
+              ]);
+              fetchContents(targetFolderId);
+              return;
+            }
+          }
+        } catch (evErr) {
+          console.error("Error loading hierarchical evidence in initializeFolder:", evErr);
         }
 
         if (sugData?.sugerencias && sugData.sugerencias.length > 0) {
@@ -1183,7 +1223,87 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
               {/* VISTA 4: FOTOS DE CAMPAÑA (POR DEFECTO) */}
               {(activeEvidenceChip === 'CAMPANIA' || activeEvidenceChip === 'EXPLORADOR') && (
                 <>
-                  {activeEvidenceChip === 'CAMPANIA' && (!items.images || items.images.length === 0) && (
+                  {/* SUB-SECCIONES DETECTADAS EN CAMPAÑA (Ej: Succión 431-433 / Impulsión 431-433) */}
+                  {activeEvidenceChip === 'CAMPANIA' && evidenciaData?.secciones_campania?.length > 1 && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '5px',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      padding: '6px 8px',
+                      backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      marginBottom: '1rem'
+                    }}>
+                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>Sub-sección:</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSubSeccion('todas')}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: selectedSubSeccion === 'todas' ? 700 : 500,
+                          cursor: 'pointer',
+                          backgroundColor: selectedSubSeccion === 'todas' ? '#334155' : 'transparent',
+                          color: selectedSubSeccion === 'todas' ? '#ffffff' : '#94a3b8',
+                          border: selectedSubSeccion === 'todas' ? '1px solid #64748b' : '1px solid transparent'
+                        }}
+                      >
+                        Ver Todas ({evidenciaData.fotos_campania?.length || 0})
+                      </button>
+                      {evidenciaData.secciones_campania.map(sec => {
+                        const isRec = sec.nombre === evidenciaData.seccion_recomendada;
+                        const isActive = selectedSubSeccion === sec.nombre;
+                        return (
+                          <button
+                            key={sec.id}
+                            type="button"
+                            onClick={() => setSelectedSubSeccion(sec.nombre)}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.7rem',
+                              fontWeight: isActive ? 700 : 500,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              backgroundColor: isActive 
+                                ? '#059669' 
+                                : isRec 
+                                ? 'rgba(5, 150, 105, 0.15)' 
+                                : 'transparent',
+                              color: isActive 
+                                ? '#ffffff' 
+                                : isRec 
+                                ? '#6ee7b7' 
+                                : '#94a3b8',
+                              border: isActive 
+                                ? '1px solid #34d399' 
+                                : isRec 
+                                ? '1px solid rgba(16, 185, 129, 0.4)' 
+                                : '1px solid transparent'
+                            }}
+                          >
+                            <span>{sec.nombre}</span>
+                            <span style={{ 
+                              fontSize: '0.65rem', 
+                              padding: '1px 4px', 
+                              borderRadius: '3px', 
+                              backgroundColor: 'rgba(0,0,0,0.3)',
+                              color: isActive ? '#d1fae5' : '#cbd5e1'
+                            }}>
+                              {sec.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {activeEvidenceChip === 'CAMPANIA' && fotosCampaniaFiltradas.length === 0 && (
                     <div style={{
                       padding: '1.5rem',
                       borderRadius: '8px',
@@ -1218,7 +1338,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
                   )}
 
                   <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                    {items.images && items.images.map((img, imgIdx) => (
+                    {(activeEvidenceChip === 'CAMPANIA' ? fotosCampaniaFiltradas : (items.images || [])).map((img, imgIdx) => (
 
               <li 
                 key={`${img.id}-${imgIdx}`} 
