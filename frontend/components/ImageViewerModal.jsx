@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ZoomIn, ZoomOut, RotateCw, Maximize2, Minimize2, X, ChevronLeft, ChevronRight, CheckCircle2, Circle, Edit3 } from 'lucide-react';
 import { API_BASE_URL } from '../services/api';
 
@@ -18,6 +18,11 @@ export default function ImageViewerModal({
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  // Refs para rastrear con precisión el arrastre y evitar cierres accidentales
+  const isDraggingRef = useRef(false);
+  const wasDraggingRef = useRef(false);
+  const mouseDownTargetRef = useRef(null);
 
   // Sincronizar índice inicial si se pasa una lista de imágenes
   useEffect(() => {
@@ -88,15 +93,19 @@ export default function ImageViewerModal({
 
   // Soporte de arrastre (Pan) cuando hay zoom activo
   const handleMouseDown = (e) => {
-    if (zoom > 1) {
+    mouseDownTargetRef.current = e.target;
+    wasDraggingRef.current = false;
+    if (e.button === 0 && zoom > 1) {
       e.preventDefault();
       setIsDragging(true);
+      isDraggingRef.current = true;
       setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
     }
   };
 
   const handleMouseMove = (e) => {
-    if (isDragging && zoom > 1) {
+    if (isDraggingRef.current && zoom > 1) {
+      wasDraggingRef.current = true;
       setPosition({
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y
@@ -104,7 +113,30 @@ export default function ImageViewerModal({
     }
   };
 
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseUp = () => {
+    if (isDraggingRef.current) {
+      setIsDragging(false);
+      isDraggingRef.current = false;
+      setTimeout(() => {
+        wasDraggingRef.current = false;
+      }, 150);
+    }
+  };
+
+  // Listener global para capturar mouseup si el cursor sale del contenedor mientras se arrastra
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (isDraggingRef.current) {
+        setIsDragging(false);
+        isDraggingRef.current = false;
+        setTimeout(() => {
+          wasDraggingRef.current = false;
+        }, 150);
+      }
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, []);
 
   // Doble clic sobre la imagen para alternar zoom rápido (1x <-> 2x)
   const handleImageDoubleClick = (e) => {
@@ -141,7 +173,6 @@ export default function ImageViewerModal({
         userSelect: 'none',
         animation: 'fadeIn 0.2s ease-out'
       }}
-      onClick={onClose}
     >
       {/* Barra superior de herramientas */}
       <div
@@ -271,8 +302,13 @@ export default function ImageViewerModal({
         onMouseUp={handleMouseUp}
         onWheel={handleWheel}
         onClick={(e) => {
-          // Si hace clic en el fondo vacío, cerrar
-          if (e.target === e.currentTarget) {
+          // Si el usuario estuvo arrastrando o moviendo con la mano, NUNCA cerrar
+          if (wasDraggingRef.current) {
+            e.stopPropagation();
+            return;
+          }
+          // Solo cerrar si fue un clic deliberado en el fondo vacío (y no comenzó en la imagen)
+          if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
             onClose();
           }
         }}
