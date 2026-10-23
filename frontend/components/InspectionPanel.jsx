@@ -47,6 +47,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   const [items, setItems] = useState({ folders: {}, images: [] });
   const [selectedImages, setSelectedImages] = useState([]);
   const [rootFolderId, setRootFolderId] = useState(null);
+  const cameraInputRef = useRef(null);
 
   // Evidencia Clasificada Directa por UT (Cero Navegación de Carpetas)
   const [evidenciaData, setEvidenciaData] = useState(null);

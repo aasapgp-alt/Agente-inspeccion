@@ -150,7 +150,6 @@ export default function ImageViewerModal({
 
   // Zoom con rueda del mouse
   const handleWheel = (e) => {
-    e.preventDefault();
     if (e.deltaY < 0) {
       handleZoomIn();
     } else {

@@ -1050,16 +1050,23 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
               </div>
             </div>
 
-            {/* PESTAÑA 3: FOTOS (Persistente) */}
-            <div style={{ display: activeTab === 'FOTOS' ? 'block' : 'none' }}>
+            {/* PESTAÑA 3 & 4: FOTOS Y ANÁLISIS IA (Persistente, instancia única) */}
+            <div style={{ display: (activeTab === 'FOTOS' || activeTab === 'ANALISIS_IA') ? 'block' : 'none' }}>
               <div>
                 <div className={`mb-3 pb-2.5 border-b flex items-center justify-between ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
                   <div>
-                    <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                      Evidencia Fotográfica y Registros de Drive
+                    <h2 className={`text-base font-black flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      {activeTab === 'ANALISIS_IA' ? (
+                        <>
+                          <Sparkles className="w-4 h-4 text-indigo-500" />
+                          Diagnóstico Multimodal Asistido por IA
+                        </>
+                      ) : (
+                        'Evidencia Fotográfica y Registros de Drive'
+                      )}
                     </h2>
                     <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                      {equipoActual ? `Fotos de ${equipoActual.nombre} (Carpeta Drive: ${equipoActual.drive_folder_nombre || 'Asignada'})` : 'Selecciona un equipo'}
+                      {equipoActual ? `Activo ID #${equipoId} · ${equipoActual.nombre} (Carpeta Drive: ${equipoActual.drive_folder_nombre || 'Asignada'})` : 'Selecciona un equipo'}
                     </p>
                   </div>
                 </div>
@@ -1077,43 +1084,10 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
                   <div className={`p-12 text-center ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
                     <Camera className="w-10 h-10 mx-auto mb-2 opacity-50" />
                     <h3 className={`font-bold text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>Selecciona un Activo</h3>
-                    <p className="text-xs mt-1">Elige un equipo en el panel lateral para explorar sus fotos.</p>
+                    <p className="text-xs mt-1">Elige un equipo en el panel lateral para explorar sus fotos o análisis IA.</p>
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* PESTAÑA 4: ANÁLISIS IA (Persistente) */}
-            <div style={{ display: activeTab === 'ANALISIS_IA' ? 'block' : 'none' }}>
-              {equipoId ? (
-                <div>
-                  <div className={`mb-3 pb-2.5 border-b flex items-center justify-between ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
-                    <div>
-                      <h2 className={`text-base font-black flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                        <Sparkles className="w-4 h-4 text-indigo-500" />
-                        Diagnóstico Multimodal Asistido por IA
-                      </h2>
-                      <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                        Activo ID #{equipoId} · {equipoActual?.nombre}
-                      </p>
-                    </div>
-                  </div>
-                  <InspectionPanel
-                    equipoId={equipoId}
-                    onChangeTab={(t) => {
-                      if (t === 'MANUAL') handleSelectTab('ESTADO');
-                      else if (t === 'HISTORY') handleSelectTab('HISTORIA');
-                      else handleSelectTab(t);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className={`p-12 text-center ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
-                  <Sparkles className="w-10 h-10 mx-auto mb-2 text-indigo-400/50" />
-                  <h3 className={`font-bold text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>Inspección con IA</h3>
-                  <p className="text-xs mt-1">Selecciona un activo en el panel lateral para iniciar el análisis multimodal.</p>
-                </div>
-              )}
             </div>
 
             {/* PESTAÑA 5: REPORTE */}
