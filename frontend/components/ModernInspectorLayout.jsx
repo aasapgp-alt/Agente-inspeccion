@@ -236,7 +236,34 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
   const equiposFiltrados = useMemo(() => {
     let result = equipos;
     if (filtroEstado !== 'TODOS') {
-      result = result.filter(eq => (eq.estado_actual || eq.estado) === filtroEstado);
+      if (filtroEstado === 'PENDIENTE') {
+        result = result.filter(eq => {
+          const est = (eq.estado_actual || eq.estado || '').toUpperCase();
+          return !est || est === 'PENDIENTE' || est === 'SIN DATOS' || est === 'NO INSPECCIONADO' || eq.has_campaign_inspection === 0;
+        });
+      } else if (filtroEstado === 'FUERA DE RUTA') {
+        result = result.filter(eq => {
+          const est = (eq.estado_actual || eq.estado || '').toUpperCase();
+          return est.includes('FUERA') || est.includes('RUTA') || eq.fuera_de_ruta === true || eq.es_fuera_ruta === true;
+        });
+      } else if (filtroEstado === 'CRITICO') {
+        result = result.filter(eq => {
+          const est = (eq.estado_actual || eq.estado || '').toUpperCase();
+          return est.includes('CRIT');
+        });
+      } else if (filtroEstado === 'REGULAR') {
+        result = result.filter(eq => {
+          const est = (eq.estado_actual || eq.estado || '').toUpperCase();
+          return est.includes('REGULAR') || est.includes('ALERTA') || est.includes('OBSERV');
+        });
+      } else if (filtroEstado === 'BUENO') {
+        result = result.filter(eq => {
+          const est = (eq.estado_actual || eq.estado || '').toUpperCase();
+          return est.includes('BUEN') || est === 'OP' || est === 'OPERATIVO';
+        });
+      } else {
+        result = result.filter(eq => (eq.estado_actual || eq.estado) === filtroEstado);
+      }
     }
     if (busquedaEquipo.trim()) {
       const q = busquedaEquipo.toLowerCase();
@@ -263,39 +290,60 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
 
   // Badges con contraste suave
   const renderBadge = (estado) => {
-    switch (estado) {
-      case 'CRITICO':
-        return (
-          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-            isLight
-              ? 'bg-rose-100 text-rose-800 border border-rose-300'
-              : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-          }`}>
-            <AlertOctagon className="w-3 h-3" /> Crítico
-          </span>
-        );
-      case 'REGULAR':
-        return (
-          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-            isLight
-              ? 'bg-amber-100 text-amber-800 border border-amber-300'
-              : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-          }`}>
-            <AlertTriangle className="w-3 h-3" /> Observado
-          </span>
-        );
-      case 'BUENO':
-      default:
-        return (
-          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-            isLight
-              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-          }`}>
-            <CheckCircle2 className="w-3 h-3" /> Bueno
-          </span>
-        );
+    const estNorm = (estado || '').toUpperCase();
+    if (estNorm.includes('CRIT')) {
+      return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+          isLight
+            ? 'bg-rose-100 text-rose-800 border border-rose-300'
+            : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+        }`}>
+          <AlertOctagon className="w-3 h-3" /> Crítico
+        </span>
+      );
     }
+    if (estNorm.includes('REGULAR') || estNorm.includes('ALERTA') || estNorm.includes('OBSERV')) {
+      return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+          isLight
+            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+        }`}>
+          <AlertTriangle className="w-3 h-3" /> Observado
+        </span>
+      );
+    }
+    if (estNorm.includes('FUERA') || estNorm.includes('RUTA')) {
+      return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+          isLight
+            ? 'bg-purple-100 text-purple-800 border border-purple-300'
+            : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+        }`}>
+          <HelpCircle className="w-3 h-3" /> Fuera de Ruta
+        </span>
+      );
+    }
+    if (!estNorm || estNorm === 'PENDIENTE' || estNorm === 'SIN DATOS' || estNorm === 'NO INSPECCIONADO') {
+      return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+          isLight
+            ? 'bg-slate-100 text-slate-700 border border-slate-300'
+            : 'bg-slate-700/30 text-slate-300 border border-slate-600/40'
+        }`}>
+          <Clock className="w-3 h-3" /> Pendiente
+        </span>
+      );
+    }
+    return (
+      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+        isLight
+          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+      }`}>
+        <CheckCircle2 className="w-3 h-3" /> Bueno
+      </span>
+    );
   };
 
   // Bloque de KPIs
@@ -510,12 +558,12 @@ export default function ModernInspectorLayout({ onToggleLegacyView }) {
         </div>
 
         {/* Filtro por estado */}
-        <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-0.5 text-[10px]">
-          {['TODOS', 'CRITICO', 'REGULAR', 'BUENO'].map((est) => (
+        <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-1 text-[10px] scrollbar-thin">
+          {['TODOS', 'CRITICO', 'REGULAR', 'BUENO', 'PENDIENTE', 'FUERA DE RUTA'].map((est) => (
             <button
               key={est}
               onClick={() => setFiltroEstado(est)}
-              className={`px-2 py-0.5 rounded-md font-bold transition-all border ${
+              className={`px-2 py-0.5 rounded-md font-bold transition-all border whitespace-nowrap shrink-0 ${
                 filtroEstado === est
                   ? isLight ? 'bg-sky-600 text-white border-sky-600' : 'bg-sky-500/25 text-sky-300 border-sky-500/40'
                   : isLight ? 'bg-slate-100 text-slate-600 border-slate-200 hover:text-slate-900' : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white'
