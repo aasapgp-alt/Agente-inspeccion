@@ -1967,7 +1967,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
       {previewImage && (
         <ImageViewerModal
           image={previewImage}
-          images={items.images || []}
+          images={activeEvidenceChip === 'CAMPANIA' && fotosCampaniaFiltradas.length > 0 ? fotosCampaniaFiltradas : (items.images || [])}
           token={token}
           onClose={() => setPreviewImage(null)}
           isSelected={selectedImages.includes(previewImage.id)}

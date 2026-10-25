@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ZoomIn, ZoomOut, RotateCw, Maximize2, Minimize2, X, ChevronLeft, ChevronRight, CheckCircle2, Circle, Edit3 } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCw, Maximize2, Minimize2, X, ChevronLeft, ChevronRight, CheckCircle2, Circle, Edit3, Sparkles } from 'lucide-react';
 import { API_BASE_URL } from '../services/api';
 
 export default function ImageViewerModal({
@@ -19,6 +19,10 @@ export default function ImageViewerModal({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
+  // Estados de alta resolución bajo demanda y carga progresiva
+  const [isOriginal, setIsOriginal] = useState(false);
+  const [isHdLoaded, setIsHdLoaded] = useState(false);
+
   // Refs para rastrear con precisión el arrastre y evitar cierres accidentales
   const isDraggingRef = useRef(false);
   const wasDraggingRef = useRef(false);
@@ -34,16 +38,47 @@ export default function ImageViewerModal({
     }
   }, [image, images]);
 
+  // Al cambiar de imagen, reiniciar estado de carga progresiva
+  useEffect(() => {
+    setIsHdLoaded(false);
+    setIsOriginal(false);
+  }, [currentIndex]);
+
   // Imagen activa actual
   const currentImg = images.length > 0 ? images[currentIndex] : image;
   const currentImgId = currentImg?.id || currentImg;
   const currentImgName = currentImg?.name || currentImg?.title || `Imagen ${currentIndex + 1}`;
   const currentImgSize = currentImg?.size ? `${(currentImg.size / 1024).toFixed(1)} KB` : '';
 
+  // Miniatura previa ligera (disponible en 0ms desde caché del navegador)
+  const thumbUrl = currentImg?.thumbnail || currentImg?.thumbnailLink || (currentImg?.data ? currentImg.data : '');
+
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
-  const imageUrl = currentImgId 
-    ? (currentImg?.data || `${API_BASE_URL}/drive/imagen/${currentImgId}?token=${activeToken}`) 
+  const hdImageUrl = currentImgId 
+    ? (currentImg?.data || `${API_BASE_URL}/drive/imagen/${currentImgId}?token=${activeToken}${isOriginal ? '&original=true' : ''}`) 
     : '';
+
+  // Pre-carga silenciosa de la imagen previa y siguiente en segundo plano
+  useEffect(() => {
+    if (images.length > 1 && activeToken && typeof window !== 'undefined') {
+      const nextIdx = (currentIndex + 1) % images.length;
+      const prevIdx = (currentIndex - 1 + images.length) % images.length;
+      
+      const nextImg = images[nextIdx];
+      const prevImg = images[prevIdx];
+      const nextId = nextImg?.id || nextImg;
+      const prevId = prevImg?.id || prevImg;
+
+      if (nextId) {
+        const imgPreloadNext = new window.Image();
+        imgPreloadNext.src = nextImg?.data || `${API_BASE_URL}/drive/imagen/${nextId}?token=${activeToken}`;
+      }
+      if (prevId) {
+        const imgPreloadPrev = new window.Image();
+        imgPreloadPrev.src = prevImg?.data || `${API_BASE_URL}/drive/imagen/${prevId}?token=${activeToken}`;
+      }
+    }
+  }, [currentIndex, images, activeToken]);
 
   const handleReset = () => {
     setZoom(1);
@@ -250,6 +285,32 @@ export default function ImageViewerModal({
             Restaurar
           </button>
 
+          <button
+            type="button"
+            onClick={() => {
+              setIsOriginal(prev => !prev);
+              setIsHdLoaded(false);
+            }}
+            style={{
+              padding: '5px 11px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              backgroundColor: isOriginal ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+              border: isOriginal ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.2)',
+              color: isOriginal ? '#34d399' : '#cbd5e1',
+              transition: 'all 0.2s'
+            }}
+            title={isOriginal ? "Resolución original completa de cámara activa (4K/Full)" : "Descargar imagen original en resolución completa (sin compresión)"}
+          >
+            <Sparkles size={14} />
+            <span>{isOriginal ? 'Original 100%' : 'Cargar Original'}</span>
+          </button>
+
           <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(255, 255, 255, 0.15)', margin: '0 4px' }} />
 
           <button
@@ -362,13 +423,35 @@ export default function ImageViewerModal({
             alignItems: 'center',
             justifyContent: 'center',
             transform: `translate(${position.x}px, ${position.y}px) scale(${zoom}) rotate(${rotation}deg)`,
-            transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+            transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+            position: 'relative'
           }}
           onDoubleClick={handleImageDoubleClick}
         >
+          {/* Fase 1: Miniatura ligera previa (desenfocada) mientras carga la versión HD */}
+          {!isHdLoaded && thumbUrl && (
+            <img
+              src={thumbUrl}
+              alt=""
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                borderRadius: isFullscreen ? '0px' : '8px',
+                filter: 'blur(10px)',
+                opacity: 0.85,
+                transition: 'opacity 0.2s ease-out',
+                position: 'absolute'
+              }}
+              draggable={false}
+            />
+          )}
+
+          {/* Fase 2: Imagen HD / Original */}
           <img
-            src={imageUrl}
+            src={hdImageUrl}
             alt={currentImgName}
+            onLoad={() => setIsHdLoaded(true)}
             style={{
               maxWidth: '100%',
               maxHeight: '100%',
@@ -377,7 +460,9 @@ export default function ImageViewerModal({
               boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
               pointerEvents: 'auto',
-              cursor: zoom > 1 ? 'inherit' : 'zoom-in'
+              cursor: zoom > 1 ? 'inherit' : 'zoom-in',
+              opacity: isHdLoaded ? 1 : (thumbUrl ? 0 : 1),
+              transition: 'opacity 0.25s ease-in-out'
             }}
             draggable={false}
           />
@@ -443,7 +528,7 @@ export default function ImageViewerModal({
           {images.map((img, idx) => {
             const imgId = img?.id || img;
             const isCurrent = idx === currentIndex;
-            const thumbUrl = img?.data || `${API_BASE_URL}/drive/imagen/${imgId}?token=${activeToken}`;
+            const itemThumbUrl = img?.thumbnail || img?.thumbnailLink || (img?.data ? img.data : `${API_BASE_URL}/drive/imagen/${imgId}?token=${activeToken}`);
             return (
               <div
                 key={imgId || idx}
@@ -464,8 +549,9 @@ export default function ImageViewerModal({
                 }}
               >
                 <img
-                  src={thumbUrl}
+                  src={itemThumbUrl}
                   alt={`Min ${idx + 1}`}
+                  loading="lazy"
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               </div>

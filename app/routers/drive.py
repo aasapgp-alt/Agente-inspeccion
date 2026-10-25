@@ -159,6 +159,7 @@ from fastapi import Query
 @router.get("/imagen/{file_id}")
 def get_imagen(
     file_id: str, 
+    original: bool = Query(False),
     token: Optional[str] = Query(None), 
     db: sqlite3.Connection = Depends(get_db)
 ):
@@ -175,10 +176,17 @@ def get_imagen(
         raise HTTPException(status_code=401, detail="No autorizado")
 
     try:
-        image_content = descargar_imagen(file_id)
+        image_content = descargar_imagen(file_id, original=original)
         if not image_content:
             raise HTTPException(status_code=404, detail="Imagen no encontrada")
-        return Response(content=image_content, media_type="image/jpeg")
+        return Response(
+            content=image_content, 
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=604800, immutable",
+                "X-Resolution": "original" if original else "optimized"
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

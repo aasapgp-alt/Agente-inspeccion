@@ -218,11 +218,25 @@ def generar_imagen_mock(file_id: str = "mock_img") -> bytes:
         # Minimal 1x1 valid JPEG fallback
         return b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' \",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9'
 
-def descargar_imagen(file_id: str, max_dim: Optional[int] = 1280, calidad: int = 80) -> bytes:
+IMAGE_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "cache_drive_images")
+os.makedirs(IMAGE_CACHE_DIR, exist_ok=True)
+
+def descargar_imagen(file_id: str, max_dim: Optional[int] = 1280, calidad: int = 80, original: bool = False) -> bytes:
     if file_id.startswith("mock_"):
         return generar_imagen_mock(file_id)
 
-    tmp_name = f"{file_id}.tmp"
+    # Cache en disco: {file_id}_orig.jpg para original, o {file_id}_{max_dim}_{calidad}.jpg para optimizada
+    cache_filename = f"{file_id}_orig.jpg" if original else f"{file_id}_{max_dim or 1280}_{calidad}.jpg"
+    cache_path = os.path.join(IMAGE_CACHE_DIR, cache_filename)
+
+    if os.path.exists(cache_path) and os.path.getsize(cache_path) > 0:
+        try:
+            with open(cache_path, "rb") as f:
+                return f.read()
+        except Exception as read_err:
+            logger.warning(f"Error leyendo imagen en caché {cache_path}: {read_err}")
+
+    tmp_name = os.path.join(IMAGE_CACHE_DIR, f"{file_id}.tmp")
     try:
         drive = get_drive_instance()
         if not drive:
@@ -231,12 +245,23 @@ def descargar_imagen(file_id: str, max_dim: Optional[int] = 1280, calidad: int =
         file = drive.CreateFile({'id': file_id})
         file.GetContentFile(tmp_name)
         
-        from app.utils.image_utils import optimizar_imagen_bytes
-        
         with open(tmp_name, "rb") as f:
             raw_bytes = f.read()
-            
-        return optimizar_imagen_bytes(raw_bytes, max_dimension=max_dim, calidad=calidad)
+
+        if original:
+            processed_bytes = raw_bytes
+        else:
+            from app.utils.image_utils import optimizar_imagen_bytes
+            processed_bytes = optimizar_imagen_bytes(raw_bytes, max_dimension=max_dim, calidad=calidad)
+
+        # Guardar en disco para servir en < 15ms en subsiguientes peticiones
+        try:
+            with open(cache_path, "wb") as f_cache:
+                f_cache.write(processed_bytes)
+        except Exception as cache_write_err:
+            logger.warning(f"No se pudo escribir en caché {cache_path}: {cache_write_err}")
+
+        return processed_bytes
     except Exception as e:
         logger.error(f"Error descargando imagen {file_id}: {e}")
         return generar_imagen_mock(file_id)
