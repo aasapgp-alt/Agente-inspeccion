@@ -74,9 +74,14 @@ def load_excel_data(excel_path: str) -> Dict[str, List[Dict[str, Any]]]:
             continue
             
         df = pd.read_excel(excel_path, sheet_name=sheet_name)
+        # Soporte para archivos con fila de título superior (header en fila 1)
+        if not any('nea' in str(c).lower() or 'equipo' in str(c).lower() for c in df.columns):
+            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=1)
+
         col_eq = [c for c in df.columns if 'nea' in str(c).lower() or 'equipo' in str(c).lower()][0]
         col_crit = [c for c in df.columns if 'criticidad' in str(c).lower()][0] if any('criticidad' in str(c).lower() for c in df.columns) else None
         col_mat = [c for c in df.columns if 'material' in str(c).lower()][0] if any('material' in str(c).lower() for c in df.columns) else None
+        col_num = [c for c in df.columns if '#' in str(c)][0] if any('#' in str(c) for c in df.columns) else None
         
         # Columnas 2023
         c_est_23 = [c for c in df.columns if 'estado' in str(c).lower() and '2023' in str(c)]
@@ -104,6 +109,7 @@ def load_excel_data(excel_path: str) -> Dict[str, List[Dict[str, Any]]]:
                 
             criticidad = clean_text(row[col_crit]) if col_crit else ""
             material = clean_text(row[col_mat]) if col_mat else ""
+            tag = clean_text(row[col_num]) if col_num else ""
             
             # Datos 2023
             est_23 = clean_state(row[c_est_23[0]]) if c_est_23 else "PENDIENTE"
@@ -128,6 +134,7 @@ def load_excel_data(excel_path: str) -> Dict[str, List[Dict[str, Any]]]:
             items.append({
                 'row_index': idx + 1,
                 'nombre': eq_nombre,
+                'tag': tag,
                 'criticidad': criticidad,
                 'material': material,
                 'estado_actual': estado_actual,
@@ -143,10 +150,11 @@ def load_excel_data(excel_path: str) -> Dict[str, List[Dict[str, Any]]]:
         
     return structured_data
 
-def sync_database(target: str = "dry-run"):
-    excel_path = "00_AASA MINUTA PGP.xlsx"
+def sync_database(target: str = "dry-run", excel_path: Optional[str] = None):
+    if not excel_path:
+        excel_path = "UT_Arauco.xlsx" if os.path.exists("UT_Arauco.xlsx") else "00_AASA MINUTA PGP.xlsx"
     print(f"\n==================================================================")
-    print(f"INICIANDO SINCRONIZACIÓN ARAUCO (Modo: {target.upper()})")
+    print(f"INICIANDO SINCRONIZACIÓN ARAUCO (Archivo: {excel_path} | Modo: {target.upper()})")
     print(f"==================================================================")
     
     excel_data = load_excel_data(excel_path)
@@ -250,16 +258,17 @@ def _sync_sqlite(db_path: str, excel_data: Dict[str, List[Dict[str, Any]]]):
                 if matched_id:
                     cursor.execute("""
                         UPDATE equipos 
-                        SET nombre = ?, codigo = ?, material = ?, criticidad = ?, estado_actual = ?, activo = 1
+                        SET nombre = ?, codigo = ?, material = ?, criticidad = ?, estado_actual = ?,
+                            tag = COALESCE(NULLIF(?, ''), tag), activo = 1
                         WHERE id = ?
-                    """, (eq_nombre, assigned_code, item['material'], item['criticidad'], item['estado_actual'], matched_id))
+                    """, (eq_nombre, assigned_code, item['material'], item['criticidad'], item['estado_actual'], item.get('tag', ''), matched_id))
                     equipo_id = matched_id
                     total_equipos_updated += 1
                 else:
                     cursor.execute("""
-                        INSERT INTO equipos (ubicacion_id, codigo, nombre, material, criticidad, estado_actual, activo)
-                        VALUES (?, ?, ?, ?, ?, ?, 1)
-                    """, (ubi_id, assigned_code, eq_nombre, item['material'], item['criticidad'], item['estado_actual']))
+                        INSERT INTO equipos (ubicacion_id, codigo, nombre, material, criticidad, estado_actual, tag, activo)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                    """, (ubi_id, assigned_code, eq_nombre, item['material'], item['criticidad'], item['estado_actual'], item.get('tag', '')))
                     equipo_id = cursor.lastrowid
                     total_equipos_created += 1
                     
@@ -411,17 +420,18 @@ def _sync_postgres(excel_data: Dict[str, List[Dict[str, Any]]]):
                 if matched_id:
                     cursor.execute("""
                         UPDATE equipos 
-                        SET nombre = %s, codigo = %s, material = %s, criticidad = %s, estado_actual = %s, activo = true
+                        SET nombre = %s, codigo = %s, material = %s, criticidad = %s, estado_actual = %s,
+                            tag = COALESCE(NULLIF(%s, ''), tag), activo = true
                         WHERE id = %s
-                    """, (eq_nombre, assigned_code, item['material'], item['criticidad'], item['estado_actual'], matched_id))
+                    """, (eq_nombre, assigned_code, item['material'], item['criticidad'], item['estado_actual'], item.get('tag', ''), matched_id))
                     equipo_id = matched_id
                     total_equipos_updated += 1
                 else:
                     cursor.execute("""
-                        INSERT INTO equipos (ubicacion_id, codigo, nombre, material, criticidad, estado_actual, activo)
-                        VALUES (%s, %s, %s, %s, %s, %s, true)
+                        INSERT INTO equipos (ubicacion_id, codigo, nombre, material, criticidad, estado_actual, tag, activo)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, true)
                         RETURNING id
-                    """, (ubi_id, assigned_code, eq_nombre, item['material'], item['criticidad'], item['estado_actual']))
+                    """, (ubi_id, assigned_code, eq_nombre, item['material'], item['criticidad'], item['estado_actual'], item.get('tag', '')))
                     equipo_id = cursor.fetchone()['id']
                     total_equipos_created += 1
                     
@@ -491,6 +501,7 @@ def _sync_postgres(excel_data: Dict[str, List[Dict[str, Any]]]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sincronizar datos de Arauco desde Excel")
     parser.add_argument("--target", choices=["dry-run", "local", "neon"], default="dry-run", help="Destino de la sincronización")
+    parser.add_argument("--file", default=None, help="Ruta al archivo Excel (por defecto UT_Arauco.xlsx o 00_AASA MINUTA PGP.xlsx)")
     args = parser.parse_args()
     
-    sync_database(target=args.target)
+    sync_database(target=args.target, excel_path=args.file)

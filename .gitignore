@@ -39,6 +39,8 @@ venv.bak/
 *.db
 *.xlsx
 *.xls
+!UT_Arauco.xlsx
+!00_AASA MINUTA PGP.xlsx
 !app/assets/seed_inspecciones.db
 
 # Environments
