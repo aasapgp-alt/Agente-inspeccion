@@ -134,7 +134,7 @@ def generar_libro(
                         has_photos = True
                     else:
                         try:
-                            sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root")
+                            sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root", equipo_id=eq_id)
                             if sugerencias:
                                 folder_id = sugerencias[0]['id']
                                 archivos = listar_archivos(folder_id)
@@ -197,7 +197,7 @@ def generar_libro(
                                 "caption": comentario
                             })
                 else:
-                    sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root")
+                    sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root", equipo_id=eq_id)
                     if sugerencias:
                         folder_id = sugerencias[0]['id']
                         archivos = listar_archivos(folder_id)
@@ -588,7 +588,7 @@ def validar_libro(
                     has_photos = True
                 else:
                     try:
-                        sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root")
+                        sugerencias = drive_sugerir_carpetas(str(codigo_eq), str(nombre_eq), "root", equipo_id=eq_id)
                         if sugerencias:
                             folder_id = sugerencias[0]['id']
                             archivos = listar_archivos(folder_id)

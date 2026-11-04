@@ -232,7 +232,7 @@ def sugerir_carpetas_get(equipo_id: str, current_user: dict = Depends(get_curren
         root_folder_id = get_config_value_db("drive_folder_id") or "root"
         
         # drive_sugerir_carpetas will receive both to find the best match
-        sugerencias_raw = drive_sugerir_carpetas(codigo, nombre, root_folder_id)
+        sugerencias_raw = drive_sugerir_carpetas(codigo, nombre, root_folder_id, equipo_id=int(eq['id']))
         
         # Limitar las sugerencias a un máximo de 5 para no dejar un listado muy largo
         sugerencias_raw = sugerencias_raw[:5]

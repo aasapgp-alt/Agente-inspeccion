@@ -460,7 +460,7 @@ def obtener_carpeta_drive_directa_equipo(equipo_id: int = None, codigo: str = No
                 cursor.execute("SELECT id, codigo, nombre, drive_folder_id FROM equipos WHERE codigo = ?", (codigo,))
                 row = cursor.fetchone()
             
-            if row and row['drive_folder_id']:
+            if row and row['drive_folder_id'] and not str(row['drive_folder_id']).startswith("auto_loc_folder_"):
                 df_id = row['drive_folder_id']
                 cursor.execute("SELECT nombre FROM drive_folders_cache WHERE drive_id = ?", (df_id,))
                 cache_row = cursor.fetchone()
@@ -475,11 +475,34 @@ def obtener_carpeta_drive_directa_equipo(equipo_id: int = None, codigo: str = No
         logger.warning(f"Error consultando carpeta directa de equipo en BD: {e}")
     return None
 
-def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
+def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str, equipo_id: int = None) -> list:
     # 0. Intentar vínculo directo registrado en BD para el equipo
-    direct_match = obtener_carpeta_drive_directa_equipo(codigo=codigo, nombre=nombre)
+    direct_match = obtener_carpeta_drive_directa_equipo(equipo_id=equipo_id, codigo=codigo, nombre=nombre)
     if direct_match:
         return [direct_match]
+
+    # Si el equipo todavía no tiene carpeta vinculada, limitar la búsqueda a su ubicación.
+    # Sin este paso, buscar desde la raíz compara equipos de áreas distintas.
+    if equipo_id:
+        try:
+            from app.services.db_service import get_db_connection
+            with get_db_connection() as conn:
+                row = conn.execute("""
+                    SELECT u.id, u.nombre, u.drive_folder_id
+                    FROM equipos e
+                    JOIN ubicaciones u ON u.id = e.ubicacion_id
+                    WHERE e.id = ?
+                """, (equipo_id,)).fetchone()
+                ubicacion = dict(row) if row else None
+            if ubicacion:
+                carpeta_id = ubicacion.get("drive_folder_id")
+                if not carpeta_id or str(carpeta_id).startswith("auto_loc_folder_"):
+                    carpeta_id = buscar_carpeta_area_por_nombre(ubicacion["nombre"], ubicacion["id"])
+                if not carpeta_id:
+                    return []
+        except Exception as db_err:
+            logger.warning(f"Error resolviendo ubicación del equipo {equipo_id}: {db_err}")
+            return []
 
     drive = get_drive_instance()
 
@@ -539,12 +562,8 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
             clean_words_norm = [clean_word(w) for w in clean_words]
             sugeridas_raw = []
 
-            # Si se especificó una carpeta de área padre (carpeta_id), filtrar candidatos ÚNICAMENTE a hijos de esa área
-            candidate_rows = cache_rows
-            if carpeta_id and carpeta_id != "root":
-                direct_children = [r for r in cache_rows if r.get("parent_id") == carpeta_id]
-                if direct_children:
-                    candidate_rows = direct_children
+            # Buscar solo carpetas hijas del área solicitada. Nunca expandir a toda la caché.
+            candidate_rows = [r for r in cache_rows if r.get("parent_id") == carpeta_id] if carpeta_id and carpeta_id != "root" else cache_rows
 
             if clean_words_norm:
                 for r in candidate_rows:
@@ -553,9 +572,13 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
                     if any(w in title_norm for w in clean_words_norm):
                         sugeridas_raw.append(r)
 
-            if not sugeridas_raw and carpeta_id:
-                # Fallback: listar hijos directos en caché de esa área
-                sugeridas_raw = [r for r in cache_rows if r["parent_id"] == carpeta_id]
+            if not sugeridas_raw and carpeta_id and carpeta_id != "root" and drive:
+                # La caché puede estar incompleta; consultar solo hijos directos en Drive.
+                direct_children = listar_carpetas(carpeta_id)
+                for child in direct_children:
+                    title_norm = clean_word(remover_prefijo_secuencia(child["title"]))
+                    if any(word in title_norm for word in clean_words_norm):
+                        sugeridas_raw.append(child)
         else:
             # No hay cache: intentar con la API de Drive en tiempo real (solo si está disponible)
             if not drive:
@@ -565,10 +588,12 @@ def sugerir_carpetas(codigo: str, nombre: str, carpeta_id: str) -> list:
                 carpetas = listar_carpetas(carpeta_id)
                 return carpetas[:5]
 
-            query_parts = [f"title contains '{w}'" for w in clean_words[:5]]
-            query = "mimeType='application/vnd.google-apps.folder' and (" + " or ".join(query_parts) + ") and trashed=false"
-            file_list = drive.ListFile({'q': query}).GetList()
-            sugeridas_raw = [{"id": file['id'], "title": file['title']} for file in file_list]
+            # listar_carpetas respeta el padre y evita coincidencias globales en otras ubicaciones.
+            direct_children = listar_carpetas(carpeta_id)
+            sugeridas_raw = [
+                child for child in direct_children
+                if any(clean_word(word) in clean_word(remover_prefijo_secuencia(child["title"])) for word in clean_words)
+            ]
 
 
         results = []
@@ -654,30 +679,33 @@ def obtener_siguiente_secuencia(parent_id: str) -> int:
                 max_seq = num
     return max_seq + 1
 
-def buscar_carpeta_area_por_nombre(ubicacion_nombre: str) -> Optional[str]:
+def buscar_carpeta_area_por_nombre(ubicacion_nombre: str, ubicacion_id: int = None) -> Optional[str]:
     try:
-        busqueda_norm = _normalizar_texto(ubicacion_nombre)
-        palabras_busqueda = [w for w in re.split(r'\W+', busqueda_norm) if len(w) >= 3]
-        if not palabras_busqueda:
-            palabras_busqueda = [busqueda_norm]
-            
-        # 1. Intentar consultar en el caché local primero para hallar la carpeta de Área
-        try:
+        # 1. El vínculo explícito de la ubicación en la BD es la fuente más confiable.
+        if ubicacion_id is not None:
             from app.services.db_service import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT drive_id, nombre FROM drive_folders_cache")
+                cursor.execute("SELECT drive_folder_id FROM ubicaciones WHERE id = ?", (ubicacion_id,))
+                linked = cursor.fetchone()
+                if linked and linked[0] and not str(linked[0]).startswith("auto_loc_folder_"):
+                    return linked[0]
+
+        # 2. Sin vínculo explícito, aceptar solo una coincidencia exacta entre hijas de la raíz.
+        try:
+            from app.services.db_service import get_db_connection
+            with get_db_connection() as conn:
+                root_folder_id = get_config_value_db("drive_folder_id") or "root"
+                cursor = conn.cursor()
+                cursor.execute("SELECT drive_id, nombre FROM drive_folders_cache WHERE parent_id = ?", (root_folder_id,))
                 cache_folders = cursor.fetchall()
-                mejor_match = None
-                mejor_score = 0
-                for fid, fname in cache_folders:
-                    fname_norm = _normalizar_texto(fname)
-                    score = sum(1 for p in palabras_busqueda if p in fname_norm)
-                    if score > mejor_score:
-                        mejor_score = score
-                        mejor_match = fid
-                if mejor_match and mejor_score >= 1:
-                    return mejor_match
+                buscado = _normalizar_texto(ubicacion_nombre)
+                matches = [fid for fid, fname in cache_folders if _normalizar_texto(remover_prefijo_secuencia(fname)) == buscado]
+                if len(set(matches)) == 1:
+                    return matches[0]
+                if len(set(matches)) > 1:
+                    logger.warning(f"Ubicación ambigua en caché de Drive: {ubicacion_nombre}")
+                    return None
         except Exception as cache_err:
             logger.warning(f"Error buscando área en cache: {cache_err}")
 
@@ -689,21 +717,9 @@ def buscar_carpeta_area_por_nombre(ubicacion_nombre: str) -> Optional[str]:
         if not folders:
             return None
             
-        mejor_match = None
-        mejor_score = 0
-        
-        for f in folders:
-            title_without_prefix = remover_prefijo_secuencia(f['title'])
-            folder_title_norm = _normalizar_texto(title_without_prefix)
-            score = 0
-            for palabra in palabras_busqueda:
-                if palabra in folder_title_norm:
-                    score += 1
-            if score > mejor_score:
-                mejor_score = score
-                mejor_match = f['id']
-                
-        return mejor_match
+        buscado = _normalizar_texto(ubicacion_nombre)
+        matches = [f['id'] for f in folders if _normalizar_texto(remover_prefijo_secuencia(f['title'])) == buscado]
+        return matches[0] if len(matches) == 1 else None
     except Exception as e:
         logger.error(f"Error buscando carpeta de área para {ubicacion_nombre}: {e}")
         return None
@@ -807,7 +823,7 @@ def crear_campania_en_equipos_de_empresa(empresa_id: int, campania_nombre: str, 
         
         with get_db_connection() as conn:
             cursor = conn.execute("""
-                SELECT e.id, e.codigo, e.nombre, u.nombre as area_nombre 
+                SELECT e.id, e.codigo, e.nombre, u.id as ubicacion_id, u.nombre as area_nombre
                 FROM equipos e
                 JOIN ubicaciones u ON e.ubicacion_id = u.id
                 WHERE u.empresa_id = ? AND e.activo = 1
@@ -848,7 +864,7 @@ def crear_campania_en_equipos_de_empresa(empresa_id: int, campania_nombre: str, 
             try:
                 area_nombre = eq['area_nombre']
                 if area_nombre not in areas_cache:
-                    area_folder_id = buscar_carpeta_area_por_nombre(area_nombre)
+                    area_folder_id = buscar_carpeta_area_por_nombre(area_nombre, eq.get("ubicacion_id"))
                     areas_cache[area_nombre] = area_folder_id
                 else:
                     area_folder_id = areas_cache[area_nombre]

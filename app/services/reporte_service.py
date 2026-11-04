@@ -177,7 +177,7 @@ def crear_reporte_individual_completo(equipo_id: int, db: sqlite3.Connection, us
                         "caption": comentario
                     })
         else:
-            sugerencias = drive_sugerir_carpetas(codigo, nombre, "root")
+            sugerencias = drive_sugerir_carpetas(codigo, nombre, "root", equipo_id=equipo_id)
             if sugerencias:
                 folder_id = sugerencias[0]['id']
                 archivos = listar_archivos(folder_id)
