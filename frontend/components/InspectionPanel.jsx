@@ -70,6 +70,8 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   // IA State
   const [analisis, setAnalisis] = useState(null);
   const [historial2024, setHistorial2024] = useState(null);
+  const [inspeccion2026, setInspeccion2026] = useState(null);
+  const [mostrarNuevaRevision, setMostrarNuevaRevision] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [chatMessage, setChatMessage] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -351,7 +353,20 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
           setSelectedImages([]);
           setAnalisis(null);
           setHistorial2024(null);
+          setInspeccion2026(null);
+          setMostrarNuevaRevision(false);
           setIndicacionesPrevias("");
+        }
+
+        // Detectar una inspección guardada de la campaña actual.
+        try {
+          const actualRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2026`);
+          if (actualRes.ok && isMounted) {
+            const actualData = await actualRes.json();
+            setInspeccion2026(actualData);
+          }
+        } catch (actualErr) {
+          console.error("Error fetching PGP 2026 inspection:", actualErr);
         }
 
         // Fetch PGP 2024 history for display in the panel
@@ -446,6 +461,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   };
 
   const handleAnalizar = async () => {
+    if (inspeccion2026 && !mostrarNuevaRevision) return;
     if (selectedImages.length === 0) return alert("Selecciona imágenes primero");
     setIsAnalyzing(true);
 
@@ -573,6 +589,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
   const handleGuardar = async (generarPdf = true) => {
     if (!analisis) return;
+    if (inspeccion2026 && !window.confirm("Ya existe una inspección PGP 2026 para este equipo. ¿Deseas actualizarla con estos datos?")) return;
     setIsSaving(true);
 
     // Obtener anotaciones locales de las imágenes seleccionadas para guardar en backend
@@ -656,6 +673,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
       if (data.inspeccion_id) {
         setInspeccionId(data.inspeccion_id);
       }
+      setInspeccion2026({ estado: editedEstado, diagnostico: editedDiagnostico, acciones: editedAcciones, recomendaciones: editedRecomendaciones });
 
       if (generarPdf) {
         alert(`Guardado y PDF generado: ${data.pdf_status}`);
@@ -1590,6 +1608,22 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
               
               {!analisis ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start' }}>
+
+              {inspeccion2026 && !mostrarNuevaRevision && (
+                <div style={{ padding: '1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  <strong style={{ color: '#fbbf24' }}>Ya existe una revisión PGP 2026</strong>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    <div><strong>Estado:</strong> {renderVal(inspeccion2026.estado) || 'Sin estado'}</div>
+                    <div><strong>Diagnóstico:</strong> {renderVal(inspeccion2026.diagnostico) || 'Sin diagnóstico'}</div>
+                    <div><strong>Recomendaciones:</strong> {renderVal(inspeccion2026.recomendaciones) || 'Sin recomendaciones'}</div>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Puedes cargar esta revisión para continuarla o iniciar un nuevo análisis con las fotos y datos actuales. Guardar una propuesta nueva actualizará este registro.</div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => { setAnalisis(inspeccion2026); setInspeccionId(inspeccion2026.id || null); setSelectedImages(inspeccion2026.image_drive_ids || []); }}>Cargar revisión guardada</button>
+                    <button type="button" className="btn btn-primary" onClick={() => setMostrarNuevaRevision(true)}>Nueva revisión con datos actuales</button>
+                  </div>
+                </div>
+              )}
               
               {/* Box de Historial PGP 2024 previo al análisis */}
               {historial2024 ? (
@@ -1710,10 +1744,11 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
               ) : (
                 <button 
                   onClick={handleAnalizar} 
+                  disabled={Boolean(inspeccion2026 && !mostrarNuevaRevision)}
                   className="btn btn-primary" 
                   style={{ width: '100%', marginTop: '0.5rem' }}
                 >
-                  Iniciar Análisis IA
+                  {inspeccion2026 && !mostrarNuevaRevision ? 'Elige cómo continuar con la revisión 2026' : 'Iniciar Análisis IA'}
                 </button>
               )}
             </div>

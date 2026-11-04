@@ -44,6 +44,8 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
 
   // 2024 History for reference
   const [history2024, setHistory2024] = useState(null);
+  const [inspeccion2026, setInspeccion2026] = useState(null);
+  const [revisionActualAvisada, setRevisionActualAvisada] = useState(false);
   const [showHistory2024, setShowHistory2024] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -285,6 +287,8 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     setLoading(true);
 
     // Resetear estados del reporte al cambiar de equipo
+    setInspeccion2026(null);
+    setRevisionActualAvisada(false);
     setReporteStatus(null);
     setGenerandoReporte(false);
     setReporteUrl('');
@@ -311,9 +315,10 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
 
     // 2. Fetch inspección 2026 actual si existe
     authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2026`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data) {
+          setInspeccion2026(data);
           setEstado(renderVal(data.estado) || 'BUENO');
           setAcciones(renderVal(data.acciones) || '');
           setDiagnostico(renderVal(data.diagnostico) || '');
@@ -349,6 +354,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   }, [equipoId]);
 
   const handleGuardar = async (generarPdf = false) => {
+    if (inspeccion2026 && !window.confirm("Ya existe una inspección PGP 2026 para este equipo. ¿Deseas actualizarla con los datos del formulario?")) return;
     setIsSaving(true);
     setSaveStatus(null);
     try {
@@ -378,6 +384,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
       }
 
       const data = await res.json();
+      setInspeccion2026({ estado, diagnostico, acciones, recomendaciones });
       window.dispatchEvent(new CustomEvent('inspeccion_actualizada'));
       if (generarPdf) {
         setSaveStatus({ type: 'success', text: `Guardado y PDF generado: ${data.pdf_status}` });
@@ -500,6 +507,17 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
           onChange={handleCameraCapture} 
         />
       </div>
+
+      {inspeccion2026 && !revisionActualAvisada && (
+        <div style={{ padding: '0.85rem 1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+          <strong style={{ color: '#fbbf24' }}>Se cargó la revisión PGP 2026 existente</strong>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Puedes continuar editándola o iniciar una nueva revisión. Al guardar, se actualizará el registro 2026 existente.</span>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setRevisionActualAvisada(true)}>Continuar revisión cargada</button>
+            <button type="button" className="btn btn-primary" onClick={() => { setEstado('BUENO'); setAcciones(''); setDiagnostico(''); setRecomendaciones(''); setRevisionActualAvisada(true); }}>Nueva revisión con datos actuales</button>
+          </div>
+        </div>
+      )}
 
       {/* TOAST DE ASISTENCIA IA */}
       {iaSuccessToast && (
