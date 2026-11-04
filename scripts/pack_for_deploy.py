@@ -11,6 +11,8 @@ EXCLUDE_DIRS = {
 EXCLUDE_EXTS = {'.pyc', '.pyo', '.pyd', '.tar.gz', '.key', '.bak', '.pdf', '.docx.bak'}
 
 def should_exclude(path):
+    if path.lower().endswith(('.tar.gz', '.tgz')):
+        return True
     parts = os.path.normpath(path).split(os.sep)
     for part in parts:
         if part in EXCLUDE_DIRS:
