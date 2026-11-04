@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai import GenerativeModel
+from app.config.prompts import CRITERIO_INSPECTOR
 
 load_dotenv()
 
@@ -126,6 +127,7 @@ def interpretar_dictado_inspeccion(texto_dictado: str, equipo_info: str = "") ->
             f"El inspector ha grabado el siguiente dictado de voz sobre un equipo ({equipo_info}):\n"
             f"\"\"\"{texto_dictado}\"\"\"\n\n"
             "Interpreta el dictado y extrae la información organizándola en los campos correspondientes.\n"
+            f"Criterio de inspección: {CRITERIO_INSPECTOR}\n"
             "Responde ÚNICAMENTE en formato JSON válido con la siguiente estructura:\n"
             "{\n"
             '  "diagnostico": "Descripción clara de hallazgos técnicos del estado actual...",\n'
@@ -258,7 +260,7 @@ def consultar_asistente_equipo(
 - Material: {equipo.get('material', 'N/A')}
 - Criticidad: {equipo.get('criticidad', 'N/A')}
 
-ANTECEDENTES HISTÓRICOS (PGP 2024):
+ANTECEDENTES HISTÓRICOS (PGP 2024, última campaña anterior disponible porque no hubo PGP 2025):
 - Estado: {historial_2024.get('estado', 'Sin datos')}
 - Diagnóstico previo: {historial_2024.get('diagnostico', 'Sin datos')}
 - Acciones previas: {historial_2024.get('acciones', 'Sin datos')}
@@ -268,10 +270,13 @@ LECCIONES APRENDIDAS Y REGLAS DE NEGOCIO:
 {reglas_negocio or 'Reglas generales de inspección de recipientes, cañerías y tanques.'}
 {f"Lecciones aprendidas: {aprendizaje}" if aprendizaje else ""}
 
+CRITERIO PRIORITARIO DE REDACCIÓN Y SEVERIDAD:
+{CRITERIO_INSPECTOR}
+
 DIRECTIVAS CRÍTICAS DE COMPORTAMIENTO (GUARDRAILS):
 1. TU ENFOQUE ES EXCLUSIVO: Solo responde dudas sobre este equipo específico, su material, modos de falla, normativas de inspección y antecedentes históricos.
 2. PREGUNTAS FUERA DE ÁMBITO: Si el usuario te pregunta sobre temas ajenos a la inspección o a este equipo, declina amablemente y recuérdale que estás enfocado en la inspección de {equipo.get('nombre')}.
-3. MATERIALES PLÁSTICOS (FRP, ACRBA, PP): Recuerda siempre las precauciones de sobreajuste de bulonería, fisuras en bridas y compatibilidad química si aplica.
+3. MATERIALES PLÁSTICOS (FRP, ACRBA, PP): Considera compatibilidad química, bridas y fijaciones cuando haya evidencia pertinente; el material por sí solo no justifica un recambio general.
 
 {formato_instruccion}
 """

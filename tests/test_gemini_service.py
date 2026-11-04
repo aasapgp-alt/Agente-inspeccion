@@ -6,6 +6,7 @@ from app.services.gemini_service import (
     preparar_prompt_analisis,
     validar_respuesta_gemini,
 )
+from app.config.prompts import CRITERIO_INSPECTOR
 
 
 # --- Parseo del diagnóstico devuelto por Gemini ---
@@ -55,6 +56,13 @@ def test_preparar_prompt_analisis_con_historial_y_aprendizaje():
     )
     assert "Historial previo" in prompt
     assert "Lecciones aprendidas" in prompt
+
+
+def test_criterio_inspector_evitar_reemplazos_por_oxidacion_leve():
+    assert "oxidación superficial leve" in CRITERIO_INSPECTOR
+    assert "no justifica declarar mal estado" in CRITERIO_INSPECTOR
+    assert "No imponer recambios generales" in CRITERIO_INSPECTOR
+    assert "No copiar automáticamente un diagnóstico anterior" in CRITERIO_INSPECTOR
 
 
 # --- Contexto espacial de anotaciones ---

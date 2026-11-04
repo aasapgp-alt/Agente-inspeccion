@@ -4,11 +4,14 @@ Cubre el casteo por tipos de get_config_value_db (de donde salen claves
 críticas como google_api_key y gemini_model) y el roundtrip de inspecciones.
 """
 
+import sqlite3
+
 from app.services.db_service import (
     get_config_value_db,
     get_db_connection,
     guardar_inspeccion_db,
     obtener_inspeccion_db,
+    obtener_antecedente_pgp_2024,
 )
 
 
@@ -110,3 +113,36 @@ def test_obtener_inspeccion_devuelve_la_mas_reciente(db_temporal):
 def test_obtener_inspeccion_inexistente_devuelve_none(db_temporal):
     _crear_tabla_inspecciones()
     assert obtener_inspeccion_db(999, 2026) is None
+
+
+def test_antecedente_pgp_2024_ignora_borradores_vacios_y_respeta_equipo():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE inspecciones (
+            id INTEGER PRIMARY KEY,
+            equipo_id INTEGER,
+            anio INTEGER,
+            estado TEXT,
+            diagnostico TEXT,
+            acciones TEXT,
+            recomendaciones TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    conn.executemany("""
+        INSERT INTO inspecciones
+            (id, equipo_id, anio, estado, diagnostico, acciones, recomendaciones, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, [
+        (1, 7, 2024, "PENDIENTE", "", "", "", "2024-01-01", "2024-01-01"),
+        (2, 8, 2024, "CRITICO", "Equipo distinto", "", "", "2024-12-01", "2024-12-01"),
+        (3, 7, 2024, "REGULAR", "Ampollamiento leve", "Inspección visual", "Continuar inspección", "2024-11-01", "2024-11-01"),
+    ])
+
+    antecedente = obtener_antecedente_pgp_2024(conn.cursor(), equipo_id=7)
+
+    assert antecedente["estado"] == "REGULAR"
+    assert antecedente["diagnostico"] == "Ampollamiento leve"
+    conn.close()

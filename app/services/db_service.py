@@ -17,6 +17,34 @@ def get_legacy_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
+def obtener_antecedente_pgp_2024(cursor: Any, equipo_id: int) -> dict:
+    """Devuelve el último registro PGP 2024 con resultados, excluyendo borradores vacíos."""
+    sin_antecedente = {
+        "estado": "Sin datos",
+        "diagnostico": "Sin diagnóstico previo.",
+        "acciones": "Sin acciones registradas.",
+        "recomendaciones": "Sin recomendaciones registradas.",
+    }
+    try:
+        cursor.execute("""
+            SELECT estado, diagnostico, acciones, recomendaciones
+            FROM inspecciones
+            WHERE equipo_id = ? AND anio = 2024
+              AND UPPER(TRIM(COALESCE(estado, ''))) <> 'PENDIENTE'
+              AND (
+                TRIM(COALESCE(diagnostico, '')) <> '' OR
+                TRIM(COALESCE(acciones, '')) <> '' OR
+                TRIM(COALESCE(recomendaciones, '')) <> ''
+              )
+            ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
+            LIMIT 1
+        """, (equipo_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else sin_antecedente
+    except Exception as e:
+        logger.error(f"Error obteniendo antecedente PGP 2024 del equipo {equipo_id}: {e}")
+        return sin_antecedente
+
 def obtener_lista_equipos_db(empresa: str = None, area: str = None, anio: int = None, estado: str = None, q: str = None) -> list:
     try:
         with get_db_connection() as conn:

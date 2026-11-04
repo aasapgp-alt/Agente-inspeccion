@@ -21,7 +21,7 @@ from app.services.gemini_service import (
     consultar_asistente_equipo,
 )
 from app.services.learning_service import cargar_ejemplos_few_shot, obtener_aprendizaje_texto
-from app.config.prompts import REGLAS_NEGOCIO
+from app.config.prompts import CRITERIO_INSPECTOR, REGLAS_NEGOCIO
 from app.utils.text_utils import es_estado_valido, normalizar_texto
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
     user_key = f"user_{current_user.get('id', 'anon')}"
     ia_analizar_rate_limiter.check(user_key)
     try:
-        from app.services.db_service import get_config_value_db
+        from app.services.db_service import get_config_value_db, obtener_antecedente_pgp_2024
 
         # 1. Obtener detalles del equipo
         cursor = db.cursor()
@@ -124,15 +124,7 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
             raise HTTPException(status_code=404, detail="Equipo no encontrado")
         equipo = dict(eq_row)
 
-        # 2. Obtener historial de inspección para 2024
-        cursor.execute("SELECT estado, diagnostico, acciones, recomendaciones FROM inspecciones WHERE equipo_id = ? AND anio = 2024 LIMIT 1", (data.equipo_id,))
-        hist_row = cursor.fetchone()
-        historial_2024 = dict(hist_row) if hist_row else {
-            "estado": "Sin datos", 
-            "diagnostico": "Sin diagnóstico previo.",
-            "acciones": "Sin acciones registradas.",
-            "recomendaciones": "Sin recomendaciones registradas."
-        }
+        historial_2024 = obtener_antecedente_pgp_2024(cursor, data.equipo_id)
 
         # 3. Descargar y codificar imágenes en base64
         images_b64 = []
@@ -179,14 +171,18 @@ Redacta el siguiente informe técnico de inspección industrial. Solo describe l
 
 {db_reglas}
 
+CRITERIO PRIORITARIO EXTRAÍDO DE LOS INFORMES DE INSPECCIÓN PGP 2024:
+{CRITERIO_INSPECTOR}
+
 Equipo a analizar:
 Nombre: {equipo.get('nombre')}, Área: {equipo.get('area') or ''}, Código/Número: {equipo.get('codigo') or equipo.get('numero') or ''}, Material: {equipo.get('material') or ''}, Criticidad: {equipo.get('criticidad') or ''}.
 
-Historial del PGP 2024 (comparar con este historial para todos los campos):
+Antecedente válido del PGP 2024 (no hubo PGP 2025; comparar solo el mismo equipo y componente):
 - Estado: {historial_2024.get('estado')}
 - Diagnóstico: {historial_2024.get('diagnostico')}
 - Acciones: {historial_2024.get('acciones')}
 - Recomendaciones: {historial_2024.get('recomendaciones')}
+Usar este registro para identificar continuidad o evolución, no para atribuir automáticamente su condición a 2026.
 
 Indicaciones previas del inspector humano:
 {data.indicaciones_previas or 'Ninguna indicación adicional.'}
@@ -211,8 +207,8 @@ Por favor, analiza con extremo cuidado las zonas señaladas por estas anotacione
 Devuelve tu respuesta ÚNICAMENTE en formato JSON (sin bloques markdown como ```json):
 {
   "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
-  "diagnostico": "TIEMPO PRESENTE IMPERSONAL. Compara con el diagnóstico de la PGP 2024. Ejemplos: 'El tramo de cañería presenta...', 'Se observa...', 'Los soportes exhiben...'. JAMÁS uses 'yo', 'he', 'detecté', 'encontré', 'verifiqué', 'inspeccioné'.",
-  "acciones": "PASADO IMPERSONAL. Describe qué hizo el inspector basándote y comparando con la PGP 2024. Ejemplos: 'Se realizó inspección externa', 'Se realizó apertura de bridas o carreteles', 'Se realizó inspección visual externa anual, verificando un estado general regular del equipo'.",
+  "diagnostico": "TIEMPO PRESENTE IMPERSONAL. Describe hallazgos actuales relevantes por componente, con estilo conciso PGP 2024. Compara con PGP 2024 solo para el mismo componente y con evidencia actual. No uses primera persona.",
+  "acciones": "PASADO IMPERSONAL. Describe únicamente las actividades realmente realizadas durante la inspección 2026; no copies acciones del antecedente.",
   "recomendaciones": {
     "EQUIPO INTERIOR": "INFINITIVO: 'Realizar...', 'Continuar...', 'Solicitar...', o 'Sin comentarios'",
     "EQUIPO EXTERIOR": "INFINITIVO o 'Sin comentarios'",
@@ -226,7 +222,7 @@ Devuelve tu respuesta ÚNICAMENTE en formato JSON (sin bloques markdown como ```
 
 RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impersonal (Se realizó...). Recomendaciones en infinitivo.
 
-*REGLA PREVENTIVA CRÍTICA PARA PLÁSTICOS*: Si el material es plástico (FRP, ACRBA, PP, etc.), en 'ACOMETIDAS' escribe obligatoriamente: 'Como medida preventiva y para evitar recurrir a los golpes para desmontar los espárragos y bulones en todas las acometidas bridadas (incluida la BdH) y sus consecuencias indeseables (roturas y fisuras recurrentes), reemplazar los elementos de sujeción y juntas en un plazo no mayor a 1 año. Aplica para todos los equipos y cañerías plásticas.'
+No recomendar el reemplazo general de tuercas, bulones o juntas solo por el material FRP/ACRBA/PP o por oxidación superficial leve. Indicar reemplazo únicamente cuando la evidencia respalde daño relevante o exista una pauta técnica aprobada y específica.
 """
 
         # 6. Inicializar y llamar a Gemini
@@ -249,15 +245,11 @@ RECORDATORIO FINAL: Diagnóstico en presente impersonal. Acciones en pasado impe
 
         system_instruction_fallback = """
 Eres un inspector industrial experto en activos mecánicos, piletas y cañerías de proceso (FRP, ACRBA) redactando un informe técnico formal.
-Debes redactar todo de manera estrictamente impersonal y formal.
-Está completamente prohibido usar la primera persona del singular ("yo", "he verificado", "mi inspección") y verbos en pasado en primera persona (no "inspeccioné", "revisé").
-- Para el DIAGNÓSTICO: Describe el estado actual o hechos únicamente en tiempo presente impersonal (ej: "El tramo de cañería presenta...", "Se observa desgaste..."). Compara con el historial PGP 2024 provisto.
-- Para las ACCIONES: Escribe en pasado impersonal, describiendo qué hizo el inspector (ej. "Se realizó inspección externa", "Se realizó apertura de bridas o carreteles", "Se realizó inspección visual externa anual"). Compara con la PGP 2024.
-- Para las RECOMENDACIONES: Escribe siempre las tareas a futuro usando verbos en INFINITIVO (ej: "Continuar con...", "Proceder a...", "Informar al área...", "Reemplazar...").
-No menciones nunca limitaciones de fotos ni digas que "no se cuenta con imágenes" o "no se puede evaluar". Para cualquier zona o componente no visible, hereda o asume exactamente el diagnóstico del Historial PGP 2024 o no lo nombres.
+Redacta de manera impersonal y formal. Diagnóstico actual en presente; acciones realmente realizadas en pasado; recomendaciones proporcionadas y específicas en infinitivo.
 Debes responder ÚNICAMENTE en formato JSON con la estructura indicada, respetando las llaves exactas.
 """
         system_instruction = db_system_instruction if db_system_instruction else system_instruction_fallback
+        system_instruction = f"{system_instruction.strip()}\n\nCRITERIO PRIORITARIO DE INSPECCIÓN:\n{CRITERIO_INSPECTOR}"
 
         try:
             temp_val = float(db_temperature)
@@ -421,7 +413,7 @@ def chat_equipo(data: ChatEquipoRequest, db: sqlite3.Connection = Depends(get_db
     Copiloto Técnico Contextual para consultas acotadas a un equipo específico.
     """
     try:
-        from app.services.db_service import get_config_value_db
+        from app.services.db_service import get_config_value_db, obtener_antecedente_pgp_2024
 
         cursor = db.cursor()
         # 1. Obtener detalles del equipo
@@ -431,18 +423,7 @@ def chat_equipo(data: ChatEquipoRequest, db: sqlite3.Connection = Depends(get_db
             raise HTTPException(status_code=404, detail="Equipo no encontrado")
         equipo = dict(eq_row)
 
-        # 2. Obtener historial PGP 2024
-        cursor.execute(
-            "SELECT estado, diagnostico, acciones, recomendaciones FROM inspecciones WHERE equipo_id = ? AND anio = 2024 LIMIT 1",
-            (data.equipo_id,)
-        )
-        hist_row = cursor.fetchone()
-        historial_2024 = dict(hist_row) if hist_row else {
-            "estado": "Sin datos",
-            "diagnostico": "Sin diagnóstico previo.",
-            "acciones": "Sin acciones registradas.",
-            "recomendaciones": "Sin recomendaciones registradas."
-        }
+        historial_2024 = obtener_antecedente_pgp_2024(cursor, data.equipo_id)
 
         # 3. Obtener lecciones aprendidas y reglas de negocio
         aprendizaje = obtener_aprendizaje_texto()
