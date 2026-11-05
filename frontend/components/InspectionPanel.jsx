@@ -475,7 +475,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   };
 
   const handleAnalizar = async () => {
-    if (inspeccion2026 && !mostrarNuevaRevision) return;
+    if (inspeccion2026 && !inspeccionCampaniaPendiente && !mostrarNuevaRevision) return;
     if (selectedImages.length === 0) return alert("Selecciona imágenes primero");
     setIsAnalyzing(true);
 
@@ -1707,7 +1707,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
               )}
 
               <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0 0', textAlign: 'center', fontSize: '0.85rem' }}>
-                Selecciona imágenes del Drive y presiona el botón.
+                {inspeccionCampaniaPendiente ? `La inspección ${campaniaActiva} está pendiente. Selecciona las fotos actuales y analiza con IA.` : 'Selecciona imágenes del Drive y presiona el botón.'}
               </p>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', textAlign: 'left' }}>
@@ -1766,11 +1766,11 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
               ) : (
                 <button 
                   onClick={handleAnalizar} 
-                  disabled={Boolean(inspeccion2026 && !mostrarNuevaRevision)}
+                  disabled={Boolean(inspeccion2026 && !inspeccionCampaniaPendiente && !mostrarNuevaRevision)}
                   className="btn btn-primary" 
                   style={{ width: '100%', marginTop: '0.5rem' }}
                 >
-                  {inspeccion2026 && !mostrarNuevaRevision ? `Elige cómo continuar con ${campaniaActiva}` : 'Iniciar Análisis IA'}
+                  {inspeccion2026 && !inspeccionCampaniaPendiente && !mostrarNuevaRevision ? `Elige cómo continuar con ${campaniaActiva}` : 'Iniciar Análisis IA'}
                 </button>
               )}
             </div>
