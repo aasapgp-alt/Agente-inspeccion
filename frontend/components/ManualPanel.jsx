@@ -4,7 +4,7 @@ import VoiceDictationButton from './VoiceDictationButton';
 import ImageViewerModal from './ImageViewerModal';
 import imageCompression from 'browser-image-compression';
 import { Sparkles, Camera, RefreshCw, FileText, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, ExternalLink, MapPin } from 'lucide-react';
-import { API_BASE_URL, getCachedEvidencia, setCachedEvidencia, clearCachedEvidencia } from '../services/api';
+import { API_BASE_URL, apiService, getCachedEvidencia, setCachedEvidencia, clearCachedEvidencia } from '../services/api';
 
 const renderVal = (val) => {
   if (!val) return '';
@@ -36,7 +36,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     });
   };
 
-  // Form fields (2026)
+  // Form fields for the active campaign
   const [estado, setEstado] = useState('BUENO');
   const [acciones, setAcciones] = useState('');
   const [diagnostico, setDiagnostico] = useState('');
@@ -46,6 +46,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   const [history2024, setHistory2024] = useState(null);
   const [inspeccion2026, setInspeccion2026] = useState(null);
   const [revisionActualAvisada, setRevisionActualAvisada] = useState(false);
+  const [campaniaActiva, setCampaniaActiva] = useState('PGP 2026');
   const [showHistory2024, setShowHistory2024] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -74,12 +75,12 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   const [reporteDriveLink, setReporteDriveLink] = useState('');
 
   // Función para obtener la evidencia clasificada de la UT
-  const fetchEvidencia = async (eqId = equipoId, showRefreshNotice = false) => {
+  const fetchEvidencia = async (eqId = equipoId, showRefreshNotice = false, campaign = campaniaActiva) => {
     if (!eqId) return;
 
     // 1. Usar memoria caché inmediata (0ms) si no es actualización manual forzada
     if (!showRefreshNotice) {
-      const cached = getCachedEvidencia(eqId);
+      const cached = getCachedEvidencia(eqId, campaign);
       if (cached) {
         setEvidenciaData(cached);
         if (cached.seccion_recomendada) {
@@ -99,11 +100,11 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
 
     if (showRefreshNotice) setIsRefreshingEvidence(true);
     try {
-      const res = await authFetch(`${API_BASE_URL}/drive/equipo/${eqId}/evidencia?campania=PGP%202026`);
+      const res = await authFetch(`${API_BASE_URL}/drive/equipo/${eqId}/evidencia?campania=${encodeURIComponent(campaign)}`);
       if (res.ok) {
         const data = await res.json();
         setEvidenciaData(data);
-        setCachedEvidencia(eqId, data);
+        setCachedEvidencia(eqId, data, campaign);
 
         // Preseleccionar la sub-sección recomendada si existe
         if (data.seccion_recomendada) {
@@ -155,7 +156,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     }
 
     const formData = new FormData();
-    formData.append('file', fileToUpload, file.name || `foto_pgp2026_${Date.now()}.jpg`);
+    formData.append('file', fileToUpload, file.name || `foto_${campaniaActiva.replace(/\s+/g, '_')}_${Date.now()}.jpg`);
     if (equipoId) formData.append('equipo_id', equipoId);
 
     // Buscar el ID de la subcarpeta según la sub-sección seleccionada o recomendada
@@ -269,9 +270,9 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     if (!evidenciaData?.path_completo) return '';
     if (activeEvidenceChip === 'CAMPANIA') {
       if (selectedSubSeccion && selectedSubSeccion !== 'todas') {
-        return `${evidenciaData.path_completo} > PGP 2026 > ${selectedSubSeccion}`;
+        return `${evidenciaData.path_completo} > ${campaniaActiva} > ${selectedSubSeccion}`;
       }
-      return `${evidenciaData.path_completo} > PGP 2026`;
+      return `${evidenciaData.path_completo} > ${campaniaActiva}`;
     }
     if (activeEvidenceChip === 'PLANOS') {
       return `${evidenciaData.path_completo} > Documentación Técnica`;
@@ -280,7 +281,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
       return `${evidenciaData.path_completo} > Campañas Históricas`;
     }
     return evidenciaData.path_completo;
-  }, [evidenciaData, activeEvidenceChip, selectedSubSeccion]);
+  }, [evidenciaData, activeEvidenceChip, selectedSubSeccion, campaniaActiva]);
 
   useEffect(() => {
     if (!equipoId) return;
@@ -296,9 +297,20 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     setSaveStatus(null);
     setIaSuccessToast(false);
 
+    const campaignPromise = apiService.getSettings(activeToken || token).then(settings => {
+      const campaign = (Array.isArray(settings) ? settings : []).find(item => item.clave === 'reporte_campania')?.valor || 'PGP 2026';
+      const year = Number(campaign.match(/20\d{2}/)?.[0]) || 2026;
+      setCampaniaActiva(campaign);
+      return { campaign, year };
+    }).catch(err => {
+      console.error('Error leyendo la campaña activa:', err);
+      return { campaign: 'PGP 2026', year: 2026 };
+    });
+
     // 1. Fetch equipo details & Evidencia
     const initializeData = async () => {
       try {
+        const { campaign } = await campaignPromise;
         const eqRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}`);
         if (eqRes.ok) {
           const eqData = await eqRes.json();
@@ -306,7 +318,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
         }
 
         // Cargar evidencia clasificada
-        await fetchEvidencia(equipoId, false);
+        await fetchEvidencia(equipoId, false, campaign);
       } catch (err) {
         console.error("Error inicializando datos del equipo:", err);
       }
@@ -314,8 +326,8 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     initializeData();
 
     // 2. Fetch inspección 2026 actual si existe
-    authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2026`)
-      .then(r => r.ok ? r.json() : null)
+    campaignPromise.then(({ year }) => authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/${year}`)
+      .then(r => r.ok ? r.json() : null))
       .then(data => {
         if (data) {
           setInspeccion2026(data);
@@ -328,7 +340,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
           }
         }
       })
-      .catch(err => console.error("Error fetching 2026 inspection:", err));
+      .catch(err => console.error("Error fetching active campaign inspection:", err));
 
     // Fetch comentarios y anotaciones
     authFetch(`${API_BASE_URL}/anotaciones/${equipoId}`)
@@ -354,7 +366,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   }, [equipoId]);
 
   const handleGuardar = async (generarPdf = false) => {
-    if (inspeccion2026 && !window.confirm("Ya existe una inspección PGP 2026 para este equipo. ¿Deseas actualizarla con los datos del formulario?")) return;
+    if (inspeccion2026 && !window.confirm(`Ya existe una inspección ${campaniaActiva} para este equipo. ¿Deseas actualizarla con los datos del formulario?`)) return;
     setIsSaving(true);
     setSaveStatus(null);
     try {
@@ -510,8 +522,8 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
 
       {inspeccion2026 && !revisionActualAvisada && (
         <div style={{ padding: '0.85rem 1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-          <strong style={{ color: '#fbbf24' }}>Se cargó la revisión PGP 2026 existente</strong>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Puedes continuar editándola o iniciar una nueva revisión. Al guardar, se actualizará el registro 2026 existente.</span>
+          <strong style={{ color: '#fbbf24' }}>Se cargó la revisión {campaniaActiva} existente</strong>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Puedes continuar editándola o iniciar una nueva revisión. Al guardar, se actualizará el registro existente de esta campaña.</span>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary" onClick={() => setRevisionActualAvisada(true)}>Continuar revisión cargada</button>
             <button type="button" className="btn btn-primary" onClick={() => { setEstado('BUENO'); setAcciones(''); setDiagnostico(''); setRecomendaciones(''); setRevisionActualAvisada(true); }}>Nueva revisión con datos actuales</button>
@@ -649,7 +661,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
                 border: activeEvidenceChip === 'CAMPANIA' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)'
               }}
             >
-              📸 Fotos 2026 ({evidenciaData?.resumen?.total_fotos_campania ?? fotosActuales.length})
+              📸 Fotos {campaniaActiva} ({evidenciaData?.resumen?.total_fotos_campania ?? fotosActuales.length})
             </button>
 
             <button
@@ -768,7 +780,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
             </div>
           )}
 
-          {/* VISTA 1: FOTOS CAMPAÑA 2026 */}
+          {/* VISTA 1: FOTOS CAMPAÑA ACTIVA */}
           {activeEvidenceChip === 'CAMPANIA' && (
             <div>
               {fotosActuales.length > 0 ? (
@@ -888,7 +900,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
               ) : (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.1)' }}>
                   <Camera style={{ width: '32px', height: '32px', margin: '0 auto 8px auto', opacity: 0.5 }} />
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Aún no hay fotos cargadas en PGP 2026 para este equipo.</p>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Aún no hay fotos cargadas en {campaniaActiva} para este equipo.</p>
                   <button
                     type="button"
                     onClick={() => cameraInputRef.current?.click()}
@@ -1051,14 +1063,14 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
 
 
         {/* ========================================================= */}
-        {/* COLUMNA DERECHA: FORMULARIO 2026 CON COPILOTO IA          */}
+        {/* COLUMNA DERECHA: FORMULARIO DE CAMPAÑA ACTIVA CON COPILOTO IA */}
         {/* ========================================================= */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
           
           {/* Header del Formulario con el Botón de Asistente IA */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'white' }}>
-              Evaluación Técnica 2026
+              Evaluación Técnica {campaniaActiva}
             </h4>
 
             {/* BOTÓN COPILOTO IA */}
@@ -1088,10 +1100,10 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
             </button>
           </div>
           
-          {/* Estado 2026 */}
+          {/* Estado de la campaña activa */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-              ESTADO S/PGP 2026:
+              ESTADO S/{campaniaActiva}:
             </label>
             <select 
               value={estado} 
@@ -1115,11 +1127,11 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
             </select>
           </div>
 
-          {/* Acciones PGP 2026 */}
+          {/* Acciones de la campaña activa */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                Acciones PGP 2026:
+                Acciones {campaniaActiva}:
               </label>
               <VoiceDictationButton
                 onTranscript={(txt) => setAcciones(txt)}
@@ -1146,11 +1158,11 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
             />
           </div>
 
-          {/* Diagnóstico 2026 */}
+          {/* Diagnóstico de la campaña activa */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                DIAGNÓSTICO 2026:
+                DIAGNÓSTICO {campaniaActiva}:
               </label>
               <VoiceDictationButton
                 onTranscript={(txt) => setDiagnostico(txt)}
@@ -1177,11 +1189,11 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
             />
           </div>
 
-          {/* Recomendaciones 2027 */}
+          {/* Recomendaciones de la campaña activa */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                RECOMENDACIONES PGP 2027:
+                RECOMENDACIONES {campaniaActiva}:
               </label>
               <VoiceDictationButton
                 onTranscript={(txt) => setRecomendaciones(txt)}

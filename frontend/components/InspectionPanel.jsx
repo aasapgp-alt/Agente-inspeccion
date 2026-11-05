@@ -72,6 +72,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   const [historial2024, setHistorial2024] = useState(null);
   const [inspeccion2026, setInspeccion2026] = useState(null);
   const [mostrarNuevaRevision, setMostrarNuevaRevision] = useState(false);
+  const [campaniaActiva, setCampaniaActiva] = useState('PGP 2026');
   const [sessionId, setSessionId] = useState(null);
   const [chatMessage, setChatMessage] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -228,12 +229,12 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
       .catch(err => console.error("Error fetching images:", err));
   };
 
-  const fetchEvidencia = async (eqId = equipoId, showRefreshNotice = false) => {
+  const fetchEvidencia = async (eqId = equipoId, showRefreshNotice = false, campaign = campaniaActiva) => {
     if (!eqId) return null;
 
     // 1. Usar memoria caché inmediata (0ms) si no es actualización manual forzada
     if (!showRefreshNotice) {
-      const cached = getCachedEvidencia(eqId);
+      const cached = getCachedEvidencia(eqId, campaign);
       if (cached) {
         setEvidenciaData(cached);
         if (cached.seccion_recomendada) {
@@ -256,11 +257,11 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
     if (showRefreshNotice) setIsRefreshingEvidence(true);
     try {
-      const res = await authFetch(`${API_BASE_URL}/drive/equipo/${eqId}/evidencia?campania=PGP%202026`);
+      const res = await authFetch(`${API_BASE_URL}/drive/equipo/${eqId}/evidencia?campania=${encodeURIComponent(campaign)}`);
       if (res.ok) {
         const data = await res.json();
         setEvidenciaData(data);
-        setCachedEvidencia(eqId, data);
+        setCachedEvidencia(eqId, data, campaign);
         if (data.seccion_recomendada) {
           setSelectedSubSeccion(data.seccion_recomendada);
         }
@@ -295,6 +296,18 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
     const initializeFolder = async () => {
       setLoading(true);
       try {
+        let campaign = 'PGP 2026';
+        try {
+          const settings = await apiService.getSettings(activeToken || token);
+          campaign = (Array.isArray(settings) ? settings : []).find(item => item.clave === 'reporte_campania')?.valor || campaign;
+        } catch (settingsErr) {
+          console.error('Error leyendo la campaña activa:', settingsErr);
+        }
+        const campaignYear = Number(campaign.match(/20\d{2}/)?.[0]) || 2026;
+        if (isMounted) {
+          setCampaniaActiva(campaign);
+        }
+
         // 1. Fetch equipo directamente por ID
         let eq = null;
         try {
@@ -360,13 +373,13 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
         // Detectar una inspección guardada de la campaña actual.
         try {
-          const actualRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/2026`);
+          const actualRes = await authFetch(`${API_BASE_URL}/equipos/${equipoId}/inspeccion/${campaignYear}`);
           if (actualRes.ok && isMounted) {
             const actualData = await actualRes.json();
             setInspeccion2026(actualData);
           }
         } catch (actualErr) {
-          console.error("Error fetching PGP 2026 inspection:", actualErr);
+          console.error(`Error fetching ${campaign} inspection:`, actualErr);
         }
 
         // Fetch PGP 2024 history for display in the panel
@@ -383,7 +396,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
         // Cargar evidencia jerárquica clasificada y auto-posicionar en la subcarpeta del equipo con fotos
         let evData = null;
         try {
-          evData = await fetchEvidencia(equipoId, false);
+          evData = await fetchEvidencia(equipoId, false, campaign);
           if (evData && isMounted) {
             if (evData.fotos_campania?.length > 0) {
               setItems(prev => ({ ...prev, images: evData.fotos_campania }));
@@ -589,7 +602,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
   const handleGuardar = async (generarPdf = true) => {
     if (!analisis) return;
-    if (inspeccion2026 && !window.confirm("Ya existe una inspección PGP 2026 para este equipo. ¿Deseas actualizarla con estos datos?")) return;
+    if (inspeccion2026 && !window.confirm(`Ya existe una inspección ${campaniaActiva} para este equipo. ¿Deseas actualizarla con estos datos?`)) return;
     setIsSaving(true);
 
     // Obtener anotaciones locales de las imágenes seleccionadas para guardar en backend
@@ -921,7 +934,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
                     transition: 'all 0.2s'
                   }}
                 >
-                  <span>📸 Fotos PGP 2026</span>
+                  <span>📸 Fotos {campaniaActiva}</span>
                   <span style={{ 
                     fontSize: '0.7rem', 
                     padding: '1px 6px', 
@@ -1334,7 +1347,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
                       marginBottom: '1rem'
                     }}>
                       <span style={{ fontSize: '1.8rem', display: 'block', marginBottom: '6px' }}>📷</span>
-                      <span>Aún no hay fotos registradas en <strong>PGP 2026</strong> para esta UT.</span>
+                      <span>Aún no hay fotos registradas en <strong>{campaniaActiva}</strong> para esta UT.</span>
                       <div style={{ marginTop: '8px' }}>
                         <button
                           type="button"
@@ -1611,7 +1624,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
               {inspeccion2026 && !mostrarNuevaRevision && (
                 <div style={{ padding: '1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  <strong style={{ color: '#fbbf24' }}>Ya existe una revisión PGP 2026</strong>
+                  <strong style={{ color: '#fbbf24' }}>Ya existe una revisión {campaniaActiva}</strong>
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                     <div><strong>Estado:</strong> {renderVal(inspeccion2026.estado) || 'Sin estado'}</div>
                     <div><strong>Diagnóstico:</strong> {renderVal(inspeccion2026.diagnostico) || 'Sin diagnóstico'}</div>
@@ -1734,7 +1747,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
                       Generando análisis con IA...
                     </p>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: 0 }}>
-                      Evaluando imágenes y consolidando recomendaciones para PGP 2027
+                      Evaluando imágenes y consolidando recomendaciones para {campaniaActiva}
                     </p>
                   </div>
                   <div className="loading-bar-wrapper">
@@ -1748,7 +1761,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
                   className="btn btn-primary" 
                   style={{ width: '100%', marginTop: '0.5rem' }}
                 >
-                  {inspeccion2026 && !mostrarNuevaRevision ? 'Elige cómo continuar con la revisión 2026' : 'Iniciar Análisis IA'}
+                  {inspeccion2026 && !mostrarNuevaRevision ? `Elige cómo continuar con ${campaniaActiva}` : 'Iniciar Análisis IA'}
                 </button>
               )}
             </div>
@@ -1764,7 +1777,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
               <div style={{ padding: '0.8rem', backgroundColor: 'rgba(0, 200, 215, 0.05)', border: '1px solid var(--accent-primary)', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                 <h5 style={{ margin: 0, color: 'var(--accent-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Propuesta Gemini (2026)</span>
+                  <span>Propuesta Gemini ({campaniaActiva})</span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>Editable antes de guardar</span>
                 </h5>
                 
@@ -1864,7 +1877,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Recomendaciones (2027):</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Recomendaciones ({campaniaActiva}):</label>
                     <VoiceDictationButton
                       onTranscript={(txt) => setEditedRecomendaciones(txt)}
                       initialValue={editedRecomendaciones}

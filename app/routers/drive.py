@@ -352,7 +352,7 @@ async def upload_file_to_drive(
 @router.get("/equipo/{equipo_id}/evidencia", response_model=Dict[str, Any])
 def get_equipo_evidencia(
     equipo_id: int, 
-    campania: Optional[str] = Query("PGP 2026"),
+    campania: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -361,7 +361,9 @@ def get_equipo_evidencia(
     """
     try:
         from app.services.drive_service import obtener_evidencia_equipo
-        resultado = obtener_evidencia_equipo(equipo_id, campania_activa=campania or "PGP 2026")
+        from app.services.db_service import get_config_value_db
+        campania_activa = campania or get_config_value_db("reporte_campania", "PGP 2026")
+        resultado = obtener_evidencia_equipo(equipo_id, campania_activa=campania_activa)
         if "error" in resultado and not resultado.get("equipo"):
             raise HTTPException(status_code=404, detail=resultado["error"])
         return resultado

@@ -1156,7 +1156,7 @@ def obtener_evidencia_equipo(equipo_id: int, campania_activa: str = "PGP 2026") 
             nombre_norm = nombre.lower().replace(" ", "").replace("-", "")
             
             tipo = "otro"
-            if campania_norm in nombre_norm or "2026" in nombre_norm:
+            if campania_norm in nombre_norm:
                 tipo = "campania_activa"
                 id_campania_activa = s_id
                 nombre_campania_activa = nombre

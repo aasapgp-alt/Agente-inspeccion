@@ -202,9 +202,14 @@ def get_equipo_inspeccion(id: int, anio: str, db: sqlite3.Connection = Depends(g
         raise HTTPException(status_code=404, detail="Inspección no encontrada para ese equipo y año")
     
     resp_data = dict(inspeccion)
-    if int(anio) == 2026:
+    from app.services.db_service import get_config_value_db
+    import re
+    campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
+    anios_campania = re.findall(r"20\d{2}", campania_activa)
+    anio_activo = int(anios_campania[0]) if anios_campania else 2026
+    if int(anio) == anio_activo:
         from app.services.memory_service import obtener_memoria_imagenes
-        resp_data['image_drive_ids'] = obtener_memoria_imagenes(id)
+        resp_data['image_drive_ids'] = obtener_memoria_imagenes(id, campania_activa)
     else:
         resp_data['image_drive_ids'] = []
     return resp_data

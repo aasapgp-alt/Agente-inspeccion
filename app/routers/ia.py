@@ -115,6 +115,7 @@ def analizar(data: AnalizarRequest, db: sqlite3.Connection = Depends(get_db), cu
     ia_analizar_rate_limiter.check(user_key)
     try:
         from app.services.db_service import get_config_value_db, obtener_antecedente_pgp_2024
+        campania_activa = get_config_value_db("reporte_campania", "PGP 2026")
 
         # 1. Obtener detalles del equipo
         cursor = db.cursor()
@@ -182,7 +183,7 @@ Antecedente válido del PGP 2024 (no hubo PGP 2025; comparar solo el mismo equip
 - Diagnóstico: {historial_2024.get('diagnostico')}
 - Acciones: {historial_2024.get('acciones')}
 - Recomendaciones: {historial_2024.get('recomendaciones')}
-Usar este registro para identificar continuidad o evolución, no para atribuir automáticamente su condición a 2026.
+Usar este registro para identificar continuidad o evolución, no para atribuir automáticamente su condición a {campania_activa}.
 
 Indicaciones previas del inspector humano:
 {data.indicaciones_previas or 'Ninguna indicación adicional.'}
@@ -208,7 +209,7 @@ Devuelve tu respuesta ÚNICAMENTE en formato JSON (sin bloques markdown como ```
 {
   "estado": "BUENO" | "REGULAR" | "CRITICO" | "FUERA DE RUTA",
   "diagnostico": "TIEMPO PRESENTE IMPERSONAL. Describe hallazgos actuales relevantes por componente, con estilo conciso PGP 2024. Compara con PGP 2024 solo para el mismo componente y con evidencia actual. No uses primera persona.",
-  "acciones": "PASADO IMPERSONAL. Describe únicamente las actividades realmente realizadas durante la inspección 2026; no copies acciones del antecedente.",
+  "acciones": "PASADO IMPERSONAL. Describe únicamente las actividades realmente realizadas durante la inspección {campania_activa}; no copies acciones del antecedente.",
   "recomendaciones": {
     "EQUIPO INTERIOR": "INFINITIVO: 'Realizar...', 'Continuar...', 'Solicitar...', o 'Sin comentarios'",
     "EQUIPO EXTERIOR": "INFINITIVO o 'Sin comentarios'",
@@ -535,9 +536,8 @@ def guardar(data: GuardarRequest, background_tasks: BackgroundTasks, db: sqlite3
             """, (data.equipo_id, img_id, anns_json, comentario_val))
                 
         # Guardar en memoria de imagenes seleccionadas
-        if data.image_drive_ids:
-            from app.services.memory_service import guardar_memoria_imagenes
-            guardar_memoria_imagenes(data.equipo_id, data.image_drive_ids)
+        from app.services.memory_service import guardar_memoria_imagenes
+        guardar_memoria_imagenes(data.equipo_id, data.image_drive_ids or [], campania_activa)
         
         # 3. Guardar lección aprendida si aplica
         if data.leccion_aprendida:

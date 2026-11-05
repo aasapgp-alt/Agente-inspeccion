@@ -515,17 +515,20 @@ export const apiService = {
 // CACHÉ EN MEMORIA PARA EVIDENCIA Y FOTOS DE UTs (Persistencia entre pestañas sin re-descargas)
 const evidenciaCache = new Map();
 
-export const getCachedEvidencia = (equipoId) => {
+export const getCachedEvidencia = (equipoId, campania = 'PGP 2026') => {
   if (!equipoId) return null;
-  return evidenciaCache.get(String(equipoId)) || null;
+  return evidenciaCache.get(`${equipoId}:${campania}`) || null;
 };
 
-export const setCachedEvidencia = (equipoId, data) => {
+export const setCachedEvidencia = (equipoId, data, campania = 'PGP 2026') => {
   if (!equipoId || !data) return;
-  evidenciaCache.set(String(equipoId), data);
+  evidenciaCache.set(`${equipoId}:${campania}`, data);
 };
 
-export const clearCachedEvidencia = (equipoId = null) => {
-  if (equipoId) evidenciaCache.delete(String(equipoId));
+export const clearCachedEvidencia = (equipoId = null, campania = null) => {
+  if (equipoId && campania) evidenciaCache.delete(`${equipoId}:${campania}`);
+  else if (equipoId) {
+    for (const key of evidenciaCache.keys()) if (key.startsWith(`${equipoId}:`)) evidenciaCache.delete(key);
+  }
   else evidenciaCache.clear();
 };
