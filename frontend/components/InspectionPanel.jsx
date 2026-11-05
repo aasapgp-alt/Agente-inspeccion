@@ -1633,7 +1633,11 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Puedes cargar esta revisión para continuarla o iniciar un nuevo análisis con las fotos y datos actuales. Guardar una propuesta nueva actualizará este registro.</div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button type="button" className="btn btn-secondary" onClick={() => { setAnalisis(inspeccion2026); setInspeccionId(inspeccion2026.id || null); setSelectedImages(inspeccion2026.image_drive_ids || []); }}>Cargar revisión guardada</button>
-                    <button type="button" className="btn btn-primary" onClick={() => setMostrarNuevaRevision(true)}>Nueva revisión con datos actuales</button>
+                    <button type="button" className="btn btn-primary" onClick={async () => {
+                      setMostrarNuevaRevision(true);
+                      const evidenciaActual = await fetchEvidencia(equipoId, true, campaniaActiva);
+                      setSelectedImages((evidenciaActual?.fotos_campania || []).map(foto => foto.id));
+                    }}>Nueva revisión con datos actuales</button>
                   </div>
                 </div>
               )}

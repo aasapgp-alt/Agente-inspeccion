@@ -94,7 +94,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
           Object.values(cached.fotos_historico).flat().forEach(img => { newRegistry[img.id] = img; });
         }
         setImageRegistry(prev => ({ ...prev, ...newRegistry }));
-        return;
+        return cached;
       }
     }
 
@@ -122,6 +122,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
           Object.values(data.fotos_historico).flat().forEach(img => { newRegistry[img.id] = img; });
         }
         setImageRegistry(prev => ({ ...prev, ...newRegistry }));
+        return data;
 
         // Si hay fotos de campaña y ninguna seleccionada, preseleccionar la primera
         if (data.fotos_campania && data.fotos_campania.length > 0 && selectedImages.length === 0) {
@@ -526,7 +527,15 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Puedes continuar editándola o iniciar una nueva revisión. Al guardar, se actualizará el registro existente de esta campaña.</span>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary" onClick={() => setRevisionActualAvisada(true)}>Continuar revisión cargada</button>
-            <button type="button" className="btn btn-primary" onClick={() => { setEstado('BUENO'); setAcciones(''); setDiagnostico(''); setRecomendaciones(''); setRevisionActualAvisada(true); }}>Nueva revisión con datos actuales</button>
+            <button type="button" className="btn btn-primary" onClick={async () => {
+              setEstado('BUENO');
+              setAcciones('');
+              setDiagnostico('');
+              setRecomendaciones('');
+              setRevisionActualAvisada(true);
+              const evidenciaActual = await fetchEvidencia(equipoId, true, campaniaActiva);
+              setSelectedImages((evidenciaActual?.fotos_campania || []).map(foto => foto.id));
+            }}>Nueva revisión con datos actuales</button>
           </div>
         </div>
       )}
