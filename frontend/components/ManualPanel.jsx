@@ -24,6 +24,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
   const [equipo, setEquipo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [cargandoInspeccionActiva, setCargandoInspeccionActiva] = useState(true);
   const [previewImage, setPreviewImage] = useState(null);
 
   const authFetch = (url, options = {}) => {
@@ -47,6 +48,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   const [inspeccion2026, setInspeccion2026] = useState(null);
   const [revisionActualAvisada, setRevisionActualAvisada] = useState(false);
   const [campaniaActiva, setCampaniaActiva] = useState('PGP 2026');
+  const inspeccionCampaniaPendiente = Boolean(inspeccion2026 && ['PENDIENTE', 'NO INSPECCIONADO', 'SIN DATOS', ''].includes(String(inspeccion2026.estado || '').trim().toUpperCase()));
   const [showHistory2024, setShowHistory2024] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -287,6 +289,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   useEffect(() => {
     if (!equipoId) return;
     setLoading(true);
+    setCargandoInspeccionActiva(true);
 
     // Resetear estados del reporte al cambiar de equipo
     setInspeccion2026(null);
@@ -332,16 +335,19 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
       .then(data => {
         if (data) {
           setInspeccion2026(data);
-          setEstado(renderVal(data.estado) || 'BUENO');
-          setAcciones(renderVal(data.acciones) || '');
-          setDiagnostico(renderVal(data.diagnostico) || '');
-          setRecomendaciones(renderVal(data.recomendaciones) || '');
-          if (data.image_drive_ids && Array.isArray(data.image_drive_ids) && data.image_drive_ids.length > 0) {
+          const estadoActual = renderVal(data.estado).trim().toUpperCase();
+          const pendiente = ['PENDIENTE', 'NO INSPECCIONADO', 'SIN DATOS', ''].includes(estadoActual);
+          setEstado(pendiente ? '' : estadoActual);
+          setAcciones(pendiente ? '' : renderVal(data.acciones) || '');
+          setDiagnostico(pendiente ? '' : renderVal(data.diagnostico) || '');
+          setRecomendaciones(pendiente ? '' : renderVal(data.recomendaciones) || '');
+          if (!pendiente && data.image_drive_ids && Array.isArray(data.image_drive_ids) && data.image_drive_ids.length > 0) {
             setSelectedImages(data.image_drive_ids);
           }
         }
       })
-      .catch(err => console.error("Error fetching active campaign inspection:", err));
+      .catch(err => console.error("Error fetching active campaign inspection:", err))
+      .finally(() => setCargandoInspeccionActiva(false));
 
     // Fetch comentarios y anotaciones
     authFetch(`${API_BASE_URL}/anotaciones/${equipoId}`)
@@ -367,6 +373,10 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   }, [equipoId]);
 
   const handleGuardar = async (generarPdf = false) => {
+    if (!estado) {
+      setSaveStatus({ type: 'error', text: 'Selecciona el estado técnico de la inspección antes de guardar.' });
+      return;
+    }
     if (inspeccion2026 && !window.confirm(`Ya existe una inspección ${campaniaActiva} para este equipo. ¿Deseas actualizarla con los datos del formulario?`)) return;
     setIsSaving(true);
     setSaveStatus(null);
@@ -413,6 +423,12 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
   };
 
   const handleGenerarReporte = async () => {
+    if (!estado) {
+      setReporteStatus('error');
+      alert('Selecciona el estado técnico de la inspección antes de generar el reporte.');
+      return;
+    }
+    if (inspeccion2026 && !window.confirm(`Ya existe una inspección ${campaniaActiva} para este equipo. ¿Deseas actualizarla y generar el reporte?`)) return;
     setGenerandoReporte(true);
     setReporteStatus('generating');
     try {
@@ -481,7 +497,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
     );
   }
 
-  if (loading) {
+  if (loading || cargandoInspeccionActiva) {
     return (
       <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <RefreshCw style={{ width: '32px', height: '32px', margin: '0 auto 12px auto', animation: 'spin 1s linear infinite' }} />
@@ -523,12 +539,12 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
 
       {inspeccion2026 && !revisionActualAvisada && (
         <div style={{ padding: '0.85rem 1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-          <strong style={{ color: '#fbbf24' }}>Se cargó la revisión {campaniaActiva} existente</strong>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Puedes continuar editándola o iniciar una nueva revisión. Al guardar, se actualizará el registro existente de esta campaña.</span>
+          <strong style={{ color: '#fbbf24' }}>{inspeccionCampaniaPendiente ? `${campaniaActiva}: inspección pendiente` : `Se cargó la revisión ${campaniaActiva} existente`}</strong>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{inspeccionCampaniaPendiente ? 'Este registro aún no tiene una evaluación técnica validada. El texto asociado no se carga como diagnóstico actual.' : 'Puedes continuar editándola o iniciar una nueva revisión. Al guardar, se actualizará el registro existente de esta campaña.'}</span>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setRevisionActualAvisada(true)}>Continuar revisión cargada</button>
+            {!inspeccionCampaniaPendiente && <button type="button" className="btn btn-secondary" onClick={() => setRevisionActualAvisada(true)}>Continuar revisión cargada</button>}
             <button type="button" className="btn btn-primary" onClick={async () => {
-              setEstado('BUENO');
+              setEstado('');
               setAcciones('');
               setDiagnostico('');
               setRecomendaciones('');
@@ -1129,6 +1145,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
                 colorScheme: 'dark'
               }}
             >
+              {!estado && <option value="" disabled>Selecciona el estado técnico...</option>}
               <option value="BUENO">BUENO (Apto para operar)</option>
               <option value="REGULAR">REGULAR (Bajo Observación)</option>
               <option value="CRITICO">CRITICO (Requiere Intervención)</option>
@@ -1276,7 +1293,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
           <div style={{ display: 'flex', gap: '0.8rem', marginTop: '0.4rem' }}>
             <button 
               onClick={() => handleGuardar(false)} 
-              disabled={isSaving || generandoReporte} 
+              disabled={isSaving || generandoReporte || !estado}
               className="btn btn-secondary" 
               style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem', fontWeight: 600 }}
             >
@@ -1284,7 +1301,7 @@ export default function ManualPanel({ equipoId, onChangeTab }) {
             </button>
             <button 
               onClick={handleGenerarReporte} 
-              disabled={isSaving || generandoReporte} 
+              disabled={isSaving || generandoReporte || !estado}
               className="btn btn-primary" 
               style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem', fontWeight: 600 }}
             >

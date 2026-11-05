@@ -25,16 +25,18 @@ def get_dashboard_stats(empresa_id: Optional[int] = None, db: sqlite3.Connection
     else:
         eq_filter = "WHERE e.activo = 1"
 
-    # Obtener todas las inspecciones más recientes de los equipos activos
+    # Para la campaña activa, contar como inspeccionado solo un estado técnico,
+    # no una fila preliminar que todavía figura PENDIENTE.
     query = f"""
         SELECT e.id as equipo_id, e.ubicacion_id, 
-               (SELECT estado FROM inspecciones WHERE equipo_id = e.id ORDER BY id DESC LIMIT 1) as estado,
-               (SELECT COUNT(*) FROM inspecciones WHERE equipo_id = e.id AND anio = ?) as has_campaign_inspection
+               COALESCE((SELECT estado FROM inspecciones WHERE equipo_id = e.id AND anio = ? ORDER BY id DESC LIMIT 1), 'PENDIENTE') as estado,
+               (SELECT COUNT(*) FROM inspecciones WHERE equipo_id = e.id AND anio = ?
+                AND UPPER(TRIM(COALESCE(estado, ''))) NOT IN ('', 'PENDIENTE', 'SIN DATOS', 'NO INSPECCIONADO')) as has_campaign_inspection
         FROM equipos e
         {eq_filter}
     """
     
-    cursor.execute(query, [anio_campania] + eq_params)
+    cursor.execute(query, [anio_campania, anio_campania] + eq_params)
     equipos_insps = [dict(row) for row in cursor.fetchall()]
     
     critical_alerts = 0

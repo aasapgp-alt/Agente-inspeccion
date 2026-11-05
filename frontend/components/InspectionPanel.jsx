@@ -73,6 +73,7 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
   const [inspeccion2026, setInspeccion2026] = useState(null);
   const [mostrarNuevaRevision, setMostrarNuevaRevision] = useState(false);
   const [campaniaActiva, setCampaniaActiva] = useState('PGP 2026');
+  const inspeccionCampaniaPendiente = Boolean(inspeccion2026 && ['PENDIENTE', 'NO INSPECCIONADO', 'SIN DATOS', ''].includes(String(inspeccion2026.estado || '').trim().toUpperCase()));
   const [sessionId, setSessionId] = useState(null);
   const [chatMessage, setChatMessage] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -1624,15 +1625,19 @@ export default function InspectionPanel({ equipoId, onChangeTab }) {
 
               {inspeccion2026 && !mostrarNuevaRevision && (
                 <div style={{ padding: '1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  <strong style={{ color: '#fbbf24' }}>Ya existe una revisión {campaniaActiva}</strong>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                    <div><strong>Estado:</strong> {renderVal(inspeccion2026.estado) || 'Sin estado'}</div>
-                    <div><strong>Diagnóstico:</strong> {renderVal(inspeccion2026.diagnostico) || 'Sin diagnóstico'}</div>
-                    <div><strong>Recomendaciones:</strong> {renderVal(inspeccion2026.recomendaciones) || 'Sin recomendaciones'}</div>
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Puedes cargar esta revisión para continuarla o iniciar un nuevo análisis con las fotos y datos actuales. Guardar una propuesta nueva actualizará este registro.</div>
+                  <strong style={{ color: '#fbbf24' }}>{inspeccionCampaniaPendiente ? `${campaniaActiva}: inspección pendiente` : `Ya existe una revisión ${campaniaActiva}`}</strong>
+                  {inspeccionCampaniaPendiente ? (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Este registro aún no tiene una evaluación técnica validada. El texto que contiene no se mostrará ni cargará como diagnóstico actual mientras siga pendiente.</div>
+                  ) : (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      <div><strong>Estado:</strong> {renderVal(inspeccion2026.estado) || 'Sin estado'}</div>
+                      <div><strong>Diagnóstico:</strong> {renderVal(inspeccion2026.diagnostico) || 'Sin diagnóstico'}</div>
+                      <div><strong>Recomendaciones:</strong> {renderVal(inspeccion2026.recomendaciones) || 'Sin recomendaciones'}</div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{inspeccionCampaniaPendiente ? 'Inicia la inspección con evidencia actual para completar este equipo.' : 'Puedes cargar esta revisión para continuarla o iniciar un nuevo análisis con las fotos y datos actuales. Guardar una propuesta nueva actualizará este registro.'}</div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button type="button" className="btn btn-secondary" onClick={() => { setAnalisis(inspeccion2026); setInspeccionId(inspeccion2026.id || null); setSelectedImages(inspeccion2026.image_drive_ids || []); }}>Cargar revisión guardada</button>
+                    {!inspeccionCampaniaPendiente && <button type="button" className="btn btn-secondary" onClick={() => { setAnalisis(inspeccion2026); setInspeccionId(inspeccion2026.id || null); setSelectedImages(inspeccion2026.image_drive_ids || []); }}>Cargar revisión guardada</button>}
                     <button type="button" className="btn btn-primary" onClick={async () => {
                       setMostrarNuevaRevision(true);
                       const evidenciaActual = await fetchEvidencia(equipoId, true, campaniaActiva);
