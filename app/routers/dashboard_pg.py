@@ -160,6 +160,7 @@ def list_factories(empresa_id: Optional[int] = None, db: sqlite3.Connection = De
         good_cnt = 0
         alert_cnt = 0
         broken_cnt = 0
+        pending_cnt = 0
         
         for est_raw in states:
             est = str(est_raw or '').upper()
@@ -167,12 +168,19 @@ def list_factories(empresa_id: Optional[int] = None, db: sqlite3.Connection = De
                 broken_cnt += 1
             elif 'REGULAR' in est:
                 alert_cnt += 1
+            elif 'PEND' in est or not est:
+                pending_cnt += 1
             else:
                 good_cnt += 1
                     
         factories.append({
             "id": ubi['id'],
             "name": ubi['nombre'],
+            "total": total_cnt,
+            "buenos": good_cnt,
+            "regulares": alert_cnt,
+            "criticos": broken_cnt,
+            "pendientes": pending_cnt,
             "good": round((good_cnt / total_cnt) * 100),
             "alert": round((alert_cnt / total_cnt) * 100),
             "broken": round((broken_cnt / total_cnt) * 100)
@@ -205,7 +213,9 @@ def get_asset_history(empresa_id: Optional[int] = None, db: sqlite3.Connection =
             e.temperatura_diseno,
             (SELECT diagnostico FROM inspecciones WHERE equipo_id = e.id AND diagnostico IS NOT NULL AND diagnostico != '' ORDER BY anio DESC LIMIT 1) as diagnostico,
             (SELECT recomendaciones FROM inspecciones WHERE equipo_id = e.id AND recomendaciones IS NOT NULL AND recomendaciones != '' ORDER BY anio DESC LIMIT 1) as recomendaciones,
-            (SELECT acciones FROM inspecciones WHERE equipo_id = e.id AND acciones IS NOT NULL AND acciones != '' ORDER BY anio DESC LIMIT 1) as acciones
+            (SELECT acciones FROM inspecciones WHERE equipo_id = e.id AND acciones IS NOT NULL AND acciones != '' ORDER BY anio DESC LIMIT 1) as acciones,
+            (SELECT anio FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1) as ultima_inspeccion_anio,
+            (SELECT COALESCE(updated_at, created_at) FROM inspecciones WHERE equipo_id = e.id ORDER BY anio DESC, id DESC LIMIT 1) as ultima_inspeccion_fecha
         FROM equipos e
         LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
         LEFT JOIN empresas emp ON u.empresa_id = emp.id
@@ -234,6 +244,8 @@ def get_asset_history(empresa_id: Optional[int] = None, db: sqlite3.Connection =
             "temperatura_diseno": row["temperatura_diseno"] or 0,
             "diagnostico": row["diagnostico"] or "",
             "recomendaciones": row["recomendaciones"] or "",
-            "acciones": row["acciones"] or ""
+            "acciones": row["acciones"] or "",
+            "ultima_inspeccion_anio": row["ultima_inspeccion_anio"],
+            "ultima_inspeccion_fecha": row["ultima_inspeccion_fecha"]
         })
     return results

@@ -1,9 +1,71 @@
-import { useState, useEffect } from 'react';
+'use client';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthProvider';
 import { API_BASE_URL } from '../services/api';
+import {
+  AlertOctagon,
+  AlertTriangle,
+  Clock,
+  TrendingUp,
+  CheckCircle2,
+  Building2,
+  MapPin,
+  Search,
+  ClipboardList,
+  Sparkles,
+  Filter,
+  X
+} from 'lucide-react';
 
-export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbicacion, onChangeTab, onOpenHelp }) {
+function getEstadoBadge(estadoRaw) {
+  const est = (estadoRaw || 'PENDIENTE').toUpperCase();
+  if (est.includes('CRIT')) {
+    return {
+      key: 'CRITICO',
+      label: 'Crítico',
+      cls: 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+    };
+  }
+  if (est.includes('REGULAR')) {
+    return {
+      key: 'REGULAR',
+      label: 'Observado',
+      cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+    };
+  }
+  if (est.includes('BUEN')) {
+    return {
+      key: 'BUENO',
+      label: 'Bueno',
+      cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+    };
+  }
+  if (est.includes('FUERA')) {
+    return {
+      key: 'FUERA',
+      label: 'Fuera de ruta',
+      cls: 'bg-slate-500/15 text-slate-400 border-slate-500/30'
+    };
+  }
+  return {
+    key: 'PENDIENTE',
+    label: 'Pendiente',
+    cls: 'bg-violet-500/15 text-violet-400 border-violet-500/30'
+  };
+}
+
+export default function GlobalDashboard({
+  empresaId,
+  empresas = [],
+  onChangeEmpresa,
+  onSelectEquipo,
+  onAnalyzeEquipo,
+  onSelectUbicacion,
+  refreshKey = 0
+}) {
   const { token } = useAuth();
+  const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '');
+
   const [metrics, setMetrics] = useState({
     critical_alerts: 0,
     under_observation: 0,
@@ -14,632 +76,397 @@ export default function GlobalDashboard({ empresaId, onSelectEquipo, onSelectUbi
     total_equipos: 0,
     inspections_today: 0
   });
-  
   const [factories, setFactories] = useState([]);
   const [equipments, setEquipments] = useState([]);
-  const [showQuickGuide, setShowQuickGuide] = useState(false);
-  
-  // Selected views
-  const [selectedCondition, setSelectedCondition] = useState(null); // 'CRITICO', 'REGULAR', 'PENDIENTE', 'BUENO'
-  const [selectedPlant, setSelectedPlant] = useState(null); // { id: X, name: Y }
+  const [loading, setLoading] = useState(true);
+
+  // Filtros de la vista general
+  const [selectedAreaId, setSelectedAreaId] = useState('ALL');
+  const [selectedCondition, setSelectedCondition] = useState('ALL');
+  const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
+    if (!activeToken) return;
+    setLoading(true);
     const urlParams = empresaId ? `?empresa_id=${empresaId}` : '';
-    
-    // Fetch stats
-    fetch(`${API_BASE_URL}/dashboard/stats${urlParams}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => setMetrics(data))
-      .catch(err => console.error(err));
+    const headers = { Authorization: `Bearer ${activeToken}` };
 
-    // Fetch factory distribution list
-    fetch(`${API_BASE_URL}/dashboard/factories${urlParams}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => setFactories(data))
-      .catch(err => console.error(err));
+    Promise.all([
+      fetch(`${API_BASE_URL}/dashboard/stats${urlParams}`, { headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API_BASE_URL}/dashboard/factories${urlParams}`, { headers }).then((r) => (r.ok ? r.json() : [])),
+      fetch(`${API_BASE_URL}/dashboard/history${urlParams}`, { headers }).then((r) => (r.ok ? r.json() : []))
+    ])
+      .then(([statsData, factoriesData, historyData]) => {
+        if (statsData) setMetrics(statsData);
+        if (Array.isArray(factoriesData)) setFactories(factoriesData);
+        if (Array.isArray(historyData)) setEquipments(historyData);
+      })
+      .catch((err) => console.error('Error cargando vista general:', err))
+      .finally(() => setLoading(false));
+  }, [empresaId, activeToken, refreshKey]);
 
-    // Fetch all equipments with states for details filtering
-    fetch(`${API_BASE_URL}/dashboard/history${urlParams}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => setEquipments(data))
-      .catch(err => console.error(err));
-  }, [empresaId, token]);
+  // Resetear área seleccionada al cambiar empresa
+  useEffect(() => {
+    setSelectedAreaId('ALL');
+  }, [empresaId]);
 
-  const topMetrics = [
-    { 
-      id: 'CRITICO', 
-      title: 'Alertas Críticas', 
-      count: metrics.critical_alerts, 
-      subtitle: 'Equipos en estado crítico - Reparación Urgente', 
-      colorClass: 'glow-red',
+  const filteredEquipments = useMemo(() => {
+    return equipments.filter((eq) => {
+      if (selectedAreaId !== 'ALL' && String(eq.ubicacion_id) !== String(selectedAreaId)) {
+        return false;
+      }
+      if (selectedCondition !== 'ALL') {
+        const key = getEstadoBadge(eq.estado_actual).key;
+        if (key !== selectedCondition) return false;
+      }
+      if (searchText.trim()) {
+        const q = searchText.toLowerCase();
+        const matchTag = (eq.tag_codigo || '').toLowerCase().includes(q);
+        const matchDesc = (eq.descripcion || '').toLowerCase().includes(q);
+        const matchArea = (eq.area_nombre || '').toLowerCase().includes(q);
+        const matchMat = (eq.material || '').toLowerCase().includes(q);
+        if (!matchTag && !matchDesc && !matchArea && !matchMat) return false;
+      }
+      return true;
+    });
+  }, [equipments, selectedAreaId, selectedCondition, searchText]);
+
+  const kpiCards = [
+    {
+      id: 'CRITICO',
+      title: 'Alertas Críticas',
+      value: metrics.critical_alerts || 0,
+      sub: 'Reparación urgente',
+      icon: AlertOctagon,
+      accent: 'border-rose-500/30 hover:border-rose-500/60',
+      iconCls: 'text-rose-400 bg-rose-500/15',
+      valueCls: 'text-rose-400',
       clickable: true
     },
-    { 
-      id: 'REGULAR', 
-      title: 'Bajo Observación', 
-      count: metrics.under_observation, 
-      subtitle: 'Equipos en estado regular - Mantenimiento Programado', 
-      colorClass: 'glow-yellow',
+    {
+      id: 'REGULAR',
+      title: 'Bajo Observación',
+      value: metrics.under_observation || 0,
+      sub: 'Mantenimiento programado',
+      icon: AlertTriangle,
+      accent: 'border-amber-500/30 hover:border-amber-500/60',
+      iconCls: 'text-amber-400 bg-amber-500/15',
+      valueCls: 'text-amber-400',
       clickable: true
     },
-    { 
-      id: 'PENDIENTE', 
-      title: 'Pendientes', 
-      count: metrics.pending_inspections, 
-      subtitle: 'Activos pendientes de inspección / resolución', 
-      colorClass: 'glow-purple',
+    {
+      id: 'PENDIENTE',
+      title: 'Pendientes',
+      value: metrics.pending_inspections || 0,
+      sub: 'Sin inspección en campaña',
+      icon: Clock,
+      accent: 'border-violet-500/30 hover:border-violet-500/60',
+      iconCls: 'text-violet-400 bg-violet-500/15',
+      valueCls: 'text-violet-400',
       clickable: true
     },
-    { 
-      id: 'AVANCE', 
-      title: 'Avance de Campaña', 
-      count: `${metrics.campaign_progress_pct || 0}%`, 
-      subtitle: `${metrics.inspected_equipos || 0} de ${metrics.total_equipos || 0} activos inspeccionados`, 
-      colorClass: 'glow-blue',
+    {
+      id: 'BUENO',
+      title: 'Aptos para Operar',
+      value: metrics.good_condition || 0,
+      sub: 'Condición óptima',
+      icon: CheckCircle2,
+      accent: 'border-emerald-500/30 hover:border-emerald-500/60',
+      iconCls: 'text-emerald-400 bg-emerald-500/15',
+      valueCls: 'text-emerald-400',
+      clickable: true
+    },
+    {
+      id: 'AVANCE',
+      title: 'Avance Campaña',
+      value: `${metrics.campaign_progress_pct || 0}%`,
+      sub: `${metrics.inspected_equipos || 0} de ${metrics.total_equipos || 0} activos`,
+      icon: TrendingUp,
+      accent: 'border-sky-500/30',
+      iconCls: 'text-sky-400 bg-sky-500/15',
+      valueCls: 'text-sky-400',
       clickable: false
-    },
-    { 
-      id: 'BUENO', 
-      title: 'Aptos para Operar', 
-      count: metrics.good_condition || 0, 
-      subtitle: 'Equipos en condición operativa óptima', 
-      colorClass: 'glow-green',
-      clickable: true
-    },
+    }
   ];
 
-  // Helper to handle equipment click
-  const handleAnalyzeEquipment = (eqId) => {
-    if (onSelectEquipo) onSelectEquipo(eqId.toString());
-    if (onChangeTab) onChangeTab('FACTORY');
+  const handleSelectArea = (areaId) => {
+    const next = String(selectedAreaId) === String(areaId) ? 'ALL' : String(areaId);
+    setSelectedAreaId(next);
+    if (onSelectUbicacion) onSelectUbicacion(next === 'ALL' ? '' : next);
   };
 
-  // 1. Detailed plant view
-  if (selectedPlant) {
-    const plantEquips = equipments.filter(eq => eq.ubicacion_id === selectedPlant.id);
-    const plantTotal = plantEquips.length;
-    const plantCriticos = plantEquips.filter(eq => eq.estado_actual === 'CRITICO').length;
-    const plantRegulares = plantEquips.filter(eq => eq.estado_actual === 'REGULAR').length;
-    const plantPendientes = plantEquips.filter(eq => eq.estado_actual === 'PENDIENTE').length;
-    const plantBuenos = plantEquips.filter(eq => eq.estado_actual === 'BUENO' || eq.estado_actual === 'BUENOS').length;
-    const plantICA = plantTotal > 0 ? round((plantCriticos / plantTotal) * 100, 1) : 0.0;
-
-    function round(value, decimals) {
-      return Number(Math.round(value + 'e' + decimals) + 'e-' + decimals);
-    }
-
-    const plantMetrics = [
-      { title: 'Alertas Críticas', count: plantCriticos, subtitle: 'Reparación Urgente Requerida', colorClass: 'glow-red' },
-      { title: 'Bajo Observación', count: plantRegulares, subtitle: 'Mantenimiento Programado', colorClass: 'glow-yellow' },
-      { title: 'Pendientes', count: plantPendientes, subtitle: 'Sin inspección en campaña', colorClass: 'glow-purple' },
-      { title: 'Índice Criticidad (ICA)', count: `${plantICA}%`, subtitle: 'Porcentaje de activos críticos', colorClass: 'glow-orange' }
-    ];
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <div className="eyebrow" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>VISTA DETALLADA DE PLANTA</div>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginTop: '0.2rem' }}>Planta: {selectedPlant.name}</h1>
-          </div>
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-            {onOpenHelp && (
-              <button 
-                onClick={onOpenHelp}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                title="Abrir Manual de Uso"
-              >
-                <span>📖</span> Manual de Uso
-              </button>
-            )}
-            <button 
-              onClick={() => {
-                setSelectedPlant(null);
-                if (onSelectUbicacion) onSelectUbicacion('');
-              }}
-              style={{
-                padding: '0.6rem 1.2rem',
-                background: 'rgba(255, 255, 255, 0.05)',
-                color: 'var(--text-primary)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: 600,
-                transition: 'background 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-            >
-              ← Volver al Dashboard Global
-            </button>
-          </div>
-        </div>
-
-        {/* Local Plant Metrics Row */}
-        <div className="dashboard-plant-metrics-grid">
-          {plantMetrics.map((m, i) => (
-            <div key={i} className={`glow-card ${m.colorClass}`}>
-              <h3>{m.title}</h3>
-              <div className="number-big">{m.count}</div>
-              <p className="card-subtitle">{m.subtitle}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Mini progress bar of distribution */}
-        <div className="glass-panel" style={{ padding: '1.2rem' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: 'var(--text-primary)' }}>Distribución Física del Área</h3>
-          <div className="progress-container" style={{ height: '26px', borderRadius: '6px', overflow: 'hidden', display: 'flex', width: '100%', backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
-            {plantBuenos > 0 && (
-              <div style={{ 
-                backgroundColor: '#10b981', 
-                width: `${(plantBuenos / plantTotal) * 100}%`, 
-                color: 'white', 
-                fontSize: '0.75rem', 
-                fontWeight: 'bold', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }} title={`Buenos: ${plantBuenos}`}>
-                Bueno: {plantBuenos}
-              </div>
-            )}
-            {plantRegulares > 0 && (
-              <div style={{ 
-                backgroundColor: '#f59e0b', 
-                width: `${(plantRegulares / plantTotal) * 100}%`, 
-                color: 'white', 
-                fontSize: '0.75rem', 
-                fontWeight: 'bold', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }} title={`Regulares: ${plantRegulares}`}>
-                Regular: {plantRegulares}
-              </div>
-            )}
-            {plantCriticos > 0 && (
-              <div style={{ 
-                backgroundColor: '#ef4444', 
-                width: `${(plantCriticos / plantTotal) * 100}%`, 
-                color: 'white', 
-                fontSize: '0.75rem', 
-                fontWeight: 'bold', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }} title={`Críticos: ${plantCriticos}`}>
-                Crítico: {plantCriticos}
-              </div>
-            )}
-            {plantPendientes > 0 && (
-              <div style={{ 
-                backgroundColor: '#a855f7', 
-                width: `${(plantPendientes / plantTotal) * 100}%`, 
-                color: 'white', 
-                fontSize: '0.75rem', 
-                fontWeight: 'bold', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }} title={`Pendientes: ${plantPendientes}`}>
-                Pendiente: {plantPendientes}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Equipments Table */}
-        <h2 style={{ fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Equipos en esta Área / Planta ({plantTotal})</h2>
-        <div className="glass-panel" style={{ padding: '1rem', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)' }}>
-                <th style={{ padding: '0.75rem 1rem' }}>Código / Tag</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Nombre / Descripción</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Estado Actual</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Último Diagnóstico</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plantEquips.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                    No hay equipos registrados en esta planta.
-                  </td>
-                </tr>
-              ) : (
-                plantEquips.map((eq) => {
-                  let stateColor = '#3fa86b';
-                  if (eq.estado_actual === 'CRITICO') stateColor = '#e0533d';
-                  else if (eq.estado_actual === 'REGULAR') stateColor = '#e0a32e';
-                  else if (eq.estado_actual === 'PENDIENTE') stateColor = '#a855f7';
-
-                  return (
-                    <tr 
-                      key={eq.id} 
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      <td style={{ padding: '0.9rem 1rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{eq.tag_codigo}</td>
-                      <td style={{ padding: '0.9rem 1rem' }}>{eq.descripcion}</td>
-                      <td style={{ padding: '0.9rem 1rem' }}>
-                        <span style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          backgroundColor: `${stateColor}1a`,
-                          color: stateColor,
-                          border: `1px solid ${stateColor}33`,
-                        }}>
-                          {eq.estado_actual}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.9rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={eq.diagnostico}>
-                        {eq.diagnostico || 'Sin diagnóstico registrado.'}
-                      </td>
-                      <td style={{ padding: '0.9rem 1rem', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleAnalyzeEquipment(eq.id)}
-                          style={{
-                            padding: '0.4rem 0.8rem',
-                            backgroundColor: 'var(--accent-primary)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-primary-hover)'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-primary)'}
-                        >
-                          🔍 Analizar
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Clicked card detailed filter view
-  if (selectedCondition) {
-    const filteredEquips = equipments.filter(eq => {
-      if (selectedCondition === 'CRITICO') return eq.estado_actual === 'CRITICO';
-      if (selectedCondition === 'REGULAR') return eq.estado_actual === 'REGULAR';
-      if (selectedCondition === 'PENDIENTE') return eq.estado_actual === 'PENDIENTE';
-      if (selectedCondition === 'BUENO') return eq.estado_actual === 'BUENO' || eq.estado_actual === 'BUENOS';
-      return false;
-    });
-
-    const conditionTitle = selectedCondition === 'CRITICO' ? 'Alertas Críticas' :
-                           selectedCondition === 'REGULAR' ? 'Bajo Observación' : 
-                           selectedCondition === 'BUENO' ? 'Aptos para Operar (Buen Estado)' : 'Pendientes de Inspección';
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: 700 }}>Equipos en Estado: {conditionTitle}</h1>
-          <button 
-            onClick={() => setSelectedCondition(null)}
-            style={{
-              padding: '0.6rem 1.2rem',
-              background: 'rgba(255, 255, 255, 0.05)',
-              color: 'var(--text-primary)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              transition: 'background 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-          >
-            ← Volver al Panel de Control
-          </button>
-        </div>
-
-        <div className="glass-panel" style={{ padding: '1rem', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)' }}>
-                <th style={{ padding: '0.75rem 1rem' }}>Código / Tag</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Descripción / Nombre</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Área / Ubicación</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Estado Actual</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Último Diagnóstico</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEquips.length === 0 ? (
-                <tr>
-                  <td colSpan="6" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                    No hay equipos en esta condición.
-                  </td>
-                </tr>
-              ) : (
-                filteredEquips.map((eq) => {
-                  let stateColor = '#3fa86b';
-                  if (eq.estado_actual === 'CRITICO') stateColor = '#e0533d';
-                  else if (eq.estado_actual === 'REGULAR') stateColor = '#e0a32e';
-                  else if (eq.estado_actual === 'PENDIENTE') stateColor = '#a855f7';
-
-                  return (
-                    <tr 
-                      key={eq.id} 
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      <td style={{ padding: '0.9rem 1rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{eq.tag_codigo}</td>
-                      <td style={{ padding: '0.9rem 1rem' }}>{eq.descripcion}</td>
-                      <td style={{ padding: '0.9rem 1rem', color: 'var(--text-secondary)' }}>{eq.area_nombre}</td>
-                      <td style={{ padding: '0.9rem 1rem' }}>
-                        <span style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          backgroundColor: `${stateColor}1a`,
-                          color: stateColor,
-                          border: `1px solid ${stateColor}33`,
-                        }}>
-                          {eq.estado_actual}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.9rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={eq.diagnostico}>
-                        {eq.diagnostico || 'Sin diagnóstico registrado.'}
-                      </td>
-                      <td style={{ padding: '0.9rem 1rem', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleAnalyzeEquipment(eq.id)}
-                          style={{
-                            padding: '0.4rem 0.8rem',
-                            backgroundColor: 'var(--accent-primary)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-primary-hover)'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-primary)'}
-                        >
-                          🔍 Analizar
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>
-      
-      {/* Header with Title and Help Quick Action */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: 700, margin: 0 }}>Panel de Control Global</h1>
-          <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Monitoreo en tiempo real del estado de salud de activos y avance de Parada General de Planta
-          </p>
+    <div className="space-y-5">
+      {/* Barra de Contexto de Planta */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl border border-slate-700/40 bg-slate-900/20">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-sky-500" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Planta / Empresa:</span>
+          </div>
+          {empresas.length > 0 ? (
+            <select
+              value={empresaId || ''}
+              onChange={(e) => onChangeEmpresa && onChangeEmpresa(e.target.value)}
+              className="px-3 py-1.5 rounded-xl border text-xs font-bold min-w-[180px]"
+            >
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nombre}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-xs font-bold">Planta #{empresaId}</span>
+          )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-          <button 
-            onClick={() => setShowQuickGuide(!showQuickGuide)}
-            style={{
-              padding: '0.5rem 0.9rem',
-              backgroundColor: showQuickGuide ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-              color: showQuickGuide ? 'var(--accent-primary)' : 'var(--text-primary)',
-              border: showQuickGuide ? '1px solid var(--accent-primary)' : '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            <span>💡</span> {showQuickGuide ? 'Ocultar Guía' : 'Guía del Dashboard'}
-          </button>
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span>
+            Total activos: <strong className="text-sky-400">{metrics.total_equipos || equipments.length}</strong>
+          </span>
+          <span>·</span>
+          <span>
+            Inspecciones hoy: <strong className="text-emerald-400">{metrics.inspections_today || 0}</strong>
+          </span>
+        </div>
+      </div>
 
-          {onOpenHelp && (
-            <button 
-              onClick={onOpenHelp}
-              className="btn btn-secondary"
-              style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-              title="Abrir Manual Completo de Uso"
+      {/* KPIs Ejecutivos (Clicables para filtrar la tabla) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+        {kpiCards.map((card) => {
+          const Icon = card.icon;
+          const isSelected = selectedCondition === card.id;
+          return (
+            <button
+              key={card.id}
+              type="button"
+              disabled={!card.clickable}
+              onClick={() => {
+                if (!card.clickable) return;
+                setSelectedCondition((prev) => (prev === card.id ? 'ALL' : card.id));
+              }}
+              className={`text-left p-3.5 rounded-2xl border transition-all ${card.accent} ${
+                isSelected ? 'ring-2 ring-sky-500 bg-sky-500/10' : 'bg-slate-900/25'
+              } ${card.clickable ? 'cursor-pointer' : 'cursor-default'}`}
             >
-              <span>📖</span> Manual de Uso
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  {card.title}
+                </span>
+                <div className={`p-1.5 rounded-lg ${card.iconCls}`}>
+                  <Icon className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className={`text-2xl font-black tracking-tight ${card.valueCls}`}>{card.value}</div>
+              <div className="text-[11px] text-slate-400 mt-0.5 truncate">{card.sub}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Distribución por Área / Ubicación */}
+      <div>
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-sky-500" />
+            Estado por Área ({factories.length})
+          </h2>
+          {selectedAreaId !== 'ALL' && (
+            <button
+              onClick={() => handleSelectArea('ALL')}
+              className="text-xs font-semibold text-sky-400 hover:underline flex items-center gap-1"
+            >
+              <X className="w-3 h-3" /> Ver todas las áreas
             </button>
           )}
         </div>
+
+        {factories.length === 0 && !loading ? (
+          <div className="p-6 rounded-2xl border border-slate-700/40 text-center text-xs text-slate-400">
+            No hay áreas con equipos activos registradas para esta planta.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {factories.map((area) => {
+              const isSelected = String(selectedAreaId) === String(area.id);
+              const total = area.total || equipments.filter((e) => e.ubicacion_id === area.id).length;
+              return (
+                <button
+                  key={area.id}
+                  onClick={() => handleSelectArea(area.id)}
+                  className={`text-left p-3.5 rounded-2xl border transition-all ${
+                    isSelected
+                      ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/50'
+                      : 'border-slate-700/40 bg-slate-900/20 hover:border-slate-500/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-sm font-bold truncate">{area.name}</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-800/60 text-slate-300 shrink-0">
+                      {total} eq.
+                    </span>
+                  </div>
+
+                  {/* Barra proporcional */}
+                  <div className="h-2 w-full rounded-full overflow-hidden flex bg-slate-800/60 mb-2">
+                    {area.good > 0 && (
+                      <div style={{ width: `${area.good}%` }} className="bg-emerald-500" title={`Bueno: ${area.good}%`} />
+                    )}
+                    {area.alert > 0 && (
+                      <div style={{ width: `${area.alert}%` }} className="bg-amber-500" title={`Observado: ${area.alert}%`} />
+                    )}
+                    {area.broken > 0 && (
+                      <div style={{ width: `${area.broken}%` }} className="bg-rose-500" title={`Crítico: ${area.broken}%`} />
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="text-emerald-400 font-semibold">{area.good}% Bueno</span>
+                    <span className="text-amber-400 font-semibold">{area.alert}% Obs.</span>
+                    <span className="text-rose-400 font-semibold">{area.broken}% Crít.</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Interactive Quick Guide Banner (Collapsible) */}
-      {showQuickGuide && (
-        <div className="glass-panel" style={{ 
-          padding: '1.5rem', 
-          backgroundColor: 'rgba(15, 23, 42, 0.75)', 
-          border: '1px solid rgba(14, 165, 233, 0.3)',
-          borderRadius: '10px',
-          animation: 'fadeIn 0.2s ease-in-out'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>🧭</span> Guía Rápida de Interpretación y Flujo de Trabajo
+      {/* Tabla de Equipos de la Planta / Área */}
+      <div className="rounded-2xl border border-slate-700/40 bg-slate-900/20 overflow-hidden">
+        {/* Barra de Filtros de Tabla */}
+        <div className="p-3.5 border-b border-slate-700/40 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-sky-500" />
+            <h3 className="text-sm font-extrabold">
+              Equipos ({filteredEquipments.length})
             </h3>
-            <button 
-              onClick={() => setShowQuickGuide(false)}
-              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1rem' }}
-            >
-              ✕
-            </button>
+            {(selectedAreaId !== 'ALL' || selectedCondition !== 'ALL' || searchText) && (
+              <button
+                onClick={() => {
+                  setSelectedAreaId('ALL');
+                  setSelectedCondition('ALL');
+                  setSearchText('');
+                }}
+                className="text-[11px] text-sky-400 hover:underline ml-2"
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', fontSize: '0.82rem', lineHeight: '1.5' }}>
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>🔴</span> Alertas Críticas (Urgente)
-              </div>
-              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                Equipos con fallas estructurales, fugas activas o corrosión severa que impiden la operación segura. Requieren intervención inmediata.
-              </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Buscar TAG, nombre, material..."
+                className="pl-8 pr-3 py-1.5 rounded-xl border text-xs w-56 sm:w-64"
+              />
             </div>
 
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontWeight: 600, color: '#f59e0b', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>🟡</span> Bajo Observación (Regular)
-              </div>
-              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                Equipos con desgaste moderado o recomendaciones preventivas programadas para el próximo ciclo de parada de planta.
-              </p>
-            </div>
-
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontWeight: 600, color: '#10b981', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>🟢</span> Aptos para Operar (Bueno)
-              </div>
-              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                Activos en condición técnica óptima sin anomalías funcionales ni desvíos respecto a las tolerancias de diseño.
-              </p>
-            </div>
-
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontWeight: 600, color: '#38bdf8', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>⚡</span> Atajos y Acciones Rápidas
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.3rem' }}>
-                {onChangeTab && (
-                  <>
-                    <span 
-                      onClick={() => onChangeTab('FACTORY')} 
-                      style={{ color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                      👉 Ir a Inspección con IA (Gemini)
-                    </span>
-                    <span 
-                      onClick={() => onChangeTab('MINUTA')} 
-                      style={{ color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                      👉 Ver Minutas y Resumen PGP
-                    </span>
-                    <span 
-                      onClick={() => onChangeTab('REPORTS')} 
-                      style={{ color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                      👉 Generar Libros y Reportes PDF
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
+            <select
+              value={selectedCondition}
+              onChange={(e) => setSelectedCondition(e.target.value)}
+              className="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"
+            >
+              <option value="ALL">Todos los estados</option>
+              <option value="CRITICO">Crítico</option>
+              <option value="REGULAR">Bajo Observación</option>
+              <option value="BUENO">Bueno</option>
+              <option value="PENDIENTE">Pendiente</option>
+            </select>
           </div>
         </div>
-      )}
 
-      {/* Metrics Row */}
-      <div className="dashboard-metrics-grid">
-        {topMetrics.map((metric, i) => (
-          <div 
-            key={i} 
-            className={`glow-card ${metric.colorClass}`}
-            onClick={() => metric.clickable && setSelectedCondition(metric.id)}
-            style={{
-              cursor: metric.clickable ? 'pointer' : 'default',
-              transition: 'transform 0.2s, box-shadow 0.2s'
-            }}
-            onMouseEnter={(e) => metric.clickable && (e.currentTarget.style.transform = 'translateY(-4px)')}
-            onMouseLeave={(e) => metric.clickable && (e.currentTarget.style.transform = 'translateY(0px)')}
-            title={metric.clickable ? "Haga clic para ver los equipos en esta condición" : ""}
-          >
-            <h3>{metric.title}</h3>
-            <div className="number-big">{metric.count}</div>
-            <p className="card-subtitle">{metric.subtitle}</p>
-          </div>
-        ))}
-      </div>
-
-      <h2 style={{ fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Vista por Área / Planta</h2>
-
-      {/* Factories Grid Row */}
-      <div className="dashboard-factories-grid">
-        {factories.map((factory, i) => (
-          <div key={i} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>{factory.name}</h3>
-            
-            <div className="progress-container">
-              <div className="progress-segment progress-green" style={{ width: `${factory.good}%` }} title={`Buenos: ${factory.good}%`}>{factory.good}%</div>
-              <div className="progress-segment progress-yellow" style={{ width: `${factory.alert}%` }} title={`Regulares: ${factory.alert}%`}>{factory.alert}%</div>
-              <div className="progress-segment progress-red" style={{ width: `${factory.broken}%` }} title={`Críticos: ${factory.broken}%`}>{factory.broken}%</div>
-            </div>
-
-            <div className="legend" style={{ display: 'flex', gap: '1rem', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              <div className="legend-item" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><div className="dot green" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-good)' }}></div> Bueno</div>
-              <div className="legend-item" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><div className="dot yellow" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-regular)' }}></div> Regular</div>
-              <div className="legend-item" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><div className="dot red" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-critical)' }}></div> Crítico</div>
-            </div>
-
-            <button 
-              onClick={() => {
-                setSelectedPlant(factory);
-                if (onSelectUbicacion) onSelectUbicacion(factory.id.toString());
-              }}
-              style={{ 
-                width: '100%', 
-                marginTop: '1.2rem', 
-                background: 'rgba(255,255,255,0.05)', 
-                color: 'var(--text-primary)', 
-                border: '1px solid rgba(255,255,255,0.2)',
-                padding: '8px 12px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                transition: 'background 0.2s, border-color 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-              }}
-            >
-              👉 INGRESAR A LA PLANTA
-            </button>
-          </div>
-        ))}
+        {/* Tabla */}
+        <div className="overflow-x-auto max-h-[520px]">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="sticky top-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50 text-[11px] uppercase text-slate-400">
+              <tr>
+                <th className="py-2.5 px-3.5">TAG</th>
+                <th className="py-2.5 px-3.5">Equipo</th>
+                <th className="py-2.5 px-3.5">Área</th>
+                <th className="py-2.5 px-3.5">Material</th>
+                <th className="py-2.5 px-3.5">Estado</th>
+                <th className="py-2.5 px-3.5">Últ. Inspección</th>
+                <th className="py-2.5 px-3.5 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                    Cargando equipos de la planta...
+                  </td>
+                </tr>
+              ) : filteredEquipments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                    No se encontraron equipos con los filtros seleccionados.
+                  </td>
+                </tr>
+              ) : (
+                filteredEquipments.map((eq) => {
+                  const badge = getEstadoBadge(eq.estado_actual);
+                  return (
+                    <tr key={eq.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="py-2.5 px-3.5 font-mono font-bold text-sky-400 whitespace-nowrap">
+                        {eq.tag_codigo || `#${eq.id}`}
+                      </td>
+                      <td className="py-2.5 px-3.5 font-semibold max-w-[260px] truncate" title={eq.descripcion}>
+                        {eq.descripcion}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-slate-400 whitespace-nowrap">
+                        {eq.area_nombre || '-'}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-slate-400 whitespace-nowrap">
+                        {eq.material || '-'}
+                      </td>
+                      <td className="py-2.5 px-3.5 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3.5 text-slate-400 whitespace-nowrap">
+                        {eq.ultima_inspeccion_anio ? (
+                          <span className="font-mono font-semibold text-slate-300">
+                            {eq.ultima_inspeccion_anio}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 italic">Sin registro</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => onSelectEquipo && onSelectEquipo(eq.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-600/50 hover:border-sky-500 text-[11px] font-bold transition-colors"
+                            title="Ver Ficha de Última Inspección"
+                          >
+                            <ClipboardList className="w-3 h-3 text-sky-400" />
+                            Ficha
+                          </button>
+                          <button
+                            onClick={() => onAnalyzeEquipo && onAnalyzeEquipo(eq.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
+                            title="Ir a Análisis y Revisión con Gemini IA"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            Analizar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -84,6 +84,20 @@ export const apiService = {
     }
   },
 
+  getEquipoFicha: async (id, token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/equipos/${id}/ficha`, {
+        headers: getAuthHeaders(token)
+      });
+      checkAuthStatus(response);
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.warn(`[apiService.getEquipoFicha] Error:`, error.message);
+      return null;
+    }
+  },
+
   getItinerarioHoy: async () => {
     try {
       let response = await fetch(`${API_BASE_URL}/itinerarios/hoy`, { headers: getAuthHeaders() });

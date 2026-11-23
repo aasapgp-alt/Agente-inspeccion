@@ -262,3 +262,59 @@ def revertir_inspeccion_equipo(
         "motivo": motivo_texto
     }
 
+@router.get("/{id}/ficha", response_model=Dict[str, Any])
+def get_equipo_ficha(id: int, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Endpoint consolidado para la Ficha de Equipo en una sola pantalla.
+    Devuelve los datos técnicos del equipo, su última inspección registrada
+    (de cualquier año), la lista de años históricos disponibles y el conteo de anotaciones.
+    """
+    equipo = db_service.obtener_equipo_db(id)
+    if not equipo:
+        raise HTTPException(status_code=404, detail="Equipo no encontrado")
+
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT *
+        FROM inspecciones
+        WHERE equipo_id = ?
+        ORDER BY anio DESC, id DESC
+    """, (id,))
+    inspecciones = [dict(r) for r in cursor.fetchall()]
+
+    # Enriquecer con memoria de imágenes 2026 si aplica
+    try:
+        from app.services.memory_service import obtener_memoria_imagenes
+        mem_imgs = obtener_memoria_imagenes(id)
+    except Exception:
+        mem_imgs = []
+
+    anios_disponibles = []
+    seen_years = set()
+    for insp in inspecciones:
+        anio = insp.get("anio")
+        if anio is not None and anio not in seen_years:
+            seen_years.add(anio)
+            anios_disponibles.append(anio)
+        if anio == 2026 and not insp.get("image_drive_ids") and mem_imgs:
+            insp["image_drive_ids"] = mem_imgs
+
+    ultima_inspeccion = inspecciones[0] if inspecciones else None
+
+    anotaciones_count = 0
+    try:
+        cursor.execute("SELECT COUNT(*) FROM anotaciones_imagenes WHERE equipo_id = ?", (id,))
+        row_cnt = cursor.fetchone()
+        anotaciones_count = row_cnt[0] if row_cnt else 0
+    except Exception:
+        anotaciones_count = 0
+
+    return {
+        "equipo": equipo,
+        "ultima_inspeccion": ultima_inspeccion,
+        "inspecciones": inspecciones,
+        "anios_disponibles": anios_disponibles,
+        "anotaciones_count": anotaciones_count,
+    }
+
+
