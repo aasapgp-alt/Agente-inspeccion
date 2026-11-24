@@ -198,7 +198,7 @@ export default function EquipoFichaPanel({
     return evidencia?.documentacion_tecnica || evidencia?.planos || [];
   }, [evidencia]);
 
-  const driveFolderId = eq?.drive_folder_id || evidencia?.equipo?.drive_folder_id;
+  const driveFolderId = ficha?.equipo?.drive_folder_id || evidencia?.equipo?.drive_folder_id;
 
   const handleSaveTech = async () => {
     if (!equipoId) return;
