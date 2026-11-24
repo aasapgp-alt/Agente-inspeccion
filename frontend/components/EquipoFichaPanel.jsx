@@ -194,7 +194,11 @@ export default function EquipoFichaPanel({
     return allHistorico;
   }, [evidencia, inspeccionActiva]);
 
-  const planos = evidencia?.planos || [];
+  const documentosTecnicos = useMemo(() => {
+    return evidencia?.documentacion_tecnica || evidencia?.planos || [];
+  }, [evidencia]);
+
+  const driveFolderId = eq?.drive_folder_id || evidencia?.equipo?.drive_folder_id;
 
   const handleSaveTech = async () => {
     if (!equipoId) return;
@@ -343,6 +347,16 @@ export default function EquipoFichaPanel({
                 {eq.drive_folder_nombre}
               </span>
             )}
+            {driveFolderId && (
+              <a
+                href={`https://drive.google.com/drive/folders/${driveFolderId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sky-400 hover:underline font-semibold"
+              >
+                Abrir carpeta Drive
+              </a>
+            )}
           </div>
         </div>
 
@@ -490,28 +504,75 @@ export default function EquipoFichaPanel({
 
           {/* Documentación Técnica / Planos de Drive */}
           <div className="pt-2 border-t border-slate-700/40">
-            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-amber-400" />
-              Planos y Doc. Técnica ({planos.length})
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-amber-400" />
+                Planos y Doc. Técnica ({documentosTecnicos.length})
+              </h4>
+              {driveFolderId && (
+                <a
+                  href={`https://drive.google.com/drive/folders/${driveFolderId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-bold text-sky-400 hover:underline"
+                >
+                  Carpeta Drive
+                </a>
+              )}
+            </div>
             {loadingEvidencia ? (
               <p className="text-xs text-slate-400">Cargando documentos de Drive...</p>
-            ) : planos.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No hay planos vinculados en la carpeta Drive.</p>
+            ) : documentosTecnicos.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No hay planos o documentos técnicos en la carpeta Drive de esta UT.</p>
             ) : (
-              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                {planos.map((doc) => (
-                  <a
-                    key={doc.id}
-                    href={doc.webViewLink || `https://drive.google.com/file/d/${doc.id}/view`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-700/40 hover:border-sky-500/50 text-xs transition-colors"
-                  >
-                    <span className="truncate font-medium">{doc.name}</span>
-                    <span className="text-[10px] text-sky-400 font-bold shrink-0">Abrir</span>
-                  </a>
-                ))}
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {documentosTecnicos.map((doc) => {
+                  const isImageDoc = (doc.mimeType || '').startsWith('image/');
+                  return (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-700/40 hover:border-sky-500/50 text-xs transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          {doc.es_plano && (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-400 text-[9px] font-extrabold uppercase shrink-0">
+                              Plano
+                            </span>
+                          )}
+                          <span className="truncate font-medium" title={doc.name}>{doc.name}</span>
+                        </div>
+                        {doc.sub_ubicacion && (
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">{doc.sub_ubicacion}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isImageDoc && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewImage({
+                                ...doc,
+                                url: `${API_BASE_URL}/drive/imagen/${doc.id}?token=${activeToken}`
+                              })
+                            }
+                            className="text-[10px] font-bold text-emerald-400 hover:underline"
+                          >
+                            Ver
+                          </button>
+                        )}
+                        <a
+                          href={doc.webViewLink || `https://drive.google.com/file/d/${doc.id}/view`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-sky-400 font-bold hover:underline"
+                        >
+                          Drive
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -608,18 +669,24 @@ export default function EquipoFichaPanel({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2.5 max-h-[490px] overflow-y-auto pr-1">
               {fotosAMostrar.map((img) => {
-                const thumbUrl = `${API_BASE_URL}/drive/proxy_thumbnail?file_id=${encodeURIComponent(img.id)}`;
+                const fallbackUrl = `${API_BASE_URL}/drive/imagen/${img.id}?token=${encodeURIComponent(activeToken || '')}`;
+                const thumbUrl = img.thumbnail || fallbackUrl;
                 return (
                   <button
                     key={img.id}
                     type="button"
-                    onClick={() => setPreviewImage({ ...img, url: `${API_BASE_URL}/drive/imagen/${img.id}` })}
+                    onClick={() => setPreviewImage({ ...img, url: fallbackUrl })}
                     className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-slate-700/50 bg-slate-900 text-left"
                   >
                     <img
                       src={thumbUrl}
                       alt={img.name || 'Evidencia'}
                       loading="lazy"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== fallbackUrl) {
+                          e.currentTarget.src = fallbackUrl;
+                        }
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                     />
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1.5">

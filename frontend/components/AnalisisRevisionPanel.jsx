@@ -654,7 +654,8 @@ export default function AnalisisRevisionPanel({
                 const isSel = selectedImages.includes(img.id);
                 const hasAnns = (annotationsMap[img.id]?.length || 0) > 0;
                 const hasComment = !!(commentsMap[img.id] || '').trim();
-                const thumbUrl = `${API_BASE_URL}/drive/proxy_thumbnail?file_id=${encodeURIComponent(img.id)}`;
+                const fallbackUrl = `${API_BASE_URL}/drive/imagen/${img.id}?token=${encodeURIComponent(activeToken || '')}`;
+                const thumbUrl = img.thumbnail || fallbackUrl;
 
                 return (
                   <div
@@ -664,7 +665,17 @@ export default function AnalisisRevisionPanel({
                       isSel ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-slate-700/50 opacity-80 hover:opacity-100'
                     }`}
                   >
-                    <img src={thumbUrl} alt={img.name} loading="lazy" className="w-full h-full object-cover" />
+                    <img
+                      src={thumbUrl}
+                      alt={img.name}
+                      loading="lazy"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== fallbackUrl) {
+                          e.currentTarget.src = fallbackUrl;
+                        }
+                      }}
+                      className="w-full h-full object-cover"
+                    />
                     <div
                       className={`absolute top-1.5 left-1.5 w-5 h-5 rounded-md flex items-center justify-center text-white text-[10px] font-bold ${
                         isSel ? 'bg-indigo-600' : 'bg-black/60 border border-white/40'
@@ -703,7 +714,8 @@ export default function AnalisisRevisionPanel({
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {selectedImages.map((imgId, idx) => {
                   const img = fotosMap.get(imgId) || { id: imgId, name: `Foto ${idx + 1}` };
-                  const thumbUrl = `${API_BASE_URL}/drive/proxy_thumbnail?file_id=${encodeURIComponent(imgId)}`;
+                  const fallbackUrl = `${API_BASE_URL}/drive/imagen/${imgId}?token=${encodeURIComponent(activeToken || '')}`;
+                  const thumbUrl = img.thumbnail || fallbackUrl;
                   const annsCount = annotationsMap[imgId]?.length || 0;
 
                   return (
@@ -711,7 +723,16 @@ export default function AnalisisRevisionPanel({
                       key={imgId}
                       className="flex items-start gap-2.5 p-2 rounded-xl border border-slate-700/40 bg-slate-900/30"
                     >
-                      <img src={thumbUrl} alt={img.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                      <img
+                        src={thumbUrl}
+                        alt={img.name}
+                        onError={(e) => {
+                          if (e.currentTarget.src !== fallbackUrl) {
+                            e.currentTarget.src = fallbackUrl;
+                          }
+                        }}
+                        className="w-12 h-12 rounded-lg object-cover shrink-0"
+                      />
                       <div className="flex-1 min-w-0 space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[11px] font-bold truncate">{img.name}</span>
