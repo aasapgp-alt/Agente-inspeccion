@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Union
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
@@ -39,8 +39,8 @@ class UserResponse(BaseModel):
     rol: str
     empresa: Optional[str] = None
     activo: bool
-    ultimo_login: Optional[str] = None
-    created_at: Optional[str] = None
+    ultimo_login: Optional[Union[str, datetime]] = None
+    created_at: Optional[Union[str, datetime]] = None
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
