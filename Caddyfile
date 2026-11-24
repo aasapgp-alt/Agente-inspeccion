@@ -12,7 +12,7 @@
     }
 }
 
-# Fallback HTTP directo por IP
+# Redirección obligatoria de HTTP (:80) a HTTPS para evitar tráfico en texto plano
 :80 {
-    reverse_proxy backend:8000
+    redir https://157.151.18.150.sslip.io{uri} permanent
 }

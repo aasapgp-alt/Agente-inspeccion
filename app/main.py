@@ -42,6 +42,16 @@ app = FastAPI(
 from app.core.auth_middleware import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
 # Configurar CORS para permitir localhost, IPs locales y dominios de Vercel
 app.add_middleware(
     CORSMiddleware,

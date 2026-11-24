@@ -12,11 +12,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+SENSITIVE_SETTING_KEYS = {"google_api_key", "smtp_password", "smtp_pass"}
+
+def _is_sensitive_key(clave: str) -> bool:
+    c = (clave or "").lower()
+    return c in SENSITIVE_SETTING_KEYS or any(tok in c for tok in ("password", "secret", "api_key", "token"))
+
 @router.get("", response_model=List[Dict[str, Any]])
 def get_settings(db: sqlite3.Connection = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """
     Retorna la lista de todas las configuraciones del sistema, ordenadas por categoría y clave.
-    Cualquier usuario autenticado puede visualizar las configuraciones.
+    Para usuarios no administradores, las claves sensibles se devuelven enmascaradas.
     """
     try:
         cursor = db.cursor()
@@ -26,7 +32,14 @@ def get_settings(db: sqlite3.Connection = Depends(get_db), current_user: dict = 
             ORDER BY categoria, clave
         """)
         rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+        is_admin = (current_user or {}).get("rol") == "admin"
+        result = []
+        for row in rows:
+            item = dict(row)
+            if not is_admin and _is_sensitive_key(item.get("clave", "")):
+                item["valor"] = "••••••••" if item.get("valor") else ""
+            result.append(item)
+        return result
     except Exception as e:
         logger.error(f"Error al obtener configuraciones: {e}", exc_info=True)
         raise HTTPException(
